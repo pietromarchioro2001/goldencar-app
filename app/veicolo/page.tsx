@@ -2111,7 +2111,7 @@ export default function Veicolo() {
 
 
 
-                    Fiat Panda
+                    {veicoloProfilo.veicolo || "Nessun veicolo"}
 
 
 
@@ -2211,7 +2211,7 @@ export default function Veicolo() {
 
 
 
-                  AB123CD
+                  {veicoloProfilo.targa || "Nessuna targa"}
 
 
 
