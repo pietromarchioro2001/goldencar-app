@@ -29,6 +29,8 @@ export default function NuovoProfiloPage() {
   const cameraVideoRef = useRef<HTMLVideoElement>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const capturedClientFileRef = useRef<File | null>(null);
+  const [fileCliente, setFileCliente] = useState<File | null>(null);
+  const [fileVeicolo, setFileVeicolo] = useState<File | null>(null);
 
   const [analisiInCorso, setAnalisiInCorso] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -116,6 +118,8 @@ export default function NuovoProfiloPage() {
     setOcrProgress(0);
     setFotoCliente("");
     setFotoVeicolo("");
+    setFileCliente(null);
+    setFileVeicolo(null);
     setStatoScansioneCliente("idle");
     setStatoScansioneVeicolo("idle");
     capturedClientFileRef.current = null;
@@ -404,6 +408,7 @@ export default function NuovoProfiloPage() {
 
     if (cameraStep === 1) {
       capturedClientFileRef.current = file;
+      setFileCliente(file);
       setFotoCliente(preview);
       setStatoScansioneCliente("analisi");
       setCameraStep(2);
@@ -423,6 +428,7 @@ export default function NuovoProfiloPage() {
     }
 
     try {
+      setFileVeicolo(file);
       await runCombinedScan(clientFile, file);
     } catch {
       // L'errore è già mostrato nell'interfaccia.
@@ -446,6 +452,9 @@ export default function NuovoProfiloPage() {
     }
   
     const [clientFile, vehicleFile] = files;
+
+    setFileCliente(clientFile);
+    setFileVeicolo(vehicleFile);
   
     const clientPreview = URL.createObjectURL(clientFile);
     const vehiclePreview = URL.createObjectURL(vehicleFile);
@@ -467,100 +476,231 @@ export default function NuovoProfiloPage() {
     }
   };
 
-  const handleSave = () => {
-    const cf1 = form.cf.trim().toUpperCase();
+  const handleSave = async () => {
+  const cf1 = form.cf.trim().toUpperCase();
 
-    if (!cf1) {
-      alert("Il codice fiscale del Cliente 1 non è stato letto dal libretto. Ripeti la scansione.");
-      return;
-    }
+  if (!cf1) {
+    alert(
+      "Il codice fiscale del Cliente 1 non è stato letto dal libretto. Ripeti la scansione."
+    );
+    return;
+  }
 
-    const cliente1DaSalvare: ClienteData = {
-      ...form,
-      cf: cf1,
-    };
-
-    const hasCliente2DaSalvare =
-      showCliente2 && Boolean(cliente2.nome.trim());
-
-    let cliente2DaSalvare: ClienteData | null = null;
-
-    if (hasCliente2DaSalvare) {
-      const cf2 = cliente2.cf.trim().toUpperCase();
-
-      if (!cf2) {
-        alert("Il codice fiscale del Cliente 2 non è stato letto dal libretto. Ripeti la scansione.");
-        return;
-      }
-
-      cliente2DaSalvare = {
-        ...cliente2,
-        cf: cf2,
-      };
-    }
-
-    const nuovoProfilo = {
-      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `vehicle-${Date.now()}`,
-      cliente1: cliente1DaSalvare,
-      cliente2: cliente2DaSalvare,
-      veicolo: {
-        veicolo: form.veicolo,
-        motore: form.motore,
-        targa: form.targa.trim().toUpperCase(),
-        immatricolazione: form.immatricolazione,
-        revisione: form.revisione,
-      },
-    };
-
-    try {
-      const raw = localStorage.getItem("goldencar_vehicles");
-      const vehicles = raw ? JSON.parse(raw) : [];
-      const list = Array.isArray(vehicles) ? vehicles : [];
-      const normalizedPlate = nuovoProfilo.veicolo.targa;
-      const existingIndex = list.findIndex(
-        (item: any) => String(item?.veicolo?.targa || "").replace(/[^A-Z0-9]/gi, "").toUpperCase() === normalizedPlate
-      );
-
-      if (existingIndex >= 0) {
-        list[existingIndex] = { ...list[existingIndex], ...nuovoProfilo };
-      } else {
-        list.push(nuovoProfilo);
-      }
-
-      localStorage.setItem("goldencar_vehicles", JSON.stringify(list));
-    } catch (error) {
-      console.error("Errore salvataggio veicolo:", error);
-      alert("Non riesco a salvare il profilo del veicolo.");
-      return;
-    }
-
-    let fromCheckIn = false;
-    try {
-      fromCheckIn = Boolean(sessionStorage.getItem("goldencar_checkin_targa"));
-      sessionStorage.removeItem("goldencar_checkin_targa");
-    } catch {
-      // Nessun handoff CHECK-IN.
-    }
-
-    if (fromCheckIn) {
-      sessionStorage.setItem(
-        "goldencar_nuova_scheda",
-        JSON.stringify({
-          nomeCliente: cliente1DaSalvare.nome,
-          indirizzo: cliente1DaSalvare.indirizzo,
-          telefono: cliente1DaSalvare.telefono,
-          codiceFiscale: cliente1DaSalvare.cf,
-          veicolo: form.veicolo,
-          targa: nuovoProfilo.veicolo.targa,
-        })
-      );
-      router.push("/veicolo/scheda");
-      return;
-    }
-
-    setOpen(false);
+  const cliente1DaSalvare: ClienteData = {
+    ...form,
+    cf: cf1,
   };
 
+  const hasCliente2DaSalvare =
+    showCliente2 && Boolean(cliente2.nome.trim());
+
+  let cliente2DaSalvare: ClienteData | null = null;
+
+  if (hasCliente2DaSalvare) {
+    const cf2 = cliente2.cf.trim().toUpperCase();
+
+    if (!cf2) {
+      alert(
+        "Il codice fiscale del Cliente 2 non è stato letto dal libretto. Ripeti la scansione."
+      );
+      return;
+    }
+
+    cliente2DaSalvare = {
+      ...cliente2,
+      cf: cf2,
+    };
+  }
+
+  const veicoloId =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `vehicle-${Date.now()}`;
+
+  const nuovoProfilo = {
+    id: veicoloId,
+
+    cliente1: cliente1DaSalvare,
+
+    cliente2: cliente2DaSalvare,
+
+    veicolo: {
+      veicolo: form.veicolo,
+      motore: form.motore,
+      targa: form.targa.trim().toUpperCase(),
+      immatricolazione: form.immatricolazione,
+      revisione: form.revisione,
+    },
+
+    libretto: {
+      cliente: null as string | null,
+      veicolo: null as string | null,
+    },
+  };
+
+  try {
+    /*
+     * ==========================================
+     * UPLOAD LIBRETTO SU CLOUDFLARE R2
+     * ==========================================
+     */
+
+    const fotoLibretto = [
+      {
+        file: fileCliente,
+        key: `veicoli/${veicoloId}/libretto/libretto-cliente.jpg`,
+        tipo: "cliente" as const,
+      },
+      {
+        file: fileVeicolo,
+        key: `veicoli/${veicoloId}/libretto/libretto-veicolo.jpg`,
+        tipo: "veicolo" as const,
+      },
+    ];
+
+    for (const foto of fotoLibretto) {
+      if (!foto.file) {
+        throw new Error(
+          "Manca una delle due foto del libretto. Ripeti la scansione."
+        );
+      }
+
+      /*
+       * Chiediamo al backend un URL temporaneo
+       * per caricare direttamente il file su R2.
+       */
+      const presignResponse = await fetch("/api/r2/file", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          key: foto.key,
+          contentType: foto.file.type || "image/jpeg",
+        }),
+      });
+
+      const presignData = await presignResponse.json();
+
+      if (!presignResponse.ok || !presignData.ok) {
+        throw new Error(
+          presignData.error ||
+            "Non riesco a preparare il caricamento del libretto."
+        );
+      }
+
+      /*
+       * Upload diretto browser → Cloudflare R2.
+       * Le credenziali R2 NON vengono mai esposte al browser.
+       */
+      const uploadResponse = await fetch(
+        presignData.uploadUrl,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": foto.file.type || "image/jpeg",
+          },
+          body: foto.file,
+        }
+      );
+
+      if (!uploadResponse.ok) {
+        throw new Error(
+          `Upload del libretto fallito (${uploadResponse.status}).`
+        );
+      }
+
+      if (foto.tipo === "cliente") {
+        nuovoProfilo.libretto.cliente = foto.key;
+      } else {
+        nuovoProfilo.libretto.veicolo = foto.key;
+      }
+    }
+
+    /*
+     * ==========================================
+     * SALVATAGGIO PROFILO
+     * ==========================================
+     */
+
+    const raw = localStorage.getItem("goldencar_vehicles");
+    const vehicles = raw ? JSON.parse(raw) : [];
+    const list = Array.isArray(vehicles) ? vehicles : [];
+
+    const normalizedPlate = nuovoProfilo.veicolo.targa;
+
+    const existingIndex = list.findIndex(
+      (item: any) =>
+        String(item?.veicolo?.targa || "")
+          .replace(/[^A-Z0-9]/gi, "")
+          .toUpperCase() === normalizedPlate
+    );
+
+    if (existingIndex >= 0) {
+      list[existingIndex] = {
+        ...list[existingIndex],
+        ...nuovoProfilo,
+      };
+    } else {
+      list.push(nuovoProfilo);
+    }
+
+    localStorage.setItem(
+      "goldencar_vehicles",
+      JSON.stringify(list)
+    );
+  } catch (error) {
+    console.error(
+      "Errore salvataggio veicolo/libretto:",
+      error
+    );
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Non riesco a salvare il profilo del veicolo."
+    );
+
+    return;
+  }
+
+  /*
+   * ==========================================
+   * CHECK-IN
+   * ==========================================
+   */
+
+  let fromCheckIn = false;
+
+  try {
+    fromCheckIn = Boolean(
+      sessionStorage.getItem("goldencar_checkin_targa")
+    );
+
+    sessionStorage.removeItem("goldencar_checkin_targa");
+  } catch {
+    // Nessun handoff CHECK-IN.
+  }
+
+  if (fromCheckIn) {
+    sessionStorage.setItem(
+      "goldencar_nuova_scheda",
+      JSON.stringify({
+        nomeCliente: cliente1DaSalvare.nome,
+        indirizzo: cliente1DaSalvare.indirizzo,
+        telefono: cliente1DaSalvare.telefono,
+        codiceFiscale: cliente1DaSalvare.cf,
+        veicolo: form.veicolo,
+        targa: nuovoProfilo.veicolo.targa,
+      })
+    );
+
+    router.push("/veicolo/scheda");
+    return;
+  }
+
+  setOpen(false);
+};
 
 
   return (
