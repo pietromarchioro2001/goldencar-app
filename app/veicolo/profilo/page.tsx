@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 import BottomBar from "@/components/BottomBar";
 
@@ -691,6 +692,142 @@ export default function NuovoProfiloPage() {
       list.push(nuovoProfilo);
     }
 
+    const { data: clientRows, error: clientsError } = await supabase
+      .from("clients")
+      .upsert(
+        [{
+          nome: cliente1DaSalvare.nome.trim(),
+          cognome: cliente1DaSalvare.cognome.trim(),
+          indirizzo: cliente1DaSalvare.indirizzo.trim(),
+          telefono: cliente1DaSalvare.telefono.trim(),
+          data_nascita: cliente1DaSalvare.nascita || null,
+          codice_fiscale: cf1,
+        }],
+        { onConflict: "codice_fiscale" }
+      )
+      .select("id, codice_fiscale");
+
+    if (clientsError) {
+      throw new Error(\`Salvataggio Cliente 1 fallito: \${clientsError.message}\`);
+    }
+
+    const client1Row = clientRows?.find(
+      (row: any) => String(row.codice_fiscale || "").toUpperCase() === cf1
+    );
+
+    if (!client1Row?.id) {
+      throw new Error("Supabase non ha restituito l'ID del Cliente 1.");
+    }
+
+    let client2Row: any = null;
+
+    if (cliente2DaSalvare) {
+      const cf2 = cliente2DaSalvare.cf.trim().toUpperCase();
+
+      const { data, error } = await supabase
+        .from("clients")
+        .upsert(
+          [{
+            nome: cliente2DaSalvare.nome.trim(),
+            cognome: cliente2DaSalvare.cognome.trim(),
+            indirizzo: cliente2DaSalvare.indirizzo.trim(),
+            telefono: cliente2DaSalvare.telefono.trim(),
+            data_nascita: cliente2DaSalvare.nascita || null,
+            codice_fiscale: cf2,
+          }],
+          { onConflict: "codice_fiscale" }
+        )
+        .select("id, codice_fiscale");
+
+      if (error) {
+        throw new Error(\`Salvataggio Cliente 2 fallito: \${error.message}\`);
+      }
+
+      client2Row = data?.find(
+        (row: any) => String(row.codice_fiscale || "").toUpperCase() === cf2
+      );
+
+      if (!client2Row?.id) {
+        throw new Error("Supabase non ha restituito l'ID del Cliente 2.");
+      }
+    }
+
+    const { error: vehicleError } = await supabase
+      .from("vehicles")
+      .upsert(
+        {
+          id: veicoloId,
+          client_id: client1Row.id,
+          veicolo: form.veicolo.trim(),
+          motore: form.motore.trim(),
+          targa: form.targa.trim().toUpperCase(),
+          immatricolazione: form.immatricolazione || null,
+          revisione: form.revisione || null,
+        },
+        { onConflict: "id" }
+      );
+
+    if (vehicleError) {
+      throw new Error(\`Salvataggio veicolo fallito: \${vehicleError.message}\`);
+    }
+
+    const { error: clearRelationsError } = await supabase
+      .from("vehicle_clients")
+      .delete()
+      .eq("vehicle_id", veicoloId);
+
+    if (clearRelationsError) {
+      throw new Error(\`Aggiornamento clienti veicolo fallito: \${clearRelationsError.message}\`);
+    }
+
+    const { error: relationsError } = await supabase
+      .from("vehicle_clients")
+      .insert([
+        {
+          vehicle_id: veicoloId,
+          client_id: String(client1Row.id),
+          ruolo: "PRINCIPALE",
+        },
+        ...(client2Row
+          ? [{
+              vehicle_id: veicoloId,
+              client_id: String(client2Row.id),
+              ruolo: "SECONDO",
+            }]
+          : []),
+      ]);
+
+    if (relationsError) {
+      throw new Error(\`Collegamento clienti/veicolo fallito: \${relationsError.message}\`);
+    }
+
+    const { error: documentsError } = await supabase
+      .from("vehicle_documents")
+      .upsert(
+        [
+          {
+            id: \`\${veicoloId}-libretto-cliente\`,
+            vehicle_id: veicoloId,
+            tipo: "LIBRETTO_CLIENTE",
+            nome: "libretto-cliente.jpg",
+            r2_key: nuovoProfilo.libretto.cliente!,
+          },
+          {
+            id: \`\${veicoloId}-libretto-veicolo\`,
+            vehicle_id: veicoloId,
+            tipo: "LIBRETTO_VEICOLO",
+            nome: "libretto-veicolo.jpg",
+            r2_key: nuovoProfilo.libretto.veicolo!,
+          },
+        ],
+        { onConflict: "id" }
+      );
+
+    if (documentsError) {
+      throw new Error(\`Salvataggio documenti fallito: \${documentsError.message}\`);
+    }
+
+    // Manteniamo temporaneamente il localStorage come fallback durante la migrazione.
     localStorage.setItem(
       "goldencar_vehicles",
       JSON.stringify(list)
