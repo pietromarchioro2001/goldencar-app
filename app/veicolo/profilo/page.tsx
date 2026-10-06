@@ -708,7 +708,7 @@ export default function NuovoProfiloPage() {
       .select("id, codice_fiscale");
 
     if (clientsError) {
-      throw new Error(\`Salvataggio Cliente 1 fallito: \${clientsError.message}\`);
+      throw new Error(`Salvataggio Cliente 1 fallito: ${clientsError.message}`);
     }
 
     const client1Row = clientRows?.find(
@@ -740,7 +740,7 @@ export default function NuovoProfiloPage() {
         .select("id, codice_fiscale");
 
       if (error) {
-        throw new Error(\`Salvataggio Cliente 2 fallito: \${error.message}\`);
+        throw new Error(`Salvataggio Cliente 2 fallito: ${error.message}`);
       }
 
       client2Row = data?.find(
@@ -768,7 +768,7 @@ export default function NuovoProfiloPage() {
       );
 
     if (vehicleError) {
-      throw new Error(\`Salvataggio veicolo fallito: \${vehicleError.message}\`);
+      throw new Error(`Salvataggio veicolo fallito: ${vehicleError.message}`);
     }
 
     const { error: clearRelationsError } = await supabase
@@ -777,7 +777,7 @@ export default function NuovoProfiloPage() {
       .eq("vehicle_id", veicoloId);
 
     if (clearRelationsError) {
-      throw new Error(\`Aggiornamento clienti veicolo fallito: \${clearRelationsError.message}\`);
+      throw new Error(`Aggiornamento clienti veicolo fallito: ${clearRelationsError.message}`);
     }
 
     const { error: relationsError } = await supabase
@@ -798,7 +798,7 @@ export default function NuovoProfiloPage() {
       ]);
 
     if (relationsError) {
-      throw new Error(\`Collegamento clienti/veicolo fallito: \${relationsError.message}\`);
+      throw new Error(`Collegamento clienti/veicolo fallito: ${relationsError.message}`);
     }
 
     const { error: documentsError } = await supabase
@@ -806,14 +806,14 @@ export default function NuovoProfiloPage() {
       .upsert(
         [
           {
-            id: \`\${veicoloId}-libretto-cliente\`,
+            id: `${veicoloId}-libretto-cliente`,
             vehicle_id: veicoloId,
             tipo: "LIBRETTO_CLIENTE",
             nome: "libretto-cliente.jpg",
             r2_key: nuovoProfilo.libretto.cliente!,
           },
           {
-            id: \`\${veicoloId}-libretto-veicolo\`,
+            id: `${veicoloId}-libretto-veicolo`,
             vehicle_id: veicoloId,
             tipo: "LIBRETTO_VEICOLO",
             nome: "libretto-veicolo.jpg",
@@ -824,7 +824,7 @@ export default function NuovoProfiloPage() {
       );
 
     if (documentsError) {
-      throw new Error(\`Salvataggio documenti fallito: \${documentsError.message}\`);
+      throw new Error(`Salvataggio documenti fallito: ${documentsError.message}`);
     }
 
     // Manteniamo temporaneamente il localStorage come fallback durante la migrazione.
