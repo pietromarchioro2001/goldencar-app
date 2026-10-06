@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 
 
 import BottomBar from "@/components/BottomBar";
+import { supabase } from "@/lib/supabase";
 
 
 
@@ -726,51 +727,142 @@ export default function Veicolo() {
   const valorNormalizzato = (value: string) =>
     value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
+  const normalizzaCliente = (item: any): ClienteData => ({
+    nome: String(item?.nome ?? ""),
+    cognome: String(item?.cognome ?? ""),
+    luogoNascita: String(item?.luogo_nascita ?? item?.luogoNascita ?? ""),
+    provinciaNascita: String(item?.provincia_nascita ?? item?.provinciaNascita ?? ""),
+    indirizzo: String(item?.indirizzo ?? ""),
+    telefono: String(item?.telefono ?? ""),
+    nascita: String(item?.nascita ?? item?.data_nascita ?? ""),
+    cf: String(item?.cf ?? item?.codice_fiscale ?? ""),
+  });
+
+  const caricaProfiliSupabase = async () => {
+    try {
+      const [{ data: vehicles, error: vehiclesError }, { data: clients, error: clientsError }] =
+        await Promise.all([
+          supabase
+            .from("vehicles")
+            .select("id, client_id, veicolo, motore, targa, immatricolazione, revisione"),
+          supabase
+            .from("clients")
+            .select("*"),
+        ]);
+
+      if (vehiclesError) throw vehiclesError;
+      if (clientsError) throw clientsError;
+
+      const clientsById = new Map(
+        (clients ?? []).map((client: any) => [String(client.id), client])
+      );
+
+      const { data: relations, error: relationsError } = await supabase
+        .from("vehicle_clients")
+        .select("vehicle_id, client_id, ruolo");
+
+      const relationsByVehicle = new Map<string, any[]>();
+      if (!relationsError) {
+        for (const relation of relations ?? []) {
+          const key = String(relation.vehicle_id);
+          const list = relationsByVehicle.get(key) ?? [];
+          list.push(relation);
+          relationsByVehicle.set(key, list);
+        }
+      }
+
+      const mapped: ProfiloVeicolo[] = (vehicles ?? []).map((vehicle: any) => {
+        const relationsForVehicle = relationsByVehicle.get(String(vehicle.id)) ?? [];
+        const primaryRelation =
+          relationsForVehicle.find((item) => item.ruolo === "PRINCIPALE") ??
+          relationsForVehicle[0];
+
+        const primaryClientId =
+          primaryRelation?.client_id ?? vehicle.client_id ?? null;
+
+        const secondRelation = relationsForVehicle.find(
+          (item) =>
+            item.ruolo === "SECONDO" &&
+            String(item.client_id) !== String(primaryClientId)
+        );
+
+        return {
+          id: String(vehicle.id),
+          cliente1: normalizzaCliente(clientsById.get(String(primaryClientId))),
+          cliente2: secondRelation
+            ? normalizzaCliente(clientsById.get(String(secondRelation.client_id)))
+            : null,
+          veicolo: {
+            veicolo: String(vehicle.veicolo ?? ""),
+            motore: String(vehicle.motore ?? ""),
+            targa: String(vehicle.targa ?? ""),
+            immatricolazione: String(vehicle.immatricolazione ?? ""),
+            revisione: String(vehicle.revisione ?? ""),
+          },
+        };
+      });
+
+      setProfiliArchivio(mapped);
+      return mapped;
+    } catch (error) {
+      console.error("Errore caricamento veicoli da Supabase:", error);
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    void caricaProfiliSupabase();
+  }, []);
+
   const trovaProfili = (query: string): ProfiloVeicolo[] => {
     if (typeof window === "undefined") return [];
 
     const valore = query.trim().toLowerCase();
     if (!valore) return [];
 
-    try {
-      const raw = localStorage.getItem("goldencar_vehicles");
-      const vehicles = raw ? JSON.parse(raw) : [];
+    let vehicles = profiliArchivio;
 
-      if (!Array.isArray(vehicles)) return [];
-
-      const queryNormalizzata = valorNormalizzato(valore);
-
-      return vehicles.filter((item: any) => {
-        const cliente1 = item?.cliente1 ?? {};
-        const cliente2 = item?.cliente2 ?? null;
-        const veicolo = item?.veicolo ?? {};
-
-        const valoriRicerca = [
-          veicolo.targa,
-          veicolo.veicolo,
-          veicolo.motore,
-          cliente1.nome,
-          cliente1.cognome,
-          cliente1.telefono,
-          cliente1.cf,
-          cliente2?.nome,
-          cliente2?.cognome,
-          cliente2?.telefono,
-          cliente2?.cf,
-        ]
-          .filter(Boolean)
-          .map((value) => String(value).toLowerCase());
-
-        return valoriRicerca.some(
-          (value) =>
-            value.includes(valore) ||
-            valorNormalizzato(value).includes(queryNormalizzata)
-        );
-      }) as ProfiloVeicolo[];
-    } catch (error) {
-      console.error("Errore lettura profili veicolo:", error);
-      return [];
+    // Fallback temporaneo: finché Supabase non è disponibile,
+    // manteniamo compatibilità con l'archivio locale esistente.
+    if (vehicles.length === 0) {
+      try {
+        const raw = localStorage.getItem("goldencar_vehicles");
+        const localVehicles = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(localVehicles)) vehicles = localVehicles;
+      } catch (error) {
+        console.error("Errore lettura profili veicolo locali:", error);
+      }
     }
+
+    const queryNormalizzata = valorNormalizzato(valore);
+
+    return vehicles.filter((item: any) => {
+      const cliente1 = item?.cliente1 ?? {};
+      const cliente2 = item?.cliente2 ?? null;
+      const veicolo = item?.veicolo ?? {};
+
+      const valoriRicerca = [
+        veicolo.targa,
+        veicolo.veicolo,
+        veicolo.motore,
+        cliente1.nome,
+        cliente1.cognome,
+        cliente1.telefono,
+        cliente1.cf,
+        cliente2?.nome,
+        cliente2?.cognome,
+        cliente2?.telefono,
+        cliente2?.cf,
+      ]
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase());
+
+      return valoriRicerca.some(
+        (value) =>
+          value.includes(valore) ||
+          valorNormalizzato(value).includes(queryNormalizzata)
+      );
+    }) as ProfiloVeicolo[];
   };
 
   const trovaProfilo = (query: string): ProfiloVeicolo | null =>
