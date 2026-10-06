@@ -1,0 +1,1664 @@
+"use client";
+
+
+
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+
+import { useRouter } from "next/navigation";
+
+import BottomBar from "@/components/BottomBar";
+
+
+
+type ProdottoOrdine = {
+
+  name: string;
+
+  quantity?: string;
+
+  details?: string;
+
+};
+
+
+
+type Ordine = {
+
+  id: string;
+
+  numero: string;
+
+  createdAt: string;
+
+  jobNumber?: number;
+
+  cliente?: string;
+
+  telefono?: string;
+
+  targa?: string;
+
+  veicolo?: string;
+
+  prodotti: ProdottoOrdine[];
+
+  supplierId?: string;
+
+  supplierName?: string;
+
+  supplierPhone?: string;
+
+};
+
+
+
+type Fornitore = {
+
+  id: string;
+
+  nome: string;
+
+  whatsapp: string;
+
+};
+
+
+
+type Veicolo = {
+
+  id?: string;
+
+  cliente1?: { nome?: string; telefono?: string };
+
+  veicolo?: { veicolo?: string; targa?: string };
+
+};
+
+
+
+type ContextOrdine = {
+
+  nomeCliente?: string;
+
+  telefono?: string;
+
+  veicolo?: string;
+
+  targa?: string;
+
+};
+
+
+
+export default function OrdiniPage() {
+
+  const router = useRouter();
+
+  const [ordini, setOrdini] = useState<Ordine[]>([]);
+
+  const [fornitori, setFornitori] = useState<Fornitore[]>([]);
+
+  const [veicoli, setVeicoli] = useState<Veicolo[]>([]);
+
+  const [nuovoAperto, setNuovoAperto] = useState(false);
+
+  const [rubricaAperta, setRubricaAperta] = useState(false);
+
+  const [context, setContext] = useState<ContextOrdine | null>(null);
+
+  const [veicoloSelezionato, setVeicoloSelezionato] = useState<Veicolo | null>(null);
+
+  const [descrizione, setDescrizione] = useState("");
+
+  const [fornitoreId, setFornitoreId] = useState("");
+
+  const [nuovoFornitore, setNuovoFornitore] = useState("");
+
+  const [nuovoWhatsApp, setNuovoWhatsApp] = useState("");
+
+  const [listening, setListening] = useState(false);
+
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
+
+
+
+  useEffect(() => {
+
+    carica();
+
+    const rawContext = sessionStorage.getItem("goldencar_nuovo_ordine");
+
+    if (rawContext) {
+
+      try {
+
+        setContext(JSON.parse(rawContext));
+
+      } catch {
+
+        setContext(null);
+
+      }
+
+      sessionStorage.removeItem("goldencar_nuovo_ordine");
+
+      setNuovoAperto(true);
+
+    }
+
+  }, []);
+
+
+
+  const carica = () => {
+
+    try {
+
+      const rawOrders = localStorage.getItem("goldencar_orders");
+
+      const rawSuppliers = localStorage.getItem("goldencar_suppliers");
+
+      const rawVehicles = localStorage.getItem("goldencar_vehicles");
+
+
+
+      const parsedOrders = rawOrders ? JSON.parse(rawOrders) : [];
+
+      const parsedSuppliers = rawSuppliers ? JSON.parse(rawSuppliers) : [];
+
+      const parsedVehicles = rawVehicles ? JSON.parse(rawVehicles) : [];
+
+
+
+      setOrdini(Array.isArray(parsedOrders) ? parsedOrders : []);
+
+      setFornitori(Array.isArray(parsedSuppliers) ? parsedSuppliers : []);
+
+      setVeicoli(Array.isArray(parsedVehicles) ? parsedVehicles : []);
+
+    } catch {
+
+      setOrdini([]);
+
+      setFornitori([]);
+
+      setVeicoli([]);
+
+    }
+
+  };
+
+
+
+  const resetNuovo = () => {
+
+    setNuovoAperto(false);
+
+    setContext(null);
+
+    setVeicoloSelezionato(null);
+
+    setDescrizione("");
+
+    setFornitoreId("");
+
+  };
+
+
+
+  const apriNuovo = () => {
+
+    setContext(null);
+
+    setVeicoloSelezionato(null);
+
+    setDescrizione("");
+
+    setFornitoreId("");
+
+    setNuovoAperto(true);
+
+  };
+
+
+
+  const cliente = context?.nomeCliente || veicoloSelezionato?.cliente1?.nome || "";
+
+  const telefono = context?.telefono || veicoloSelezionato?.cliente1?.telefono || "";
+
+  const veicolo = context?.veicolo || veicoloSelezionato?.veicolo?.veicolo || "";
+
+  const targa = context?.targa || veicoloSelezionato?.veicolo?.targa || "";
+
+
+
+  const avviaDettatura = () => {
+
+    if (listening) {
+
+      recognitionRef.current?.stop();
+
+      setListening(false);
+
+      return;
+
+    }
+
+
+
+    const Recognition = (
+
+      window as Window & {
+
+        SpeechRecognition?: new () => any;
+
+        webkitSpeechRecognition?: new () => any;
+
+      }
+
+    ).SpeechRecognition ||
+
+      (
+
+        window as Window & {
+
+          webkitSpeechRecognition?: new () => any;
+
+        }
+
+      ).webkitSpeechRecognition;
+
+
+
+    if (!Recognition) {
+
+      alert("La dettatura vocale non è disponibile in questo browser.");
+
+      return;
+
+    }
+
+
+
+    const recognition = new Recognition();
+
+    recognition.lang = "it-IT";
+
+    recognition.interimResults = false;
+
+    recognition.continuous = false;
+
+
+
+    recognition.onresult = (event) => {
+
+      const transcript = event.results[0]?.[0]?.transcript?.trim() || "";
+
+      if (transcript) {
+
+        setDescrizione((current) =>
+
+          current ? `${current} ${transcript}` : transcript
+
+        );
+
+      }
+
+    };
+
+    recognition.onerror = () => setListening(false);
+
+    recognition.onend = () => setListening(false);
+
+
+
+    recognitionRef.current = recognition;
+
+    setListening(true);
+
+    recognition.start();
+
+  };
+
+
+
+  const creaOrdine = () => {
+
+    if (!descrizione.trim()) {
+
+      alert("Inserisci cosa devo ordinare.");
+
+      return;
+
+    }
+
+
+
+    if (!cliente && !veicolo && !targa) {
+
+      alert("Seleziona un veicolo.");
+
+      return;
+
+    }
+
+
+
+    const nextNumber =
+
+      ordini.reduce((max, ordine) => {
+
+        const n = Number(String(ordine.numero || "").replace(/\D/g, ""));
+
+        return Number.isFinite(n) ? Math.max(max, n) : max;
+
+      }, 0) + 1;
+
+
+
+    const supplier = fornitori.find((item) => item.id === fornitoreId);
+
+
+
+    const ordine: Ordine = {
+
+      id: `ordine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+
+      numero: String(nextNumber).padStart(3, "0"),
+
+      createdAt: new Date().toISOString(),
+
+      cliente,
+
+      telefono,
+
+      veicolo,
+
+      targa,
+
+      prodotti: [
+
+        {
+
+          name: descrizione.trim(),
+
+          quantity: "1",
+
+          details: "",
+
+        },
+
+      ],
+
+      supplierId: supplier?.id,
+
+      supplierName: supplier?.nome,
+
+      supplierPhone: supplier?.whatsapp,
+
+    };
+
+
+
+    const next = [ordine, ...ordini];
+
+    localStorage.setItem("goldencar_orders", JSON.stringify(next));
+
+    setOrdini(next);
+
+    resetNuovo();
+
+  };
+
+
+
+  const aggiungiFornitore = () => {
+
+    if (!nuovoFornitore.trim() || !nuovoWhatsApp.trim()) {
+
+      alert("Inserisci nome e numero WhatsApp.");
+
+      return;
+
+    }
+
+
+
+    const fornitore: Fornitore = {
+
+      id: `fornitore-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+
+      nome: nuovoFornitore.trim(),
+
+      whatsapp: nuovoWhatsApp.replace(/[^\d+]/g, ""),
+
+    };
+
+
+
+    const next = [...fornitori, fornitore];
+
+    localStorage.setItem("goldencar_suppliers", JSON.stringify(next));
+
+    setFornitori(next);
+
+    setNuovoFornitore("");
+
+    setNuovoWhatsApp("");
+
+  };
+
+
+
+  const assegnaFornitore = (ordineId: string, id: string) => {
+
+    const supplier = fornitori.find((item) => item.id === id);
+
+    if (!supplier) return;
+
+
+
+    const next = ordini.map((ordine) =>
+
+      ordine.id === ordineId
+
+        ? {
+
+            ...ordine,
+
+            supplierId: supplier.id,
+
+            supplierName: supplier.nome,
+
+            supplierPhone: supplier.whatsapp,
+
+          }
+
+        : ordine
+
+    );
+
+
+
+    localStorage.setItem("goldencar_orders", JSON.stringify(next));
+
+    setOrdini(next);
+
+  };
+
+
+
+  const inviaWhatsApp = (ordine: Ordine) => {
+
+    if (!ordine.supplierPhone) {
+
+      alert("Seleziona prima un fornitore.");
+
+      return;
+
+    }
+
+
+
+    const prodotti = ordine.prodotti
+
+      .map((product) => {
+
+        const dettagli = product.details ? ` — ${product.details}` : "";
+
+        return `${product.quantity || "1"} × ${product.name}${dettagli}`;
+
+      })
+
+      .join("\n");
+
+
+
+    const messaggio = `Ciao, per ${ordine.veicolo || "il veicolo"}${ordine.targa ? ` ${ordine.targa}` : ""} mi servono:\n${prodotti}`;
+
+    const numero = ordine.supplierPhone.replace(/\D/g, "");
+
+    window.open(
+
+      `https://wa.me/${numero}?text=${encodeURIComponent(messaggio)}`,
+
+      "_blank",
+
+      "noopener,noreferrer"
+
+    );
+
+  };
+
+
+
+  const ordiniOrdinati = useMemo(
+
+    () =>
+
+      [...ordini].sort(
+
+        (a, b) =>
+
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+
+      ),
+
+    [ordini]
+
+  );
+
+
+
+  return (
+
+    <main
+
+      className="app"
+
+      style={{
+
+        minHeight: "100vh",
+
+        paddingBottom: 90,
+
+        background: "#F3F4F6",
+
+      }}
+
+    >
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 18,
+          padding: "28px 22px 18px",
+        }}
+      >
+        <div
+          style={{
+            width: 74,
+            height: 74,
+            borderRadius: 22,
+            background: "#FFFFFF",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "#9CA3AF",
+            flexShrink: 0,
+          }}
+        >
+          LOGO
+        </div>
+
+        <h1
+          style={{
+            fontSize: 31,
+            fontWeight: 800,
+            color: "#041E49",
+            letterSpacing: "-0.7px",
+            margin: "3px 0 0",
+          }}
+        >
+          ORDINI
+        </h1>
+      </div>
+
+      <div
+        style={{
+          padding: "0 22px 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#6B7280",
+          }}
+        >
+          {ordini.length} {ordini.length === 1 ? "ordine" : "ordini"}
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            type="button"
+            onClick={() => setRubricaAperta(true)}
+            style={smallActionStyle}
+          >
+            RUBRICA
+          </button>
+
+          <button
+            type="button"
+            onClick={apriNuovo}
+            style={{
+              width: 52,
+              height: 52,
+              border: "none",
+              borderRadius: 18,
+              background: "#D4AF37",
+              boxShadow: "0 4px 12px rgba(0,0,0,.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              color: "#041E49",
+              fontSize: 28,
+              lineHeight: 1,
+            }}
+            aria-label="Nuovo ordine"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <section style={{ padding: "8px 18px 20px" }}>
+
+        {ordiniOrdinati.length === 0 ? (
+
+          <div style={emptyStyle}>
+
+            <div style={{ fontSize: 16, fontWeight: 900, color: "#111827" }}>
+
+              Nessun ordine
+
+            </div>
+
+            <div style={{ marginTop: 5, color: "#64748B", fontSize: 13 }}>
+
+              Gli ordini creati dalle schede lavoro compariranno qui.
+
+            </div>
+
+          </div>
+
+        ) : (
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+            {ordiniOrdinati.map((ordine) => (
+
+              <div key={ordine.id} style={cardStyle}>
+
+                <div
+
+                  style={{
+
+                    display: "flex",
+
+                    justifyContent: "space-between",
+
+                    alignItems: "flex-start",
+
+                    gap: 10,
+
+                  }}
+
+                >
+
+                  <div style={{ minWidth: 0 }}>
+
+                    <div
+
+                      style={{
+
+                        fontSize: 12,
+
+                        fontWeight: 900,
+
+                        color: "#A16207",
+
+                        letterSpacing: "0.04em",
+
+                      }}
+
+                    >
+
+                      ORDINE {ordine.numero}
+
+                    </div>
+
+                    <div
+
+                      style={{
+
+                        marginTop: 4,
+
+                        fontSize: 16,
+
+                        fontWeight: 900,
+
+                        color: "#111827",
+
+                      }}
+
+                    >
+
+                      {ordine.veicolo || "Veicolo"}
+
+                    </div>
+
+                    <div
+
+                      style={{
+
+                        marginTop: 2,
+
+                        fontSize: 13,
+
+                        color: "#64748B",
+
+                        fontWeight: 700,
+
+                      }}
+
+                    >
+
+                      {ordine.targa || "—"} · {ordine.cliente || "Cliente"}
+
+                    </div>
+
+                  </div>
+
+                  {ordine.jobNumber && (
+
+                    <div
+
+                      style={{
+
+                        padding: "6px 8px",
+
+                        borderRadius: 10,
+
+                        background: "#F1F5F9",
+
+                        color: "#64748B",
+
+                        fontSize: 11,
+
+                        fontWeight: 900,
+
+                        whiteSpace: "nowrap",
+
+                      }}
+
+                    >
+
+                      SCHEDA #{ordine.jobNumber}
+
+                    </div>
+
+                  )}
+
+                </div>
+
+
+
+                <div
+
+                  style={{
+
+                    marginTop: 13,
+
+                    padding: "11px 12px",
+
+                    borderRadius: 14,
+
+                    background: "#F8FAFC",
+
+                    display: "flex",
+
+                    flexDirection: "column",
+
+                    gap: 5,
+
+                  }}
+
+                >
+
+                  {ordine.prodotti.map((product, index) => (
+
+                    <div
+
+                      key={`${ordine.id}-${index}`}
+
+                      style={{
+
+                        fontSize: 13,
+
+                        color: "#334155",
+
+                        fontWeight: 700,
+
+                      }}
+
+                    >
+
+                      <strong>{product.quantity || "1"} ×</strong>{" "}
+
+                      {product.name}
+
+                      {product.details ? ` — ${product.details}` : ""}
+
+                    </div>
+
+                  ))}
+
+                </div>
+
+
+
+                <div
+
+                  style={{
+
+                    display: "grid",
+
+                    gridTemplateColumns: "minmax(0,1fr) auto",
+
+                    gap: 8,
+
+                    marginTop: 11,
+
+                  }}
+
+                >
+
+                  <select
+
+                    value={ordine.supplierId || ""}
+
+                    onChange={(event) =>
+
+                      assegnaFornitore(ordine.id, event.target.value)
+
+                    }
+
+                    style={{
+
+                      width: "100%",
+
+                      minWidth: 0,
+
+                      border: "1px solid #E5E7EB",
+
+                      borderRadius: 13,
+
+                      padding: "11px 10px",
+
+                      background: "#FFFFFF",
+
+                      color: "#334155",
+
+                      fontSize: 13,
+
+                      fontWeight: 700,
+
+                      outline: "none",
+
+                    }}
+
+                  >
+
+                    <option value="">Seleziona fornitore</option>
+
+                    {fornitori.map((fornitore) => (
+
+                      <option key={fornitore.id} value={fornitore.id}>
+
+                        {fornitore.nome}
+
+                      </option>
+
+                    ))}
+
+                  </select>
+
+
+
+                  <button
+
+                    type="button"
+
+                    onClick={() => inviaWhatsApp(ordine)}
+
+                    style={{
+
+                      border: 0,
+
+                      borderRadius: 13,
+
+                      padding: "0 13px",
+
+                      background: "#16A34A",
+
+                      color: "#FFFFFF",
+
+                      fontSize: 11,
+
+                      fontWeight: 900,
+
+                    }}
+
+                  >
+
+                    WHATSAPP
+
+                  </button>
+
+                </div>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        )}
+
+      </section>
+
+
+
+      {nuovoAperto && (
+
+        <Overlay title="NUOVO ORDINE" onClose={resetNuovo}>
+
+          {context ? (
+
+            <div style={linkedVehicleStyle}>
+
+              <div style={{ fontSize: 11, fontWeight: 900, color: "#A16207" }}>
+
+                VEICOLO COLLEGATO
+
+              </div>
+
+              <div style={{ marginTop: 5, fontSize: 16, fontWeight: 900 }}>
+
+                {veicolo || "Veicolo"}
+
+              </div>
+
+              <div style={{ marginTop: 2, fontSize: 13, color: "#64748B" }}>
+
+                {targa || "—"} · {cliente || "Cliente"}
+
+              </div>
+
+            </div>
+
+          ) : (
+
+            <>
+
+              <div style={labelStyle}>VEICOLO</div>
+
+              <select
+
+                value={veicoloSelezionato?.id || ""}
+
+                onChange={(event) => {
+
+                  const selected =
+
+                    veicoli.find(
+
+                      (item) => String(item.id || "") === event.target.value
+
+                    ) || null;
+
+                  setVeicoloSelezionato(selected);
+
+                }}
+
+                style={inputStyle}
+
+              >
+
+                <option value="">Seleziona veicolo</option>
+
+                {veicoli.map((item, index) => (
+
+                  <option
+
+                    key={String(item.id || index)}
+
+                    value={String(item.id || "")}
+
+                  >
+
+                    {item.veicolo?.veicolo || "Veicolo"} ·{" "}
+
+                    {item.veicolo?.targa || "—"} ·{" "}
+
+                    {item.cliente1?.nome || "Cliente"}
+
+                  </option>
+
+                ))}
+
+              </select>
+
+            </>
+
+          )}
+
+
+
+          <div style={labelStyle}>COSA DEVO ORDINARE?</div>
+
+          <div style={{ position: "relative" }}>
+
+            <textarea
+
+              value={descrizione}
+
+              onChange={(event) => setDescrizione(event.target.value)}
+
+              placeholder="Es. Pastiglie anteriori Brembo + dischi anteriori"
+
+              rows={4}
+
+              style={{
+
+                ...inputStyle,
+
+                fontFamily: "Arial, sans-serif",
+                fontSize: 16,
+                resize: "vertical",
+                paddingRight: 52,
+              }}
+
+            />
+
+            <button
+
+              type="button"
+
+              onClick={avviaDettatura}
+
+              title="Dettatura vocale"
+
+              style={{
+
+                position: "absolute",
+
+                right: 9,
+
+                bottom: 9,
+
+                width: 36,
+
+                height: 36,
+
+                border: 0,
+
+                borderRadius: 11,
+
+                background: listening ? "#FEE2E2" : "#F1F5F9",
+
+                color: listening ? "#DC2626" : "#111827",
+
+                display: "flex",
+
+                alignItems: "center",
+
+                justifyContent: "center",
+
+              }}
+
+            >
+
+              <MicIcon active={listening} />
+
+            </button>
+
+          </div>
+
+
+
+          <div style={labelStyle}>FORNITORE</div>
+
+          <select
+
+            value={fornitoreId}
+
+            onChange={(event) => setFornitoreId(event.target.value)}
+
+            style={inputStyle}
+
+          >
+
+            <option value="">Seleziona fornitore (facoltativo)</option>
+
+            {fornitori.map((fornitore) => (
+
+              <option key={fornitore.id} value={fornitore.id}>
+
+                {fornitore.nome}
+
+              </option>
+
+            ))}
+
+          </select>
+
+
+
+          <button type="button" onClick={creaOrdine} style={saveButtonStyle}>
+
+            CREA ORDINE
+
+          </button>
+
+        </Overlay>
+
+      )}
+
+
+
+      {rubricaAperta && (
+
+        <Overlay title="RUBRICA FORNITORI" onClose={() => setRubricaAperta(false)}>
+
+          {fornitori.length > 0 && (
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+              {fornitori.map((fornitore) => (
+
+                <div key={fornitore.id} style={supplierRowStyle}>
+
+                  <div style={{ minWidth: 0 }}>
+
+                    <div style={{ fontWeight: 900, color: "#111827" }}>
+
+                      {fornitore.nome}
+
+                    </div>
+
+                    <div style={{ marginTop: 2, fontSize: 12, color: "#64748B" }}>
+
+                      {fornitore.whatsapp}
+
+                    </div>
+
+                  </div>
+
+                  <button
+
+                    type="button"
+
+                    onClick={() =>
+
+                      window.open(
+
+                        `https://wa.me/${fornitore.whatsapp.replace(/\D/g, "")}`,
+
+                        "_blank",
+
+                        "noopener,noreferrer"
+
+                      )
+
+                    }
+
+                    style={{
+
+                      border: 0,
+
+                      borderRadius: 11,
+
+                      padding: "9px 10px",
+
+                      background: "#16A34A",
+
+                      color: "#FFFFFF",
+
+                      fontSize: 10,
+
+                      fontWeight: 900,
+
+                    }}
+
+                  >
+
+                    WHATSAPP
+
+                  </button>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
+
+
+          {fornitori.length === 0 && (
+
+            <div style={{ ...emptyStyle, marginBottom: 12 }}>
+
+              Nessun fornitore in rubrica.
+
+            </div>
+
+          )}
+
+
+
+          <div style={labelStyle}>NUOVO FORNITORE</div>
+
+          <input
+
+            value={nuovoFornitore}
+
+            onChange={(event) => setNuovoFornitore(event.target.value)}
+
+            placeholder="Nome fornitore"
+
+            style={inputStyle}
+
+          />
+
+          <input
+
+            value={nuovoWhatsApp}
+
+            onChange={(event) => setNuovoWhatsApp(event.target.value)}
+
+            placeholder="Numero WhatsApp"
+
+            inputMode="tel"
+
+            style={{ ...inputStyle, marginTop: 8 }}
+
+          />
+
+          <button type="button" onClick={aggiungiFornitore} style={saveButtonStyle}>
+
+            AGGIUNGI FORNITORE
+
+          </button>
+
+        </Overlay>
+
+      )}
+
+
+
+      <BottomBar />
+
+    </main>
+
+  );
+
+}
+
+
+
+const inputStyle: CSSProperties = {
+
+  width: "100%",
+
+  boxSizing: "border-box",
+
+  border: "1px solid #E5E7EB",
+
+  borderRadius: 14,
+
+  padding: "13px 14px",
+
+  fontSize: 15,
+
+  background: "#FFFFFF",
+
+  color: "#111827",
+
+  outline: "none",
+
+};
+
+
+
+const labelStyle: CSSProperties = {
+
+  fontSize: 11,
+
+  fontWeight: 900,
+
+  color: "#64748B",
+
+  marginTop: 14,
+
+  marginBottom: 6,
+
+  letterSpacing: "0.04em",
+
+};
+
+
+
+const saveButtonStyle: CSSProperties = {
+
+  width: "100%",
+
+  height: 50,
+
+  border: 0,
+
+  borderRadius: 16,
+
+  background: "#D4AF37",
+
+  color: "#111827",
+
+  fontWeight: 900,
+
+  marginTop: 16,
+
+};
+
+
+
+const smallActionStyle: CSSProperties = {
+
+  height: 44,
+
+  border: 0,
+
+  borderRadius: 14,
+
+  background: "#FFFFFF",
+
+  color: "#475569",
+
+  fontSize: 10,
+
+  fontWeight: 900,
+
+  padding: "0 13px",
+
+  boxShadow: "0 3px 12px rgba(15,23,42,.06)",
+
+};
+
+
+
+const cardStyle: CSSProperties = {
+
+  background: "#FFFFFF",
+
+  borderRadius: 22,
+
+  padding: 15,
+
+  boxShadow: "0 4px 14px rgba(15,23,42,.07)",
+
+};
+
+
+
+const emptyStyle: CSSProperties = {
+
+  background: "#FFFFFF",
+
+  borderRadius: 20,
+
+  padding: "24px 16px",
+
+  textAlign: "center",
+
+  color: "#64748B",
+
+  fontSize: 13,
+
+  fontWeight: 700,
+
+};
+
+
+
+const linkedVehicleStyle: CSSProperties = {
+
+  background: "#FFF8DB",
+
+  border: "1px solid #E8D17A",
+
+  borderRadius: 16,
+
+  padding: 13,
+
+};
+
+
+
+const supplierRowStyle: CSSProperties = {
+
+  background: "#FFFFFF",
+
+  border: "1px solid #E5E7EB",
+
+  borderRadius: 15,
+
+  padding: 12,
+
+  display: "flex",
+
+  alignItems: "center",
+
+  justifyContent: "space-between",
+
+  gap: 10,
+
+};
+
+
+
+function Overlay({
+
+  title,
+
+  children,
+
+  onClose,
+
+}: {
+
+  title: string;
+
+  children: React.ReactNode;
+
+  onClose: () => void;
+
+}) {
+
+  return (
+
+    <div
+
+      onClick={onClose}
+
+      style={{
+
+        position: "fixed",
+
+        inset: 0,
+
+        zIndex: 1000,
+
+        background: "rgba(15,23,42,.45)",
+
+        display: "flex",
+
+        alignItems: "center",
+
+        justifyContent: "center",
+
+        padding: 18,
+
+      }}
+
+    >
+
+      <div
+
+        onClick={(event) => event.stopPropagation()}
+
+        style={{
+
+          width: "100%",
+
+          maxWidth: 520,
+
+          maxHeight: "86vh",
+
+          overflowY: "auto",
+
+          background: "#F3F4F6",
+
+          borderRadius: 26,
+
+          padding: "20px 16px 22px",
+
+          boxSizing: "border-box",
+
+        }}
+
+      >
+
+        <div
+
+          style={{
+
+            display: "flex",
+
+            alignItems: "center",
+
+            justifyContent: "space-between",
+
+            gap: 10,
+
+            marginBottom: 15,
+
+          }}
+
+        >
+
+          <h2
+
+            style={{
+
+              margin: 0,
+
+              fontSize: 20,
+
+              fontWeight: 900,
+
+              color: "#111827",
+
+            }}
+
+          >
+
+            {title}
+
+          </h2>
+
+          <button
+
+            type="button"
+
+            onClick={onClose}
+
+            style={{
+
+              width: 34,
+
+              height: 34,
+
+              border: 0,
+
+              borderRadius: 11,
+
+              background: "#E5E7EB",
+
+              color: "#111827",
+
+              fontSize: 20,
+
+            }}
+
+          >
+
+            ×
+
+          </button>
+
+        </div>
+
+        {children}
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+function MicIcon({ active = false }: { active?: boolean }) {
+
+  return (
+
+    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+
+      <rect
+
+        x="8"
+
+        y="3"
+
+        width="8"
+
+        height="12"
+
+        rx="4"
+
+        stroke={active ? "#DC2626" : "#111827"}
+
+        strokeWidth="2"
+
+      />
+
+      <path
+
+        d="M5 11A7 7 0 0 0 19 11M12 18V21M9 21H15"
+
+        stroke={active ? "#DC2626" : "#111827"}
+
+        strokeWidth="2"
+
+        strokeLinecap="round"
+
+      />
+
+    </svg>
+
+  );
+
+}

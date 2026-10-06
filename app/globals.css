@@ -1,0 +1,217 @@
+/* =========================
+   RESET
+========================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  background: #2f2f2f;
+  font-family: Inter, Arial, sans-serif;
+  color: #111827;
+  overflow-x: hidden;
+}
+
+/* =========================
+   COLORI
+========================= */
+
+:root {
+  --gold: #d4af37;
+  --gold-light: #f4d54a;
+
+  --bg: #ecedee;
+  --white: #ffffff;
+
+  --navy: #111827;
+  --text: #111827;
+  --muted: #6b7280;
+
+  --line: #d8dee7;
+  --shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+/* =========================
+   CONTENITORE APP
+========================= */
+
+.app {
+  width: 100%;
+  max-width: 430px;
+  min-height: 100vh;
+  margin: 0 auto;
+  position: relative;
+  overflow-x: hidden;
+  background: var(--bg);
+  padding-bottom: 110px;
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.header {
+  padding: 28px 20px 18px;
+}
+
+.header-box {
+  background: var(--white);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  padding: 22px 28px;
+}
+
+.page-title {
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--navy);
+  line-height: 1;
+}
+
+/* =========================
+   CARD
+========================= */
+
+.card {
+  background: var(--white);
+  border-radius: 26px;
+  box-shadow: var(--shadow);
+}
+
+.card-soft {
+  background: var(--white);
+  border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+/* =========================
+   TITOLI
+========================= */
+
+.section-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.stat-number {
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--navy);
+}
+
+/* =========================
+   GRID 3x2
+========================= */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.stat-card {
+  height: 132px;
+  padding: 14px 10px;
+  border-radius: 22px;
+  background: var(--white);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* =========================
+   BOTTONI GRANDI
+========================= */
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.action-btn {
+  height: 108px;
+  border: none;
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.action-btn span {
+  margin-top: 10px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.checkin {
+  background: var(--gold);
+  color: #111827;
+}
+
+.checkout {
+  background: #08142f;
+  color: #ffffff;
+}
+
+/* =========================
+   DIVISORE
+========================= */
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: 18px 0 22px;
+}
+
+/* =========================
+   UTILITÀ
+========================= */
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.space-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}

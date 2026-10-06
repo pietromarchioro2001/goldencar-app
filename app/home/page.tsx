@@ -1,0 +1,1934 @@
+"use client";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import BottomBar from "@/components/BottomBar";
+type Lavoro = {
+  jobNumber: number;
+  createdAt: string;
+  nomeCliente?: string;
+  veicolo?: string;
+  targa?: string;
+  telefono?: string;
+  paymentAmount?: string;
+  paymentStatus?: "DA_PAGARE" | "PAGATO";
+  types?: string[];
+  works?: string[] | string;
+  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  pdfUrl?: string;
+};
+type Appuntamento = {
+  id?: string;
+  date?: string;
+  data?: string;
+  time?: string;
+  ora?: string;
+  title?: string;
+  descrizione?: string;
+  description?: string;
+};
+type Revisione = {
+  id?: string;
+  nomeCliente?: string;
+  cliente?: string;
+  veicolo?: string;
+  targa?: string;
+  revisione?: string;
+  scadenza?: string;
+  telefono?: string;
+};
+type Sollecito = {
+  id?: string;
+  nomeCliente?: string;
+  cliente?: string;
+  telefono?: string;
+  clientKey?: string;
+  importo?: string;
+};
+type PagamentoManuale = {
+  id: string;
+  clientKey: string;
+  nomeCliente: string;
+  telefono?: string;
+  targa?: string;
+  descrizione: string;
+  importo: string;
+  stato: "DA_PAGARE" | "PAGATO";
+  createdAt: string;
+};
+type PagamentoDettaglio = {
+  id: string;
+  clientKey: string;
+  nomeCliente: string;
+  telefono?: string;
+  descrizione: string;
+  importo: number;
+  stato: "DA_PAGARE" | "PAGATO";
+  jobNumber?: number;
+  manuale?: boolean;
+};
+type ClienteRicerca = {
+  clientKey: string;
+  nomeCliente: string;
+  telefono: string;
+  targa?: string;
+};
+type Ordine = {
+  id?: string;
+  numero?: string;
+  cliente?: string;
+  veicolo?: string;
+  descrizione?: string;
+  stato?: string;
+};
+type VeicoloSalvato = {
+  id?: string;
+  cliente1?: { nome?: string; indirizzo?: string; telefono?: string; cf?: string; nascita?: string };
+  cliente2?: { nome?: string; indirizzo?: string; telefono?: string; cf?: string; nascita?: string } | null;
+  veicolo?: { veicolo?: string; motore?: string; targa?: string; immatricolazione?: string; revisione?: string };
+};
+const TEST_VEHICLE: VeicoloSalvato = {
+  id: "test-gt015bf",
+  cliente1: {
+    nome: "Mario Rossi",
+    indirizzo: "Via Roma 12, Fondo (TN)",
+    telefono: "3471234567",
+    cf: "RSSMRA80C14L378Z",
+    nascita: "1980-03-14",
+  },
+  cliente2: null,
+  veicolo: {
+    veicolo: "Volkswagen Golf",
+    motore: "1968",
+    targa: "GT015BF",
+    immatricolazione: "2020-05-12",
+    revisione: "2026-05-12",
+  },
+};
+function normalizePlate(value: string) {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .replace(/O/g, "0")
+    .replace(/I/g, "1")
+    .replace(/L/g, "1");
+}
+function plateCandidates(text: string) {
+  const raw = text.toUpperCase().replace(/[^A-Z0-9]/g, " ");
+  const compact = raw.replace(/\s+/g, " ");
+  const candidates = new Set<string>();
+  const tokens = compact.split(/\s+/).filter(Boolean);
+  tokens.forEach((token) => {
+    const normalized = normalizePlate(token);
+    if (/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(normalized)) candidates.add(normalized);
+  });
+  for (let i = 0; i < compact.length - 6; i++) {
+    const chunk = normalizePlate(compact.slice(i, i + 7));
+    if (/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(chunk)) candidates.add(chunk);
+  }
+  return [...candidates];
+}
+type ModalType =
+  | "lavori"
+  | "revisioni"
+  | "agenda"
+  | "solleciti"
+  | "ordini"
+  | null;
+function parseImporto(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return 0;
+  const normalized = raw
+    .replace(/€/g, "")
+    .replace(/\s/g, "")
+    .replace(/\.(?=\d{3}(?:,|$))/g, "")
+    .replace(",", ".");
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+function formatEuro(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+function makeClientKey(nome: string, telefono?: string) {
+  return `${nome.trim().toLowerCase()}|${(telefono || "").replace(/\D/g, "")}`;
+}
+function aggregaSolleciti(lavori: Lavoro[], manuali: PagamentoManuale[]): Sollecito[] {
+  const map = new Map<string, Sollecito>();
+  const add = (item: { clientKey: string; nomeCliente: string; telefono?: string; amount: number }) => {
+    if (item.amount <= 0) return;
+    const current = map.get(item.clientKey);
+    if (current) {
+      current.importo = String(parseImporto(current.importo) + item.amount);
+    } else {
+      map.set(item.clientKey, {
+        clientKey: item.clientKey,
+        nomeCliente: item.nomeCliente,
+        telefono: item.telefono || "",
+        importo: String(item.amount),
+      });
+    }
+  };
+  for (const lavoro of lavori) {
+    if (lavoro.paymentStatus !== "DA_PAGARE") continue;
+    const amount = parseImporto(lavoro.paymentAmount);
+    if (amount <= 0) continue;
+    const nome = lavoro.nomeCliente || "Cliente";
+    add({
+      clientKey: makeClientKey(nome, lavoro.telefono),
+      nomeCliente: nome,
+      telefono: lavoro.telefono,
+      amount,
+    });
+  }
+  for (const pagamento of manuali) {
+    if (pagamento.stato !== "DA_PAGARE") continue;
+    add({
+      clientKey: pagamento.clientKey,
+      nomeCliente: pagamento.nomeCliente,
+      telefono: pagamento.telefono,
+      amount: parseImporto(pagamento.importo),
+    });
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    (a.nomeCliente || "").localeCompare(b.nomeCliente || "", "it")
+  );
+}
+export default function Home() {
+  const router = useRouter();
+  const [lavori, setLavori] = useState<Lavoro[]>([]);
+  const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
+  const [revisioni, setRevisioni] = useState<Revisione[]>([]);
+  const [solleciti, setSolleciti] = useState<Sollecito[]>([]);
+  const [pagamentiManuali, setPagamentiManuali] = useState<PagamentoManuale[]>([]);
+  const [dettaglioSollecito, setDettaglioSollecito] = useState<Sollecito | null>(null);
+  const [nuovoPagamentoAperto, setNuovoPagamentoAperto] = useState(false);
+  const [clienteQuery, setClienteQuery] = useState("");
+  const [clienteSelezionatoPagamento, setClienteSelezionatoPagamento] = useState<ClienteRicerca | null>(null);
+  const [nuovoClienteNome, setNuovoClienteNome] = useState("");
+  const [nuovoClienteTelefono, setNuovoClienteTelefono] = useState("");
+  const [nuovoPagamentoDescrizione, setNuovoPagamentoDescrizione] = useState("");
+  const [nuovoPagamentoImporto, setNuovoPagamentoImporto] = useState("");
+  const [ordini, setOrdini] = useState<Ordine[]>([]);
+  const [modal, setModal] = useState<ModalType>(null);
+  const [listening, setListening] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInBusy, setCheckInBusy] = useState(false);
+  const [checkInError, setCheckInError] = useState("");
+  const checkInVideoRef = useRef<HTMLVideoElement>(null);
+  const checkInStreamRef = useRef<MediaStream | null>(null);
+  const ensureTestVehicle = () => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem("goldencar_vehicles");
+      const vehicles: VeicoloSalvato[] = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(vehicles)) return;
+      const exists = vehicles.some(
+        (vehicle) => normalizePlate(vehicle?.veicolo?.targa || "") === "GT015BF"
+      );
+      if (!exists) {
+        localStorage.setItem(
+          "goldencar_vehicles",
+          JSON.stringify([...vehicles, TEST_VEHICLE])
+        );
+      }
+    } catch {
+      localStorage.setItem("goldencar_vehicles", JSON.stringify([TEST_VEHICLE]));
+    }
+  };
+  useEffect(() => {
+    ensureTestVehicle();
+    caricaDati();
+    const refresh = () => caricaDati();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
+  useEffect(() => {
+    if (!checkInOpen || !checkInVideoRef.current || !checkInStreamRef.current) return;
+    checkInVideoRef.current.srcObject = checkInStreamRef.current;
+    void checkInVideoRef.current.play().catch(() => undefined);
+  }, [checkInOpen]);
+  useEffect(() => {
+    return () => {
+      checkInStreamRef.current?.getTracks().forEach((track) => track.stop());
+      checkInStreamRef.current = null;
+    };
+  }, []);
+  const stopCheckInCamera = () => {
+    checkInStreamRef.current?.getTracks().forEach((track) => track.stop());
+    checkInStreamRef.current = null;
+    setCheckInOpen(false);
+    setCheckInBusy(false);
+  };
+  const openCheckInCamera = async () => {
+    if (checkInBusy) return;
+    setCheckInError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCheckInError("La fotocamera non è disponibile su questo dispositivo.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      });
+      checkInStreamRef.current = stream;
+      setCheckInOpen(true);
+    } catch (error) {
+      console.error("CHECK-IN camera error:", error);
+      setCheckInError("Non posso accedere alla fotocamera. Controlla i permessi del browser.");
+    }
+  };
+  const startCheckIn = () => {
+    void openCheckInCamera();
+  };
+  const apriCheckIn = startCheckIn;
+  const captureCheckInPlate = async () => {
+    const video = checkInVideoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight || checkInBusy) return;
+    setCheckInBusy(true);
+    setCheckInError("");
+    try {
+      const canvas = document.createElement("canvas");
+      // Il riquadro guida è centrale: ritagliamo solo la fascia in cui l'utente
+      // deve inquadrare la targa, riducendo molto il rumore dell'OCR.
+      const cropWidth = Math.round(video.videoWidth * 0.82);
+      const cropHeight = Math.round(video.videoHeight * 0.22);
+      const sx = Math.round((video.videoWidth - cropWidth) / 2);
+      const sy = Math.round((video.videoHeight - cropHeight) / 2);
+      canvas.width = Math.max(1200, cropWidth * 2);
+      canvas.height = Math.max(300, cropHeight * 2);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Impossibile acquisire la foto.");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(video, sx, sy, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.98)
+      );
+      if (!blob) throw new Error("Impossibile creare la foto della targa.");
+      const file = new File([blob], "check-in-targa.jpg", { type: "image/jpeg" });
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/vision/plate", { method: "POST", body: formData });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || "Errore durante la lettura della targa.");
+      const plate = normalizePlate(String(data?.plate || ""));
+      if (!/^[A-Z]{2}\d{3}[A-Z]{2}$/.test(plate)) {
+        const fallback = plateCandidates(String(data?.text || ""))[0] || "";
+        if (!fallback) throw new Error("Targa non riconosciuta. Avvicinati e riprova.");
+        await handleRecognizedPlate(fallback);
+      } else {
+        await handleRecognizedPlate(plate);
+      }
+    } catch (error) {
+      console.error("CHECK-IN OCR error:", error);
+      setCheckInError(error instanceof Error ? error.message : "Non sono riuscito a leggere la targa.");
+      setCheckInBusy(false);
+    }
+  };
+  const handleRecognizedPlate = async (plate: string) => {
+    const normalized = normalizePlate(plate);
+    let vehicles: VeicoloSalvato[] = [];
+    try {
+      const raw = localStorage.getItem("goldencar_vehicles");
+      const parsed = raw ? JSON.parse(raw) : [];
+      vehicles = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      vehicles = [];
+    }
+    const vehicle = vehicles.find(
+      (item) => normalizePlate(item?.veicolo?.targa || "") === normalized
+    );
+    stopCheckInCamera();
+    if (vehicle) {
+      const cliente = vehicle.cliente1 || {};
+      const veicolo = vehicle.veicolo || {};
+      sessionStorage.setItem(
+        "goldencar_nuova_scheda",
+        JSON.stringify({
+          nomeCliente: cliente.nome || "",
+          indirizzo: cliente.indirizzo || "",
+          telefono: cliente.telefono || "",
+          codiceFiscale: cliente.cf || "",
+          veicolo: veicolo.veicolo || "",
+          targa: normalized,
+        })
+      );
+      router.push("/veicolo/scheda");
+      return;
+    }
+    sessionStorage.setItem("goldencar_checkin_targa", normalized);
+    router.push("/veicolo/profilo");
+  };
+  const caricaDati = () => {
+    if (typeof window === "undefined") return;
+    /* =========================
+       LAVORI
+    ========================= */
+    const lavoriCaricati: Lavoro[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith("goldencar_job_")) continue;
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        const lavoro = JSON.parse(raw) as Lavoro;
+        if (lavoro.jobNumber) {
+          lavoriCaricati.push(lavoro);
+        }
+      } catch {
+        // ignora dati non validi
+      }
+    }
+    lavoriCaricati.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() -
+        new Date(a.createdAt).getTime()
+    );
+    setLavori(lavoriCaricati);
+    /* =========================
+       AGENDA
+    ========================= */
+    setAppuntamenti(
+      leggiArray<Appuntamento>("goldencar_appointments")
+    );
+    /* =========================
+       REVISIONI
+    ========================= */
+    setRevisioni(
+      leggiArray<Revisione>("goldencar_revisions")
+    );
+    /* =========================
+       SOLLECITI
+    ========================= */
+    const manuali = leggiArray<PagamentoManuale>("goldencar_pagamenti_manuali");
+    setPagamentiManuali(manuali);
+    setSolleciti(aggregaSolleciti(lavoriCaricati, manuali));
+    /* =========================
+       ORDINI
+    ========================= */
+    setOrdini(
+      leggiArray<Ordine>("goldencar_orders")
+    );
+  };
+  const leggiArray = <T,>(key: string): T[] => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+  const lavoriAttivi = useMemo(
+    () =>
+      lavori.filter(
+        (lavoro) =>
+          lavoro.status === "IN_LAVORAZIONE"
+      ),
+    [lavori]
+  );
+  const revisioniScadute = useMemo(() => {
+    const oggi = new Date();
+    oggi.setHours(0, 0, 0, 0);
+    return revisioni.filter((revisione) => {
+      const raw =
+        revisione.scadenza ||
+        revisione.revisione;
+      if (!raw) return false;
+      const data = new Date(raw);
+      if (Number.isNaN(data.getTime())) {
+        return false;
+      }
+      data.setHours(0, 0, 0, 0);
+      return data < oggi;
+    });
+  }, [revisioni]);
+  const appuntamentiOggi = useMemo(() => {
+    const oggi = new Date();
+    const yyyy = oggi.getFullYear();
+    const mm = String(
+      oggi.getMonth() + 1
+    ).padStart(2, "0");
+    const dd = String(
+      oggi.getDate()
+    ).padStart(2, "0");
+    const oggiISO = `${yyyy}-${mm}-${dd}`;
+    return appuntamenti
+      .filter((appuntamento) => {
+        const data =
+          appuntamento.date ||
+          appuntamento.data ||
+          "";
+        return (
+          data === oggiISO ||
+          data.includes(
+            `${dd}/${mm}/${yyyy}`
+          )
+        );
+      })
+      .sort((a, b) =>
+        (
+          a.time ||
+          a.ora ||
+          ""
+        ).localeCompare(
+          b.time ||
+          b.ora ||
+          ""
+        )
+      );
+  }, [appuntamenti]);
+  const apriLavoro = (lavoro: Lavoro) => {
+    sessionStorage.setItem(
+      "goldencar_apri_scheda",
+      String(lavoro.jobNumber)
+    );
+    setModal(null);
+    router.push("/veicolo/scheda");
+  };
+  const avvisaRevisione = (
+    revisione: Revisione
+  ) => {
+    const telefono =
+      revisione.telefono || "";
+    const nome =
+      revisione.nomeCliente ||
+      revisione.cliente ||
+      "cliente";
+    const messaggio = encodeURIComponent(
+      `Ciao ${nome}, ti ricordiamo che la revisione del veicolo ${revisione.veicolo || ""} targato ${revisione.targa || ""} è scaduta. Contattaci per fissare un appuntamento.`
+    );
+    if (telefono) {
+      const numero = telefono.replace(
+        /\s+/g,
+        ""
+      );
+      window.open(
+        `https://wa.me/${numero}?text=${messaggio}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+    } else {
+      alert(
+        "Questo cliente non ha un numero di telefono."
+      );
+    }
+  };
+  const sollecita = (sollecito: Sollecito) => {
+    const telefono = sollecito.telefono || "";
+    const nome = sollecito.nomeCliente || "cliente";
+    const importo = formatEuro(parseImporto(sollecito.importo));
+    const messaggio = encodeURIComponent(
+      `Ciao ${nome}, ti contattiamo per ricordarti che risulta ancora da saldare un importo di ${importo}. Grazie.`
+    );
+    if (!telefono) {
+      alert("Questo cliente non ha un numero di telefono.");
+      return;
+    }
+    const numero = telefono.replace(/\s+/g, "");
+    window.open(
+      `https://wa.me/${numero}?text=${messaggio}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
+  const aggiornaStatiPagamento = (clientKey: string, paymentId?: string, pagaTutto = false) => {
+    const updatedJobs = lavori.map((lavoro) => {
+      const nome = lavoro.nomeCliente || "Cliente";
+      const key = makeClientKey(nome, lavoro.telefono);
+      if (key !== clientKey || lavoro.paymentStatus !== "DA_PAGARE") return lavoro;
+      if (!pagaTutto && String(lavoro.jobNumber) !== String(paymentId)) return lavoro;
+      return { ...lavoro, paymentStatus: "PAGATO" as const };
+    });
+    for (const lavoro of updatedJobs) {
+      const originale = lavori.find((x) => x.jobNumber === lavoro.jobNumber);
+      if (originale !== lavoro) {
+        localStorage.setItem(`goldencar_job_${lavoro.jobNumber}`, JSON.stringify(lavoro));
+      }
+    }
+    const updatedManuali = pagamentiManuali.map((pagamento) => {
+      if (pagamento.clientKey !== clientKey || pagamento.stato !== "DA_PAGARE") return pagamento;
+      if (!pagaTutto && pagamento.id !== paymentId) return pagamento;
+      return { ...pagamento, stato: "PAGATO" as const };
+    });
+    localStorage.setItem("goldencar_pagamenti_manuali", JSON.stringify(updatedManuali));
+    setPagamentiManuali(updatedManuali);
+    setLavori(updatedJobs);
+    setSolleciti(aggregaSolleciti(updatedJobs, updatedManuali));
+    setDettaglioSollecito((current) => {
+      if (!current) return null;
+      const remaining = aggregaSolleciti(updatedJobs, updatedManuali).find(x => x.clientKey === current.clientKey);
+      return remaining || null;
+    });
+  };
+  const pagaTuttoCliente = (sollecito: Sollecito) => {
+    aggiornaStatiPagamento(sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono), undefined, true);
+  };
+  const pagamentiCliente = (sollecito: Sollecito): PagamentoDettaglio[] => {
+    const key = sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono);
+    const result: PagamentoDettaglio[] = [];
+    for (const lavoro of lavori) {
+      const nome = lavoro.nomeCliente || "Cliente";
+      if (makeClientKey(nome, lavoro.telefono) !== key || lavoro.paymentStatus !== "DA_PAGARE") continue;
+      const amount = parseImporto(lavoro.paymentAmount);
+      if (amount <= 0) continue;
+      result.push({
+        id: String(lavoro.jobNumber),
+        clientKey: key,
+        nomeCliente: nome,
+        telefono: lavoro.telefono,
+        descrizione: `Scheda ${lavoro.jobNumber}${
+          (() => {
+            const worksText = Array.isArray(lavoro.works)
+              ? lavoro.works.filter(Boolean).join(" · ").trim()
+              : String(lavoro.works || "").trim();
+            return worksText ? ` · ${worksText}` : "";
+          })()
+        }`,
+        importo: amount,
+        stato: "DA_PAGARE",
+        jobNumber: lavoro.jobNumber,
+      });
+    }
+    for (const pagamento of pagamentiManuali) {
+      if (pagamento.clientKey !== key || pagamento.stato !== "DA_PAGARE") continue;
+      result.push({
+        id: pagamento.id,
+        clientKey: key,
+        nomeCliente: pagamento.nomeCliente,
+        telefono: pagamento.telefono,
+        descrizione: pagamento.descrizione,
+        importo: parseImporto(pagamento.importo),
+        stato: "DA_PAGARE",
+        manuale: true,
+      });
+    }
+    return result;
+  };
+  const clientiDisponibili = useMemo<ClienteRicerca[]>(() => {
+    if (typeof window === "undefined") return [];
+    const map = new Map<string, ClienteRicerca>();
+    const add = (nome: unknown, telefono?: unknown, targa?: unknown) => {
+      const n = String(nome || "").trim();
+      const tel = String(telefono || "").trim();
+      if (!n) return;
+      const key = makeClientKey(n, tel);
+      if (!map.has(key)) map.set(key, { clientKey: key, nomeCliente: n, telefono: tel, targa: String(targa || "").trim() });
+    };
+    for (const lavoro of lavori) add(lavoro.nomeCliente, lavoro.telefono, lavoro.targa);
+    for (const storageKey of ["goldencar_vehicles", "goldencar_clients", "goldencar_clienti"]) {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(arr)) continue;
+        for (const item of arr) {
+          add(item.nomeCliente || item.nome || item.cliente || [item.nome, item.cognome].filter(Boolean).join(" "), item.telefono || item.phone, item.targa || item.plate);
+        }
+      } catch {}
+    }
+    return Array.from(map.values()).sort((a, b) => a.nomeCliente.localeCompare(b.nomeCliente, "it"));
+  }, [lavori]);
+  const clientiFiltrati = useMemo(() => {
+    const q = clienteQuery.trim().toLowerCase();
+    if (!q) return clientiDisponibili.slice(0, 8);
+    return clientiDisponibili.filter((cliente) =>
+      [cliente.nomeCliente, cliente.telefono, cliente.targa || ""].some(value => value.toLowerCase().includes(q))
+    ).slice(0, 8);
+  }, [clienteQuery, clientiDisponibili]);
+  const apriNuovoPagamento = () => {
+    setClienteQuery("");
+    setClienteSelezionatoPagamento(null);
+    setNuovoClienteNome("");
+    setNuovoClienteTelefono("");
+    setNuovoPagamentoDescrizione("");
+    setNuovoPagamentoImporto("");
+    setNuovoPagamentoAperto(true);
+  };
+  const salvaNuovoPagamento = () => {
+    const nome = (clienteSelezionatoPagamento?.nomeCliente || nuovoClienteNome).trim();
+    const telefono = (clienteSelezionatoPagamento?.telefono || nuovoClienteTelefono).trim();
+    const importo = parseImporto(nuovoPagamentoImporto);
+    const descrizione = nuovoPagamentoDescrizione.trim();
+    if (!nome) {
+      alert("Inserisci o seleziona un cliente.");
+      return;
+    }
+    if (importo <= 0) {
+      alert("Inserisci un importo valido.");
+      return;
+    }
+    if (!descrizione) {
+      alert("Inserisci la descrizione del piccolo lavoro.");
+      return;
+    }
+    const clientKey = clienteSelezionatoPagamento?.clientKey || makeClientKey(nome, telefono);
+    // Se il cliente non esiste, registriamo almeno il profilo cliente locale.
+    // Quando la rubrica definitiva verrà collegata a Supabase, questo blocco sarà sostituito dal salvataggio nel database.
+    if (!clienteSelezionatoPagamento) {
+      try {
+        const raw = localStorage.getItem("goldencar_clients");
+        const clienti = raw ? JSON.parse(raw) : [];
+        const elenco = Array.isArray(clienti) ? clienti : [];
+        if (!elenco.some((c: any) => makeClientKey(c.nomeCliente || c.nome || "", c.telefono || c.phone) === clientKey)) {
+          elenco.push({
+            id: crypto.randomUUID(),
+            nomeCliente: nome,
+            telefono,
+            createdAt: new Date().toISOString(),
+          });
+          localStorage.setItem("goldencar_clients", JSON.stringify(elenco));
+        }
+      } catch {}
+    }
+    const nuovo: PagamentoManuale = {
+      id: crypto.randomUUID(),
+      clientKey,
+      nomeCliente: nome,
+      telefono,
+      descrizione,
+      importo: String(importo),
+      stato: "DA_PAGARE",
+      createdAt: new Date().toISOString(),
+    };
+    const aggiornati = [...pagamentiManuali, nuovo];
+    localStorage.setItem("goldencar_pagamenti_manuali", JSON.stringify(aggiornati));
+    setPagamentiManuali(aggiornati);
+    setSolleciti(aggregaSolleciti(lavori, aggiornati));
+    setNuovoPagamentoAperto(false);
+  };
+  const aggiungiAppuntamentoVocale =
+    () => {
+      const Recognition = (
+        window as Window & {
+          SpeechRecognition?: any;
+          webkitSpeechRecognition?: any;
+        }
+      ).SpeechRecognition ||
+      (
+        window as Window & {
+          SpeechRecognition?: any;
+          webkitSpeechRecognition?: any;
+        }
+      ).webkitSpeechRecognition;
+      if (!Recognition) {
+        alert(
+          "La dettatura vocale non è disponibile in questo browser."
+        );
+        return;
+      }
+      if (listening) return;
+      const recognition =
+        new Recognition();
+      recognition.lang = "it-IT";
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      recognition.onresult = (
+        event: any
+      ) => {
+        const testo =
+          event.results?.[0]?.[0]
+            ?.transcript || "";
+        if (!testo.trim()) return;
+        const nuovo: Appuntamento = {
+          id: crypto.randomUUID(),
+          date: "",
+          time: "",
+          description: testo.trim(),
+        };
+        const aggiornati = [
+          ...appuntamenti,
+          nuovo,
+        ];
+        localStorage.setItem(
+          "goldencar_appointments",
+          JSON.stringify(aggiornati)
+        );
+        setAppuntamenti(aggiornati);
+        alert(
+          `Appuntamento acquisito:\n"${testo.trim()}"\n\nIn seguito collegheremo qui l'interpretazione automatica di giorno e ora.`
+        );
+      };
+      recognition.onerror = () => {
+        setListening(false);
+      };
+      recognition.onend = () => {
+        setListening(false);
+      };
+      setListening(true);
+      recognition.start();
+    };
+  return (
+    <>
+      <main
+        className="app"
+        style={{
+          paddingBottom: 140,
+        }}
+      >
+        {/* =========================
+            HEADER
+        ========================= */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 18,
+            padding:
+              "28px 22px 20px",
+          }}
+        >
+          <div
+            style={{
+              width: 74,
+              height: 74,
+              borderRadius: 22,
+              background: "#FFFFFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow:
+                "0 4px 12px rgba(0,0,0,.08)",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "#9CA3AF",
+            }}
+          >
+            LOGO
+          </div>
+          <h1
+            style={{
+              fontSize: 31,
+              fontWeight: 800,
+              color: "#041E49",
+              letterSpacing: "-0.7px",
+              margin: "3px 0 0",
+            }}
+          >
+            GOLDENCAR
+          </h1>
+        </div>
+        {/* =========================
+            STATISTICHE
+        ========================= */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(3, 1fr)",
+            gap: 14,
+            padding: "0 18px",
+            marginTop: 36,
+          }}
+        >
+          <StatCard
+            title="LAVORI"
+            value={lavoriAttivi.length}
+            color="#111827"
+            icon={<IconLavori />}
+            onClick={() =>
+              setModal("lavori")
+            }
+          />
+          <StatCard
+            title="REVISIONI"
+            value={revisioniScadute.length}
+            color="#D4AF37"
+            icon={<IconRevisioni />}
+            onClick={() =>
+              setModal("revisioni")
+            }
+          />
+          <StatCard
+            title="AGENDA"
+            value={appuntamentiOggi.length}
+            color="#2563EB"
+            icon={<IconAgenda />}
+            onClick={() =>
+              setModal("agenda")
+            }
+          />
+          <StatCard
+            title="SOLLECITI"
+            value={solleciti.length}
+            color="#EA580C"
+            icon={<IconAlert />}
+            onClick={() =>
+              setModal("solleciti")
+            }
+          />
+          <StatCard
+            title="ORDINI"
+            value={ordini.length}
+            color="#0F766E"
+            icon={<IconOrdini />}
+            onClick={() =>
+              setModal("ordini")
+            }
+          />
+          <StatCard
+            title="FATTURE"
+            value="web"
+            color="#7C3AED"
+            icon={<IconFatture />}
+            onClick={() => {
+              window.open(
+                "https://www.google.com/",
+                "_blank",
+                "noopener,noreferrer"
+              );
+            }}
+          />
+        </div>
+        {/* =========================
+            CHECK IN / OUT
+        ========================= */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              padding: "0 18px",
+              marginTop: 120,
+            }}
+          >
+            <button
+              type="button"
+              onClick={apriCheckIn}
+              style={{
+                width: "calc(50% - 9px)",
+                maxWidth: 300,
+                height: 132,
+                border: "none",
+                borderRadius: 30,
+                background: "#D4AF37",
+                boxShadow: "0 8px 20px rgba(0,0,0,.12)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+              }}
+            >
+              <CameraIcon />
+              <span
+                style={{
+                  marginTop: 12,
+                  fontSize: 20,
+                  fontWeight: 800,
+                  color: "#08142F",
+                }}
+              >
+                CHECK-IN
+              </span>
+            </button>
+          </div>
+      </main>
+      <BottomBar />
+      {/* =========================
+          MODAL LAVORI
+      ========================= */}
+      {modal === "lavori" && (
+        <Modal
+          title="LAVORI ATTIVI"
+          onClose={() =>
+            setModal(null)
+          }
+          topRight={
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/lavori"
+                )
+              }
+              style={modalLinkStyle}
+            >
+              LISTA LAVORI
+            </button>
+          }
+        >
+          {lavoriAttivi.length === 0 ? (
+            <EmptyState text="Nessun lavoro in lavorazione." />
+          ) : (
+            lavoriAttivi.map(
+              (lavoro) => (
+                <LavoroRow
+                  key={lavoro.jobNumber}
+                  lavoro={lavoro}
+                  onClick={() =>
+                    apriLavoro(lavoro)
+                  }
+                />
+              )
+            )
+          )}
+        </Modal>
+      )}
+      {/* =========================
+          MODAL REVISIONI
+      ========================= */}
+      {modal === "revisioni" && (
+        <Modal
+          title="REVISIONI SCADUTE"
+          onClose={() =>
+            setModal(null)
+          }
+          topRight={
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/revisioni"
+                )
+              }
+              style={modalLinkStyle}
+            >
+              REVISIONI
+            </button>
+          }
+        >
+          {revisioniScadute.length ===
+          0 ? (
+            <EmptyState text="Nessuna revisione scaduta." />
+          ) : (
+            revisioniScadute.map(
+              (revisione, index) => (
+                <RevisionRow
+                  key={
+                    revisione.id ||
+                    index
+                  }
+                  revisione={revisione}
+                  onWhatsApp={() =>
+                    avvisaRevisione(
+                      revisione
+                    )
+                  }
+                />
+              )
+            )
+          )}
+        </Modal>
+      )}
+      {/* =========================
+          MODAL AGENDA
+      ========================= */}
+      {modal === "agenda" && (
+        <Modal
+          title="APPUNTAMENTI DI OGGI"
+          onClose={() =>
+            setModal(null)
+          }
+          topRight={
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/agenda")
+              }
+              style={modalLinkStyle}
+            >
+              AGENDA
+            </button>
+          }
+        >
+          {appuntamentiOggi.length ===
+          0 ? (
+            <EmptyState text="Nessun appuntamento oggi." />
+          ) : (
+            appuntamentiOggi.map(
+              (
+                appuntamento,
+                index
+              ) => (
+                <AppointmentRow
+                  key={
+                    appuntamento.id ||
+                    index
+                  }
+                  appuntamento={
+                    appuntamento
+                  }
+                />
+              )
+            )
+          )}
+          <button
+            type="button"
+            onClick={
+              aggiungiAppuntamentoVocale
+            }
+            style={{
+              width: 52,
+              height: 52,
+              margin:
+                "14px auto 0",
+              border: "none",
+              borderRadius: 17,
+              background:
+                listening
+                  ? "#FEE2E2"
+                  : "#D4AF37",
+              color: "#111827",
+              display: "flex",
+              alignItems: "center",
+              justifyContent:
+                "center",
+              cursor: "pointer",
+            }}
+            aria-label="Aggiungi appuntamento vocalmente"
+          >
+            {listening ? (
+              <MicIcon active />
+            ) : (
+              <PlusIcon />
+            )}
+          </button>
+        </Modal>
+      )}
+      {/* =========================
+          MODAL SOLLECITI
+      ========================= */}
+      {modal === "solleciti" && (
+        <Modal
+          title="SOLLECITI"
+          onClose={() => setModal(null)}
+        >
+          {solleciti.length === 0 ? (
+            <EmptyState text="Nessun sollecito in corso." />
+          ) : (
+            solleciti.map((sollecito) => (
+              <SollecitoRow
+                key={sollecito.clientKey || sollecito.nomeCliente}
+                sollecito={sollecito}
+                onPayAll={() => pagaTuttoCliente(sollecito)}
+                onDetails={() => setDettaglioSollecito(sollecito)}
+                onWhatsApp={() => sollecita(sollecito)}
+              />
+            ))
+          )}
+          <button
+            type="button"
+            onClick={apriNuovoPagamento}
+            style={{
+              width: 52,
+              height: 52,
+              margin: "6px auto 0",
+              border: "none",
+              borderRadius: 17,
+              background: "#D4AF37",
+              color: "#111827",
+              fontSize: 28,
+              fontWeight: 500,
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0,0,0,.10)",
+            }}
+          >
+            +
+          </button>
+        </Modal>
+      )}
+      {dettaglioSollecito && (
+        <Modal
+          title={dettaglioSollecito.nomeCliente || "PAGAMENTI"}
+          onClose={() => setDettaglioSollecito(null)}
+        >
+          {pagamentiCliente(dettaglioSollecito).map((pagamento) => (
+            <div
+              key={pagamento.id}
+              onClick={() => {
+                if (pagamento.manuale || pagamento.jobNumber == null) return;
+                const lavoro = lavori.find(
+                  (item) => item.jobNumber === pagamento.jobNumber
+                );
+                if (!lavoro) return;
+                setDettaglioSollecito(null);
+                apriLavoro(lavoro);
+              }}
+              style={{
+                background: "#FFFFFF",
+                borderRadius: 17,
+                padding: 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                cursor:
+                  pagamento.manuale || pagamento.jobNumber == null
+                    ? "default"
+                    : "pointer",
+              }}
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  aggiornaStatiPagamento(pagamento.clientKey, pagamento.id);
+                }}
+                aria-label="Segna pagamento come pagato"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  border: "2px solid #CBD5E1",
+                  background: "#FFFFFF",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
+                  {pagamento.descrizione}
+                </div>
+                <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>
+                  {pagamento.manuale ? "Piccolo lavoro" : `Scheda #${pagamento.jobNumber}`}
+                </div>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", whiteSpace: "nowrap" }}>
+                {formatEuro(pagamento.importo)}
+              </div>
+            </div>
+          ))}
+          <div
+            style={{
+              marginTop: 4,
+              padding: "12px 4px 2px",
+              borderTop: "1px solid #E2E8F0",
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 16,
+              fontWeight: 900,
+            }}
+          >
+            <span>TOTALE DA PAGARE</span>
+            <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum, item) => sum + item.importo, 0))}</span>
+          </div>
+        </Modal>
+      )}
+      {nuovoPagamentoAperto && (
+        <Modal title="NUOVO PAGAMENTO" onClose={() => setNuovoPagamentoAperto(false)}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginBottom: 6 }}>CLIENTE</div>
+          {clienteSelezionatoPagamento ? (
+            <div
+              style={{ background: "#FFFFFF", borderRadius: 14, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 900 }}>{clienteSelezionatoPagamento.nomeCliente}</div>
+                <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{clienteSelezionatoPagamento.telefono || "Nessun telefono"}{clienteSelezionatoPagamento.targa ? ` · ${clienteSelezionatoPagamento.targa}` : ""}</div>
+              </div>
+              <button type="button" onClick={() => setClienteSelezionatoPagamento(null)} style={{ border: 0, background: "transparent", color: "#64748B", fontSize: 18 }}>×</button>
+            </div>
+          ) : (
+            <>
+              <input
+                value={clienteQuery}
+                onChange={(e) => setClienteQuery(e.target.value)}
+                placeholder="Nome, targa o telefono"
+                style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }}
+              />
+              {clienteQuery.trim() && clientiFiltrati.length > 0 && (
+                <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {clientiFiltrati.map((cliente) => (
+                    <button key={cliente.clientKey} type="button" onClick={() => { setClienteSelezionatoPagamento(cliente); setClienteQuery(""); }} style={{ border: 0, background: "#FFFFFF", borderRadius: 12, padding: 11, textAlign: "left", cursor: "pointer" }}>
+                      <div style={{ fontWeight: 800 }}>{cliente.nomeCliente}</div>
+                      <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{cliente.telefono || ""}{cliente.targa ? ` · ${cliente.targa}` : ""}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {clienteQuery.trim() && clientiFiltrati.length === 0 && (
+                <div style={{ marginTop: 8, padding: 12, borderRadius: 14, background: "#FFFFFF", color: "#64748B", fontSize: 13 }}>
+                  Nessun cliente trovato. Compila qui sotto per creare il nuovo profilo.
+                </div>
+              )}
+            </>
+          )}
+          {!clienteSelezionatoPagamento && (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 12, marginBottom: 6 }}>NUOVO CLIENTE</div>
+              <input value={nuovoClienteNome} onChange={(e) => setNuovoClienteNome(e.target.value)} placeholder="Nome e cognome" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }} />
+              <input value={nuovoClienteTelefono} onChange={(e) => setNuovoClienteTelefono(e.target.value)} placeholder="Telefono" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF", marginTop: 8 }} />
+            </>
+          )}
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 14, marginBottom: 6 }}>DESCRIZIONE</div>
+          <input value={nuovoPagamentoDescrizione} onChange={(e) => setNuovoPagamentoDescrizione(e.target.value)} placeholder="Es. Cambio lampadina" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }} />
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 14, marginBottom: 6 }}>IMPORTO</div>
+          <input value={nuovoPagamentoImporto} onChange={(e) => setNuovoPagamentoImporto(e.target.value)} inputMode="decimal" placeholder="€ 0,00" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 16, background: "#FFFFFF" }} />
+          <button type="button" onClick={salvaNuovoPagamento} style={{ width: "100%", height: 50, border: 0, borderRadius: 16, background: "#D4AF37", color: "#111827", fontWeight: 900, marginTop: 16 }}>SALVA</button>
+        </Modal>
+      )}
+      {checkInOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 20000, background: "#000", display: "flex", justifyContent: "center" }}>
+          <div style={{ position: "relative", width: "100%", maxWidth: 430, height: "100%", overflow: "hidden", background: "#000" }}>
+            <video ref={checkInVideoRef} autoPlay muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.42)", pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: 18, left: 18, right: 18, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 2 }}>
+              <div style={{ padding: "9px 12px", borderRadius: 14, background: "rgba(0,0,0,.62)", color: "#FFF", fontSize: 12, fontWeight: 900 }}>CHECK-IN · TARGA</div>
+              <button type="button" onClick={stopCheckInCamera} style={{ width: 42, height: 42, border: 0, borderRadius: 14, background: "rgba(255,255,255,.94)", color: "#111827", fontSize: 24, fontWeight: 700 }}>×</button>
+            </div>
+            <div style={{ position: "absolute", left: "8%", right: "8%", top: "50%", transform: "translateY(-50%)", height: 78, border: "3px solid #D4AF37", borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,.46)", zIndex: 2, pointerEvents: "none" }}>
+              <div style={{ position: "absolute", left: "50%", top: -38, transform: "translateX(-50%)", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,.65)", color: "#FFF", fontSize: 12, fontWeight: 800 }}>Inquadra qui la targa</div>
+            </div>
+            {checkInError && <div style={{ position: "absolute", left: 18, right: 18, bottom: 122, zIndex: 4, padding: "11px 13px", borderRadius: 14, background: "rgba(127,29,29,.92)", color: "#FFF", fontSize: 13, fontWeight: 800, textAlign: "center" }}>{checkInError}</div>}
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 28, zIndex: 4, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+              <div style={{ color: "#FFF", fontSize: 12, fontWeight: 700, textAlign: "center" }}>Tieni la targa dentro il riquadro</div>
+              <button type="button" onClick={() => void captureCheckInPlate()} disabled={checkInBusy} aria-label="Scatta foto targa" style={{ width: 78, height: 78, borderRadius: "50%", border: "5px solid rgba(255,255,255,.78)", background: checkInBusy ? "#D1D5DB" : "#FFF", boxShadow: "0 8px 24px rgba(0,0,0,.35)", cursor: checkInBusy ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 58, height: 58, borderRadius: "50%", background: "#D4AF37" }} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modal === "ordini" && (
+        <Modal
+          title="ORDINI"
+          onClose={() =>
+            setModal(null)
+          }
+        >
+          {ordini.length === 0 ? (
+            <EmptyState text="Nessun ordine presente." />
+          ) : (
+            ordini.map(
+              (ordine, index) => (
+                <OrderRow
+                  key={
+                    ordine.id ||
+                    ordine.numero ||
+                    index
+                  }
+                  ordine={ordine}
+                />
+              )
+            )
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
+const modalLinkStyle: React.CSSProperties = {
+  border: "none",
+  background: "transparent",
+  color: "#64748B",
+  fontSize: 11,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+function IconLavori() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <rect x="5" y="3" width="14" height="18" rx="2" stroke="#111827" strokeWidth="2" />
+      <path d="M8 8H16M8 12H13" stroke="#111827" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function WrenchIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <g stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 6L10.5 10.5" />
+        <path d="M6 6H3L2 3L3 2L6 3V6Z" />
+        <path d="M19.259 2.74101L16.6314 5.36863C16.2354 5.76465 16.0373 5.96265 15.9632 6.19098C15.8979 6.39183 15.8979 6.60817 15.9632 6.80902C16.0373 7.03735 16.2354 7.23535 16.6314 7.63137L16.8686 7.86863C17.2646 8.26465 17.4627 8.46265 17.691 8.53684C17.8918 8.6021 18.1082 8.6021 18.309 8.53684C18.5373 8.46265 18.7354 8.26465 19.1314 7.86863L21.5893 5.41072C21.854 6.05488 22 6.76039 22 7.5C22 10.5376 19.5376 13 16.5 13C16.1338 13 15.7759 12.9642 15.4298 12.8959C14.9436 12.8001 14.7005 12.7521 14.5532 12.7668C14.3965 12.7824 14.3193 12.8059 14.1805 12.8802C14.0499 12.9501 13.919 13.081 13.657 13.343L6.5 20.5C5.67157 21.3284 4.32843 21.3284 3.5 20.5C2.67157 19.6716 2.67157 18.3284 3.5 17.5L10.657 10.343C10.919 10.081 11.0499 9.95005 11.2332 9.44681C11.2479 9.29945 11.1999 9.05638 11.1041 8.57024C11.0358 8.22406 11 7.86621 11 7.5C11 4.46243 13.4624 2 16.5 2C17.5055 2 18.448 2.26982 19.259 2.74101Z" />
+        <path d="M12.0001 14.9999L17.5 20.4999C18.3284 21.3283 19.6716 21.3283 20.5 20.4999C21.3284 19.6715 21.3284 18.3283 20.5 17.4999L15.9753 12.9753C15.655 12.945 15.3427 12.8872 15.0408 12.8043C14.6517 12.6975 14.2249 12.7751 13.9397 13.0603L12.0001 14.9999Z" />
+      </g>
+    </svg>
+  );
+}
+
+function IconRevisioni() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <g stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 6L10.5 10.5" />
+        <path d="M6 6H3L2 3L3 2L6 3V6Z" />
+        <path d="M19.259 2.74101L16.6314 5.36863C16.2354 5.76465 16.0373 5.96265 15.9632 6.19098C15.8979 6.39183 15.8979 6.60817 15.9632 6.80902C16.0373 7.03735 16.2354 7.23535 16.6314 7.63137L16.8686 7.86863C17.2646 8.26465 17.4627 8.46265 17.691 8.53684C17.8918 8.6021 18.1082 8.6021 18.309 8.53684C18.5373 8.46265 18.7354 8.26465 19.1314 7.86863L21.5893 5.41072C21.854 6.05488 22 6.76039 22 7.5C22 10.5376 19.5376 13 16.5 13C16.1338 13 15.7759 12.9642 15.4298 12.8959C14.9436 12.8001 14.7005 12.7521 14.5532 12.7668C14.3965 12.7824 14.3193 12.8059 14.1805 12.8802C14.0499 12.9501 13.919 13.081 13.657 13.343L6.5 20.5C5.67157 21.3284 4.32843 21.3284 3.5 20.5C2.67157 19.6716 2.67157 18.3284 3.5 17.5L10.657 10.343C10.919 10.081 11.0499 9.95005 11.2332 9.44681C11.2479 9.29945 11.1999 9.05638 11.1041 8.57024C11.0358 8.22406 11 7.86621 11 7.5C11 4.46243 13.4624 2 16.5 2C17.5055 2 18.448 2.26982 19.259 2.74101Z" />
+        <path d="M12.0001 14.9999L17.5 20.4999C18.3284 21.3283 19.6716 21.3283 20.5 20.4999C21.3284 19.6715 21.3284 18.3283 20.5 17.4999L15.9753 12.9753C15.655 12.945 15.3427 12.8872 15.0408 12.8043C14.6517 12.6975 14.2249 12.7751 13.9397 13.0603L12.0001 14.9999Z" />
+      </g>
+    </svg>
+  );
+}
+
+function IconAgenda() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="5" width="18" height="16" rx="2" stroke="#2563EB" strokeWidth="2" />
+      <path d="M8 3V7M16 3V7M3 9H13" stroke="#2563EB" strokeWidth="2" />
+      <circle cx="17" cy="16" r="4" stroke="#2563EB" strokeWidth="2" />
+      <path d="M17 14V16L18.5 17" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconAlert() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="#EA580C" strokeWidth="2" />
+      <path d="M12 7V13" stroke="#EA580C" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="17" r="1.3" fill="#EA580C" />
+    </svg>
+  );
+}
+
+function IconOrdini() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <path d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z" stroke="#0F766E" strokeWidth="2" />
+      <path d="M8 6L16 10M12 12V21" stroke="#0F766E" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function IconFatture() {
+  return (
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+      <path d="M7 3H15L18 6V21H6V3H7Z" stroke="#7C3AED" strokeWidth="2" />
+      <path d="M15 3V6H18M9 11H15M9 15H13" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function GlobeIcon() {
+  return (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="#7C3AED" strokeWidth="2" />
+      <path d="M3 12H21M12 3C14.5 5.5 16 8.5 16 12C16 15.5 14.5 18.5 12 21C9.5 18.5 8 15.5 8 12C8 8.5 9.5 5.5 12 3Z" stroke="#7C3AED" strokeWidth="1.6" />
+    </svg>
+  );
+}
+
+function CameraIcon() {
+  return (
+    <svg width="42" height="42" viewBox="0 0 24 24" fill="none">
+      <g stroke="#08142F" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 8.5C3 6.6 4.6 5 6.5 5H17.5C19.4 5 21 6.6 21 8.5V18C21 19.1 20.1 20 19 20H5C3.9 20 3 19.1 3 18V8.5Z" />
+        <circle cx="12" cy="12.5" r="3.5" />
+        <path d="M8 5L9.2 3.5H14.8L16 5" />
+      </g>
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="46" height="46" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" fill="white" />
+      <path d="M8 12.2L10.6 14.8L16.2 9.2" stroke="#08142F" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M12 5V19M5 12H19" stroke="#111827" strokeWidth="2.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MicIcon({ active = false }: { active?: boolean }) {
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+      <rect x="8" y="3" width="8" height="12" rx="4" stroke={active ? "#DC2626" : "#111827"} strokeWidth="2" />
+      <path d="M5 11A7 7 0 0 0 19 11M12 18V21M9 21H15" stroke={active ? "#DC2626" : "#111827"} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
+}
+function OrderRow({ ordine }: { ordine: Ordine }) {
+  return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div></div>;
+}
+
+/* =====================================================
+   STAT CARD
+\===================================================== */
+function StatCard({
+  title,
+  value,
+  color,
+  icon,
+  onClick,
+}: {
+  title: string;
+  value: string | number;
+  color: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "relative",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          width: "100%",
+          height: 140,
+          border: "none",
+          borderRadius: 24,
+          background: "#FFFFFF",
+          padding: 14,
+          paddingTop: 16,
+          textAlign: "left",
+          boxShadow:
+            "0 4px 14px rgba(15,23,42,.08)",
+          display: "flex",
+          flexDirection:
+            "column",
+          justifyContent:
+            "space-between",
+          cursor: "pointer",
+        }}
+      >
+        {icon}
+        <div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#6B7280",
+              marginBottom: 4,
+              fontWeight: 700,
+            }}
+          >
+            {title}
+          </div>
+          {value !== "web" ? (
+            <div
+              style={{
+                fontSize: 40,
+                fontWeight: 900,
+                lineHeight: 1,
+                color,
+              }}
+            >
+              {value}
+            </div>
+          ) : (
+            <GlobeIcon />
+          )}
+        </div>
+      </button>
+    </div>
+  );
+}
+/* =====================================================
+   MODAL
+\===================================================== */
+function Modal({
+  title,
+  children,
+  onClose,
+  topRight,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  topRight?: React.ReactNode;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 100,
+        background: "rgba(15,23,42,.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "20px",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        onClick={(event) =>
+          event.stopPropagation()
+        }
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "80vh",
+          overflowY: "auto",
+          background: "#F3F4F6",
+          borderRadius: 28,
+          padding: "22px 18px 24px",
+          boxShadow:
+            "0 20px 50px rgba(0,0,0,.25)",
+          boxSizing: "border-box",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            marginBottom: 18,
+          }}
+        >
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 20,
+              fontWeight: 900,
+              color: "#111827",
+            }}
+          >
+            {title}
+          </h2>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            {topRight}
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                width: 34,
+                height: 34,
+                border: "none",
+                borderRadius: 11,
+                background: "#E5E7EB",
+                color: "#111827",
+                fontSize: 20,
+                fontWeight: 700,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+/* =====================================================
+   LAVORO
+\===================================================== */
+function LavoroRow({
+  lavoro,
+  onClick,
+}: {
+  lavoro: Lavoro;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        border: "none",
+        background: "#FFFFFF",
+        borderRadius: 17,
+        padding: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        textAlign: "left",
+        boxShadow:
+          "0 3px 10px rgba(0,0,0,.06)",
+      }}
+    >
+      <div
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 13,
+          background: "#F3F4F6",
+          display: "flex",
+          alignItems: "center",
+          justifyContent:
+            "center",
+          flexShrink: 0,
+        }}
+      >
+        <WrenchIcon />
+      </div>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 11,
+            color: "#64748B",
+            fontWeight: 700,
+          }}
+        >
+          SCHEDA #{lavoro.jobNumber}
+        </div>
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            color: "#111827",
+            marginTop: 2,
+          }}
+        >
+          {lavoro.nomeCliente ||
+            "Cliente"}
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#64748B",
+            marginTop: 2,
+          }}
+        >
+          {lavoro.veicolo ||
+            "Veicolo"}{" "}
+          ·{" "}
+          {lavoro.targa ||
+            "—"}
+        </div>
+      </div>
+      <div
+        style={{
+          background: "#FFF1C2",
+          color: "#92400E",
+          borderRadius: 999,
+          padding:
+            "6px 9px",
+          fontSize: 10,
+          fontWeight: 900,
+          whiteSpace:
+            "nowrap",
+        }}
+      >
+        IN LAVORAZIONE
+      </div>
+    </button>
+  );
+}
+/* =====================================================
+   REVISIONE
+\===================================================== */
+function RevisionRow({
+  revisione,
+  onWhatsApp,
+}: {
+  revisione: Revisione;
+  onWhatsApp: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: "#FFFFFF",
+        borderRadius: 17,
+        padding: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 15,
+            fontWeight: 900,
+            color: "#111827",
+          }}
+        >
+          {revisione.nomeCliente ||
+            revisione.cliente ||
+            "Cliente"}
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#64748B",
+            marginTop: 3,
+          }}
+        >
+          {revisione.veicolo ||
+            "Veicolo"}{" "}
+          ·{" "}
+          {revisione.targa ||
+            "—"}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onWhatsApp}
+        style={{
+          border: "none",
+          borderRadius: 12,
+          background: "#16A34A",
+          color: "#FFFFFF",
+          padding: "9px 12px",
+          fontSize: 10,
+          fontWeight: 900,
+          whiteSpace: "nowrap",
+          cursor: "pointer",
+        }}
+      >
+        RICORDA
+      </button>
+    </div>
+  );
+}
+/* =====================================================
+   APPUNTAMENTO
+\===================================================== */
+function AppointmentRow({
+  appuntamento,
+}: {
+  appuntamento: Appuntamento;
+}) {
+  return (
+    <div
+      style={{
+        background: "#FFFFFF",
+        borderRadius: 17,
+        padding: 13,
+        display: "flex",
+        gap: 12,
+      }}
+    >
+      <div
+        style={{
+          minWidth: 48,
+          fontSize: 14,
+          fontWeight: 900,
+          color: "#2563EB",
+        }}
+      >
+        {appuntamento.time ||
+          appuntamento.ora ||
+          "--:--"}
+      </div>
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 700,
+          color: "#111827",
+        }}
+      >
+        {appuntamento.title ||
+          appuntamento.descrizione ||
+          appuntamento.description ||
+          "Appuntamento"}
+      </div>
+    </div>
+  );
+}
+/* =====================================================
+   SOLLECITO
+\===================================================== */
+function SollecitoRow({
+  sollecito,
+  onPayAll,
+  onDetails,
+  onWhatsApp,
+}: {
+  sollecito: Sollecito;
+  onPayAll: () => void;
+  onDetails: () => void;
+  onWhatsApp: () => void;
+}) {
+  return (
+    <div
+      style={{
+        background: "#FFFFFF",
+        borderRadius: 17,
+        padding: 13,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onPayAll}
+        aria-label="Segna tutti i pagamenti come pagati"
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          border: "2px solid #CBD5E1",
+          background: "#FFFFFF",
+          flexShrink: 0,
+          cursor: "pointer",
+        }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>
+          {sollecito.nomeCliente || "Cliente"}
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 900, color: "#EA580C", marginTop: 3 }}>
+          {formatEuro(parseImporto(sollecito.importo))}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onWhatsApp}
+        style={{
+          border: "none",
+          borderRadius: 12,
+          background: "#EA580C",
+          color: "#FFFFFF",
+          padding: "9px 10px",
+          fontSize: 10,
+          fontWeight: 900,
+          whiteSpace: "nowrap",
+        }}
+      >
+        SOLLECITA
+      </button>
+      <button
+        type="button"
+        onClick={onDetails}
+        aria-label="Mostra dettaglio pagamenti"
+        style={{
+          border: 0,
+          background: "transparent",
+          color: "#94A3B8",
+          fontSize: 24,
+          lineHeight: 1,
+          padding: "0 2px",
+          cursor: "pointer",
+        }}
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+;

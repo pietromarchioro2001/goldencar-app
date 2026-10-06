@@ -1,0 +1,5704 @@
+"use client";
+
+
+
+import { useEffect, useState, type ReactNode } from "react";
+
+
+
+import { useRouter } from "next/navigation";
+
+
+
+import BottomBar from "@/components/BottomBar";
+
+
+
+type ClienteData = {
+
+
+
+  nome: string; cognome: string; luogoNascita: string; provinciaNascita: string;
+
+
+
+  indirizzo: string; telefono: string; nascita: string; cf: string;
+
+
+
+};
+
+
+
+type ClienteSelezionato = 1 | 2;
+
+
+
+type MediaAttachment = {
+
+
+
+  id: string;
+
+
+
+  name: string;
+
+
+
+  type: string;
+
+
+
+  size: number;
+
+
+
+  createdAt: string;
+
+
+
+};
+
+
+
+type LavoroSalvato = {
+
+
+
+  jobNumber: number;
+
+
+
+  createdAt: string;
+
+
+
+  nomeCliente?: string;
+
+
+
+  indirizzo?: string;
+
+
+
+  telefono?: string;
+
+
+
+  codiceFiscale?: string;
+
+
+
+  veicolo?: string;
+
+
+
+  targa?: string;
+
+
+
+  kilometers?: string;
+
+
+
+  types?: string[];
+
+
+
+  works?: string;
+
+
+
+  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+
+
+
+  invoiceNumber?: string;
+
+
+
+  pdfUrl?: string;
+
+
+
+  media?: MediaAttachment[];
+
+
+
+};
+
+
+
+const MEDIA_DB_NAME = "goldencar_media";
+
+
+
+const MEDIA_STORE_NAME = "files";
+
+
+
+function openMediaDb(): Promise<IDBDatabase> {
+
+
+
+  return new Promise((resolve, reject) => {
+
+
+
+    const request = indexedDB.open(MEDIA_DB_NAME, 1);
+
+
+
+    request.onupgradeneeded = () => {
+
+
+
+      const db = request.result;
+
+
+
+      if (!db.objectStoreNames.contains(MEDIA_STORE_NAME)) {
+
+
+
+        db.createObjectStore(MEDIA_STORE_NAME);
+
+
+
+      }
+
+
+
+    };
+
+
+
+    request.onsuccess = () => resolve(request.result);
+
+
+
+    request.onerror = () => reject(request.error);
+
+
+
+  });
+
+
+
+}
+
+
+
+async function loadMediaBlob(id: string): Promise<Blob | null> {
+
+
+
+  const db = await openMediaDb();
+
+
+
+  return new Promise((resolve) => {
+
+
+
+    const tx = db.transaction(MEDIA_STORE_NAME, "readonly");
+
+
+
+    const request = tx.objectStore(MEDIA_STORE_NAME).get(id);
+
+
+
+    request.onsuccess = () => {
+
+
+
+      const blob = request.result as Blob | undefined;
+
+
+
+      db.close();
+
+
+
+      resolve(blob || null);
+
+
+
+    };
+
+
+
+    request.onerror = () => {
+
+
+
+      db.close();
+
+
+
+      resolve(null);
+
+
+
+    };
+
+
+
+  });
+
+
+
+}
+
+
+
+async function deleteMediaBlob(id: string) {
+
+
+
+  const db = await openMediaDb();
+
+
+
+  await new Promise<void>((resolve, reject) => {
+
+
+
+    const tx = db.transaction(MEDIA_STORE_NAME, "readwrite");
+
+
+
+    tx.objectStore(MEDIA_STORE_NAME).delete(id);
+
+
+
+    tx.oncomplete = () => resolve();
+
+
+
+    tx.onerror = () => reject(tx.error);
+
+
+
+  });
+
+
+
+  db.close();
+
+
+
+}
+
+
+
+export default function Veicolo() {
+
+
+
+  const router = useRouter();
+
+
+
+  const [ricerca, setRicerca] = useState("");
+
+
+
+  const [veicoloSelezionato, setVeicoloSelezionato] = useState(false);
+
+
+
+  const [lavori, setLavori] = useState<LavoroSalvato[]>([]);
+
+
+
+  const [dataRevisione, setDataRevisione] = useState("");
+
+
+
+  const [mediaAperto, setMediaAperto] = useState(false);
+
+
+
+  const [mediaCaricamento, setMediaCaricamento] = useState(false);
+
+
+
+  const [mediaItems, setMediaItems] = useState<Array<MediaAttachment & {
+
+
+
+    jobNumber: number;
+
+
+
+    jobDate: string;
+
+
+
+    jobType: string;
+
+
+
+    url?: string;
+
+
+
+  }>>([]);
+
+
+
+  const [mediaVisualizzato, setMediaVisualizzato] = useState<
+
+
+
+    (MediaAttachment & {
+
+
+
+      jobNumber: number;
+
+
+
+      jobDate: string;
+
+
+
+      jobType: string;
+
+
+
+      url?: string;
+
+
+
+    }) | null
+
+
+
+  >(null);
+
+
+
+  // Cliente visualizzato nel profilo attuale.
+
+
+
+  // Quando collegheremo Supabase, questi dati arriveranno dal database.
+
+
+
+  const cliente1Profilo: ClienteData = {
+
+
+
+    nome: "Mario Rossi", cognome: "", luogoNascita: "", provinciaNascita: "",
+
+
+
+    indirizzo: "Via Roma 12", telefono: "3471234567", nascita: "12/03/1985", cf: "RSSMRA80C14L378Z",
+
+
+
+  };
+
+
+
+  const cliente2Profilo: ClienteData = {
+
+
+
+    nome: "", cognome: "", luogoNascita: "", provinciaNascita: "", indirizzo: "", telefono: "", nascita: "", cf: "",
+
+
+
+  };
+
+
+
+  const [clienteSelezionato, setClienteSelezionato] = useState<ClienteSelezionato>(1);
+
+
+
+  const [menuClientiAperto, setMenuClientiAperto] = useState(false);
+
+
+
+  const clienteVisualizzato = clienteSelezionato === 1 ? cliente1Profilo : cliente2Profilo;
+
+
+
+  const hasCliente2Profilo = Boolean(cliente2Profilo.nome.trim());
+
+
+
+  const indirizzoMaps = clienteVisualizzato.indirizzo
+
+
+
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(clienteVisualizzato.indirizzo)}`
+
+
+
+    : undefined;
+
+
+
+  const telefonoHref = clienteVisualizzato.telefono
+
+
+
+    ? `tel:${clienteVisualizzato.telefono.replace(/\s+/g, "")}`
+
+
+
+    : undefined;
+
+
+
+  // I lavori della scheda vengono salvati temporaneamente in localStorage.
+
+
+
+  // Per ora li leggiamo qui; in seguito questa parte verrà sostituita con Supabase.
+
+
+
+  const aggiornaLavori = () => {
+
+
+
+    if (typeof window === "undefined") return;
+
+
+
+    const targaVeicolo = "AB123CD".trim().toUpperCase();
+
+
+
+    const risultati: LavoroSalvato[] = [];
+
+
+
+    for (let i = 0; i < localStorage.length; i++) {
+
+
+
+      const key = localStorage.key(i);
+
+
+
+      if (!key?.startsWith("goldencar_job_")) continue;
+
+
+
+      try {
+
+
+
+        const raw = localStorage.getItem(key);
+
+
+
+        if (!raw) continue;
+
+
+
+        const lavoro = JSON.parse(raw) as LavoroSalvato;
+
+
+
+        if ((lavoro.targa || "").trim().toUpperCase() === targaVeicolo) risultati.push(lavoro);
+
+
+
+      } catch {
+
+
+
+        // Ignora eventuali valori non validi nel localStorage.
+
+
+
+      }
+
+
+
+    }
+
+
+
+    risultati.sort((a, b) => {
+
+
+
+      const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+
+
+
+      if (dateDiff !== 0) return dateDiff;
+
+
+
+      return Number(b.jobNumber || 0) - Number(a.jobNumber || 0);
+
+
+
+    });
+
+
+
+    setLavori(risultati);
+
+
+
+  };
+
+
+
+  useEffect(() => {
+
+
+
+    aggiornaLavori();
+
+
+
+    const onStorage = () => aggiornaLavori();
+
+
+
+    window.addEventListener("storage", onStorage);
+
+
+
+    window.addEventListener("focus", onStorage);
+
+
+
+    return () => {
+
+
+
+      window.removeEventListener("storage", onStorage);
+
+
+
+      window.removeEventListener("focus", onStorage);
+
+
+
+    };
+
+
+
+  }, []);
+
+
+
+  const aggiornaRevisione = () => {
+
+
+
+    if (typeof window === "undefined") return;
+
+
+
+    const targaVeicolo = "AB123CD".trim().toUpperCase();
+
+
+
+    try {
+
+
+
+      const raw = localStorage.getItem("goldencar_revisions");
+
+
+
+      const revisioni = raw ? JSON.parse(raw) : [];
+
+
+
+      if (!Array.isArray(revisioni)) {
+
+
+
+        setDataRevisione("");
+
+
+
+        return;
+
+
+
+      }
+
+
+
+      const revisione = revisioni.find((item: any) =>
+
+
+
+        String(item?.targa || "").trim().toUpperCase() === targaVeicolo
+
+
+
+      );
+
+
+
+      setDataRevisione(
+
+
+
+        String(revisione?.scadenza || revisione?.revisione || "")
+
+
+
+      );
+
+
+
+    } catch {
+
+
+
+      setDataRevisione("");
+
+
+
+    }
+
+
+
+  };
+
+
+
+  useEffect(() => {
+
+
+
+    aggiornaRevisione();
+
+
+
+    const onRevisioniChange = () => aggiornaRevisione();
+
+
+
+    window.addEventListener("storage", onRevisioniChange);
+
+
+
+    window.addEventListener("focus", onRevisioniChange);
+
+
+
+    return () => {
+
+
+
+      window.removeEventListener("storage", onRevisioniChange);
+
+
+
+      window.removeEventListener("focus", onRevisioniChange);
+
+
+
+    };
+
+
+
+  }, []);
+
+
+
+  useEffect(() => {
+
+
+
+    const salvata = sessionStorage.getItem("goldencar_veicolo_ricerca");
+
+
+
+    if (salvata) {
+
+
+
+      setRicerca(salvata);
+
+
+
+      setVeicoloSelezionato(true);
+
+
+
+    }
+
+
+
+  }, []);
+
+
+
+  const ricercaNormalizzata = ricerca.trim().toLowerCase();
+
+
+
+  const profiloCorrisponde = [
+
+
+
+    "AB123CD", "Fiat Panda", cliente1Profilo.nome, cliente1Profilo.telefono, cliente2Profilo.nome, cliente2Profilo.telefono,
+
+
+
+  ].some((valore) => valore.toLowerCase().includes(ricercaNormalizzata));
+
+
+
+  const gestisciRicerca = (value: string) => {
+
+
+
+    setRicerca(value);
+
+
+
+    const query = value.trim().toLowerCase();
+
+
+
+    if (!query) {
+
+
+
+      sessionStorage.removeItem("goldencar_veicolo_ricerca");
+
+
+
+      setVeicoloSelezionato(false);
+
+
+
+      return;
+
+
+
+    }
+
+
+
+    const corrisponde = [
+
+
+
+      "AB123CD", "Fiat Panda", cliente1Profilo.nome, cliente1Profilo.telefono, cliente2Profilo.nome, cliente2Profilo.telefono,
+
+
+
+    ].some((valore) => valore.toLowerCase().includes(query));
+
+
+
+    if (corrisponde) {
+
+
+
+      sessionStorage.setItem("goldencar_veicolo_ricerca", value);
+
+
+
+      setVeicoloSelezionato(true);
+
+
+
+    } else {
+
+
+
+      setVeicoloSelezionato(false);
+
+
+
+    }
+
+
+
+  };
+
+
+
+  const mostraProfilo =
+
+
+
+    veicoloSelezionato && ricercaNormalizzata.length > 0 && profiloCorrisponde;
+
+
+
+  const azioni = [
+
+
+
+    { titolo: "Nuovo lavoro", coloreIcona: "#E7F8EC", coloreTesto: "#15803D", icon: <DocGreen /> },
+
+
+
+    { titolo: "Nuovo ordine", coloreIcona: "#FFF4D6", coloreTesto: "#A16207", icon: <CubeGold /> },
+
+
+
+    { titolo: "Media", coloreIcona: "#EEF1F5", coloreTesto: "#475569", icon: <PhotoGray /> },
+
+
+
+  ];
+
+
+
+  const cronologia = lavori.map((lavoro) => {
+
+
+
+    const data = lavoro.createdAt
+
+
+
+      ? new Intl.DateTimeFormat("it-IT", {
+
+
+
+          day: "2-digit",
+
+
+
+          month: "2-digit",
+
+
+
+          year: "numeric",
+
+
+
+        }).format(new Date(lavoro.createdAt))
+
+
+
+      : "—";
+
+
+
+    const tipo =
+
+
+
+      lavoro.types?.length ? lavoro.types.join(" · ") : "Intervento";
+
+    const concluso = lavoro.status === "CONCLUSO";
+
+
+
+    return {
+
+
+
+      ...lavoro,
+
+
+
+      data,
+
+
+
+      titolo: tipo,
+
+
+
+      tipo,
+
+
+
+      stato: concluso ? "Concluso" : "In lavorazione",
+
+
+
+      statoBg: concluso ? "#DCFCE7" : "#FFF1C2",
+
+
+
+      statoColor: concluso ? "#15803D" : "#92400E",
+
+
+
+      pdfUrl: lavoro.pdfUrl || "",
+
+
+
+    };
+
+
+
+  });
+
+
+
+  const veicoloAperto = lavori.some((lavoro) => lavoro.status === "IN_LAVORAZIONE");
+
+
+
+  const apriNuovoLavoro = () => {
+
+
+
+    if (veicoloAperto) {
+
+
+
+      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE");
+
+
+
+      alert(`Questo veicolo ha già un lavoro in lavorazione${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
+
+
+
+      return;
+
+
+
+    }
+
+
+
+    sessionStorage.setItem("goldencar_nuova_scheda", JSON.stringify({
+
+
+
+      nomeCliente: clienteVisualizzato.nome, indirizzo: clienteVisualizzato.indirizzo, telefono: clienteVisualizzato.telefono,
+
+
+
+      codiceFiscale: clienteVisualizzato.cf, veicolo: "Fiat Panda", targa: "AB123CD",
+
+
+
+    }));
+
+
+
+    router.push("/veicolo/scheda");
+
+
+
+  };
+
+
+
+  const apriNuovoOrdine = () => {
+
+    sessionStorage.setItem(
+
+      "goldencar_nuovo_ordine",
+
+      JSON.stringify({
+
+        nomeCliente: clienteVisualizzato.nome,
+
+        telefono: clienteVisualizzato.telefono,
+
+        veicolo: "Fiat Panda",
+
+        targa: "AB123CD",
+
+      })
+
+    );
+
+    router.push("/ordini");
+
+  };
+
+
+
+  const chiudiMedia = () => {
+
+
+
+    mediaItems.forEach((item) => {
+
+
+
+      if (item.url) URL.revokeObjectURL(item.url);
+
+
+
+    });
+
+
+
+    setMediaVisualizzato(null);
+
+
+
+    setMediaItems([]);
+
+
+
+    setMediaAperto(false);
+
+
+
+  };
+
+
+
+  const apriMedia = async () => {
+
+
+
+    setMediaAperto(true);
+
+
+
+    setMediaCaricamento(true);
+
+
+
+    setMediaVisualizzato(null);
+
+
+
+    try {
+
+
+
+      const items = lavori.flatMap((lavoro) =>
+
+
+
+        (lavoro.media || []).map((media) => ({
+
+
+
+          ...media,
+
+
+
+          jobNumber: lavoro.jobNumber,
+
+
+
+          jobDate: lavoro.createdAt,
+
+
+
+          jobType: lavoro.types?.join(" · ") || lavoro.works?.trim() || "Lavoro",
+
+
+
+        }))
+
+
+
+      );
+
+
+
+      const loaded = await Promise.all(
+
+
+
+        items.map(async (item) => {
+
+
+
+          const blob = await loadMediaBlob(item.id);
+
+
+
+          return {
+
+
+
+            ...item,
+
+
+
+            url: blob ? URL.createObjectURL(blob) : undefined,
+
+
+
+          };
+
+
+
+        })
+
+
+
+      );
+
+
+
+      setMediaItems(loaded);
+
+
+
+    } catch (error) {
+
+
+
+      console.error("Errore caricamento media veicolo:", error);
+
+
+
+      setMediaItems([]);
+
+
+
+    } finally {
+
+
+
+      setMediaCaricamento(false);
+
+
+
+    }
+
+
+
+  };
+
+
+
+  const eliminaMedia = async (
+
+
+
+    item: MediaAttachment & { jobNumber: number; jobDate: string; jobType: string; url?: string }
+
+
+
+  ) => {
+
+
+
+    const conferma = window.confirm(
+
+
+
+      `Eliminare "${item.name}"? Il file verrà rimosso anche dalla scheda #${item.jobNumber}.`
+
+
+
+    );
+
+
+
+    if (!conferma) return;
+
+
+
+    try {
+
+
+
+      const key = `goldencar_job_${item.jobNumber}`;
+
+
+
+      const raw = localStorage.getItem(key);
+
+
+
+      if (raw) {
+
+
+
+        const lavoro = JSON.parse(raw) as LavoroSalvato;
+
+
+
+        lavoro.media = (lavoro.media || []).filter((media) => media.id !== item.id);
+
+
+
+        localStorage.setItem(key, JSON.stringify(lavoro));
+
+
+
+      }
+
+
+
+      await deleteMediaBlob(item.id);
+
+
+
+      if (item.url) URL.revokeObjectURL(item.url);
+
+
+
+      setMediaItems((current) => current.filter((media) => media.id !== item.id));
+
+
+
+      setMediaVisualizzato(null);
+
+
+
+      aggiornaLavori();
+
+
+
+    } catch (error) {
+
+
+
+      console.error("Errore eliminazione media:", error);
+
+
+
+      alert("Non è stato possibile eliminare il file.");
+
+
+
+    }
+
+
+
+  };
+
+
+
+  const scaricaMedia = (item: MediaAttachment & { url?: string }) => {
+
+
+
+    if (!item.url) return;
+
+
+
+    const link = document.createElement("a");
+
+
+
+    link.href = item.url;
+
+
+
+    link.download = item.name;
+
+
+
+    document.body.appendChild(link);
+
+
+
+    link.click();
+
+
+
+    link.remove();
+
+
+
+  };
+
+
+
+  const formatMediaDate = (value: string) =>
+
+
+
+    value
+
+
+
+      ? new Intl.DateTimeFormat("it-IT", {
+
+
+
+          day: "2-digit",
+
+
+
+          month: "2-digit",
+
+
+
+          year: "numeric",
+
+
+
+        }).format(new Date(value))
+
+
+
+      : "Data non disponibile";
+
+
+
+  const isImageMedia = (item: MediaAttachment) => item.type.startsWith("image/");
+
+
+
+  const mediaGroups = Array.from(
+
+
+
+    mediaItems.reduce((groups, item) => {
+
+
+
+      const existing = groups.get(item.jobNumber);
+
+
+
+      if (existing) {
+
+
+
+        existing.items.push(item);
+
+
+
+      } else {
+
+
+
+        groups.set(item.jobNumber, {
+
+
+
+          jobNumber: item.jobNumber,
+
+
+
+          jobDate: item.jobDate,
+
+
+
+          jobType: item.jobType,
+
+
+
+          items: [item],
+
+
+
+        });
+
+
+
+      }
+
+
+
+      return groups;
+
+
+
+    }, new Map<number, {
+
+
+
+      jobNumber: number;
+
+
+
+      jobDate: string;
+
+
+
+      jobType: string;
+
+
+
+      items: typeof mediaItems;
+
+
+
+    }>())
+
+
+
+  ).sort((a, b) => b[1].jobNumber - a[1].jobNumber);
+
+
+
+  return (
+
+
+
+    <>
+
+
+
+      <main className="app">
+
+
+
+      {/* =========================
+
+
+
+          HEADER
+
+
+
+      ========================= */}
+
+
+
+      <div
+
+
+
+        style={{
+
+
+
+          display: "flex",
+
+
+
+          alignItems: "center",
+
+
+
+          gap: 18,
+
+
+
+          padding: "28px 22px 18px",
+
+
+
+        }}
+
+
+
+      >
+
+
+
+        <div
+
+
+
+          style={{
+
+
+
+            width: 74,
+
+
+
+            height: 74,
+
+
+
+            borderRadius: 22,
+
+
+
+            background: "#FFFFFF",
+
+
+
+            display: "flex",
+
+
+
+            alignItems: "center",
+
+
+
+            justifyContent: "center",
+
+
+
+            boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+
+
+
+            fontSize: 13,
+
+
+
+            fontWeight: 700,
+
+
+
+            color: "#9CA3AF",
+
+
+
+            flexShrink: 0,
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          LOGO
+
+
+
+        </div>
+
+
+
+        <h1
+
+          style={{
+
+            fontSize: 31,
+
+            fontWeight: 800,
+
+            color: "#041E49",
+
+            letterSpacing: "-0.7px",
+
+            margin: "3px 0 0",
+
+          }}
+
+        >
+
+
+
+          VEICOLO
+
+
+
+        </h1>
+
+
+
+      </div>
+
+
+
+      {/* =========================
+
+
+
+          RICERCA
+
+
+
+      ========================= */}
+
+
+
+      <div
+
+
+
+        style={{
+
+
+
+          display: "flex",
+
+
+
+          gap: 12,
+
+
+
+          padding: "0 18px",
+
+
+
+        }}
+
+
+
+      >
+
+
+
+        <div
+
+
+
+          style={{
+
+
+
+            flex: 1,
+
+
+
+            height: 52,
+
+
+
+            borderRadius: 18,
+
+
+
+            background: "#FFFFFF",
+
+
+
+            display: "flex",
+
+
+
+            alignItems: "center",
+
+
+
+            padding: "0 16px",
+
+
+
+            boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          <SearchIcon />
+
+
+
+          <input
+
+
+
+            value={ricerca}
+
+
+
+            onChange={(e) => gestisciRicerca(e.target.value)}
+
+
+
+            placeholder="Targa, cliente o telefono"
+
+
+
+            style={{
+
+
+
+              border: "none",
+
+
+
+              outline: "none",
+
+
+
+              marginLeft: 10,
+
+
+
+              width: "100%",
+
+
+
+              fontSize: 15,
+
+
+
+              background: "transparent",
+
+
+
+              color: "#111827",
+
+
+
+            }}
+
+
+
+          />
+
+
+
+        </div>
+
+
+
+        <button
+
+
+
+          type="button"
+
+
+
+          onClick={() => router.push("/veicolo/profilo")}
+
+
+
+          aria-label="Nuovo profilo"
+
+
+
+          style={{
+
+
+
+            width: 52,
+
+
+
+            height: 52,
+
+
+
+            border: "none",
+
+
+
+            borderRadius: 18,
+
+
+
+            background: "#D4AF37",
+
+
+
+            boxShadow: "0 4px 12px rgba(0,0,0,.12)",
+
+
+
+            display: "flex",
+
+
+
+            alignItems: "center",
+
+
+
+            justifyContent: "center",
+
+
+
+            cursor: "pointer",
+
+
+
+            flexShrink: 0,
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          <PlusIcon />
+
+
+
+        </button>
+
+
+
+      </div>
+
+
+
+      {/* =========================
+
+
+
+          RISULTATO RICERCA
+
+
+
+      ========================= */}
+
+
+
+      {!mostraProfilo && ricercaNormalizzata.length > 0 ? (
+
+
+
+        <div
+
+
+
+          style={{
+
+
+
+            margin: "22px 18px 0",
+
+
+
+            borderRadius: 22,
+
+
+
+            background: "#FFFFFF",
+
+
+
+            boxShadow: "0 4px 14px rgba(15,23,42,.08)",
+
+
+
+            padding: 24,
+
+
+
+            textAlign: "center",
+
+
+
+            color: "#6B7280",
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          Nessun veicolo trovato
+
+
+
+        </div>
+
+
+
+      ) : mostraProfilo ? (
+
+
+
+        <>
+
+
+
+          {/* =========================
+
+
+
+              PROFILO VEICOLO
+
+
+
+          ========================= */}
+
+
+
+          <div
+
+
+
+            style={{
+
+
+
+              margin: "22px 18px 0",
+
+
+
+              background: "#FFFFFF",
+
+
+
+              borderRadius: 26,
+
+
+
+              padding: 18,
+
+
+
+              boxShadow: "0 4px 14px rgba(15,23,42,.08)",
+
+
+
+            }}
+
+
+
+          >
+
+
+
+            <div
+
+
+
+              style={{
+
+
+
+                display: "flex",
+
+
+
+                gap: 16,
+
+
+
+                alignItems: "center",
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              <div
+
+
+
+                style={{
+
+
+
+                  width: 72,
+
+
+
+                  height: 72,
+
+
+
+                  borderRadius: 18,
+
+
+
+                  background: "#F3F4F6",
+
+
+
+                  display: "flex",
+
+
+
+                  alignItems: "center",
+
+
+
+                  justifyContent: "center",
+
+
+
+                  flexShrink: 0,
+
+
+
+                }}
+
+
+
+              >
+
+
+
+                <CarIcon />
+
+
+
+              </div>
+
+
+
+              <div
+
+
+
+                style={{
+
+
+
+                  flex: 1,
+
+
+
+                  minWidth: 0,
+
+
+
+                }}
+
+
+
+              >
+
+
+
+                <div
+
+
+
+                  style={{
+
+
+
+                    display: "flex",
+
+
+
+                    alignItems: "center",
+
+
+
+                    justifyContent: "space-between",
+
+
+
+                    gap: 10,
+
+
+
+                  }}
+
+
+
+                >
+
+
+
+                  <h2
+
+
+
+                    style={{
+
+
+
+                      fontSize: 20,
+
+
+
+                      fontWeight: 800,
+
+
+
+                      color: "#111827",
+
+
+
+                      margin: 0,
+
+
+
+                    }}
+
+
+
+                  >
+
+
+
+                    Fiat Panda
+
+
+
+                  </h2>
+
+
+
+                  {veicoloAperto && (
+
+
+
+                    <div
+
+
+
+                      style={{
+
+
+
+                        background: "#22C55E",
+
+
+
+                        color: "#FFFFFF",
+
+
+
+                        fontSize: 12,
+
+
+
+                        fontWeight: 700,
+
+
+
+                        padding: "6px 12px",
+
+
+
+                        borderRadius: 999,
+
+
+
+                        whiteSpace: "nowrap",
+
+
+
+                      }}
+
+
+
+                    >
+
+
+
+                      APERTO
+
+
+
+                    </div>
+
+
+
+                  )}
+
+
+
+                </div>
+
+
+
+                <div
+
+
+
+                  style={{
+
+
+
+                    color: "#6B7280",
+
+
+
+                    marginTop: 4,
+
+
+
+                    fontSize: 16,
+
+
+
+                  }}
+
+
+
+                >
+
+
+
+                  AB123CD
+
+
+
+                </div>
+
+
+
+                <div style={{ marginTop: 6, position: "relative" }}>
+
+
+
+                  {hasCliente2Profilo ? (
+
+
+
+                    <>
+
+
+
+                      <button
+
+
+
+                        type="button"
+
+
+
+                        onClick={() => setMenuClientiAperto((prev) => !prev)}
+
+
+
+                        style={{
+
+
+
+                          border: "none",
+
+
+
+                          background: "transparent",
+
+
+
+                          padding: 0,
+
+
+
+                          display: "inline-flex",
+
+
+
+                          alignItems: "center",
+
+
+
+                          gap: 5,
+
+
+
+                          fontWeight: 600,
+
+
+
+                          color: "#374151",
+
+
+
+                          fontSize: 15,
+
+
+
+                          cursor: "pointer",
+
+
+
+                        }}
+
+
+
+                      >
+
+
+
+                        {clienteVisualizzato.nome}
+
+
+
+                        <ChevronDownIcon open={menuClientiAperto} />
+
+
+
+                      </button>
+
+
+
+                      {menuClientiAperto && (
+
+
+
+                        <div
+
+
+
+                          style={{
+
+
+
+                            position: "absolute",
+
+
+
+                            top: 28,
+
+
+
+                            left: 0,
+
+
+
+                            minWidth: 180,
+
+
+
+                            background: "#FFFFFF",
+
+
+
+                            borderRadius: 14,
+
+
+
+                            boxShadow: "0 10px 24px rgba(0,0,0,.14)",
+
+
+
+                            overflow: "hidden",
+
+
+
+                            zIndex: 20,
+
+
+
+                            border: "1px solid #E5E7EB",
+
+
+
+                          }}
+
+
+
+                        >
+
+
+
+                          <ClientChoice
+
+
+
+                            nome={cliente1Profilo.nome}
+
+
+
+                            active={clienteSelezionato === 1}
+
+
+
+                            onClick={() => {
+
+
+
+                              setClienteSelezionato(1);
+
+
+
+                              setMenuClientiAperto(false);
+
+
+
+                            }}
+
+
+
+                          />
+
+
+
+                          <ClientChoice
+
+
+
+                            nome={cliente2Profilo.nome}
+
+
+
+                            active={clienteSelezionato === 2}
+
+
+
+                            onClick={() => {
+
+
+
+                              setClienteSelezionato(2);
+
+
+
+                              setMenuClientiAperto(false);
+
+
+
+                            }}
+
+
+
+                          />
+
+
+
+                        </div>
+
+
+
+                      )}
+
+
+
+                    </>
+
+
+
+                  ) : (
+
+
+
+                    <div
+
+
+
+                      style={{
+
+
+
+                        fontWeight: 600,
+
+
+
+                        color: "#374151",
+
+
+
+                        fontSize: 15,
+
+
+
+                      }}
+
+
+
+                    >
+
+
+
+                      {clienteVisualizzato.nome}
+
+
+
+                    </div>
+
+
+
+                  )}
+
+
+
+                </div>
+
+
+
+              </div>
+
+
+
+            </div>
+
+
+
+          </div>
+
+
+
+          {/* =========================
+
+
+
+              DATI VEICOLO / CLIENTE
+
+
+
+          ========================= */}
+
+
+
+          <div
+
+
+
+            style={{
+
+
+
+              display: "grid",
+
+
+
+              gridTemplateColumns: "1fr 1fr",
+
+
+
+              gap: 12,
+
+
+
+              padding: "18px",
+
+
+
+            }}
+
+
+
+          >
+
+
+
+            <InfoCard
+
+
+
+              icon={<RevisionIcon />}
+
+
+
+              label="Revisione"
+
+
+
+              value={
+
+
+
+                dataRevisione
+
+
+
+                  ? (() => {
+
+
+
+                      const data = new Date(dataRevisione);
+
+
+
+                      if (Number.isNaN(data.getTime())) return dataRevisione;
+
+
+
+                      return new Intl.DateTimeFormat("it-IT", {
+
+
+
+                        month: "2-digit",
+
+
+
+                        year: "numeric",
+
+
+
+                      }).format(data);
+
+
+
+                    })()
+
+
+
+                  : "—"
+
+
+
+              }
+
+
+
+              iconColor="#2563EB"
+
+
+
+            />
+
+
+
+            <InfoCard
+
+
+
+              icon={<KeyIcon />}
+
+
+
+              label="Immatric."
+
+
+
+              value="2018"
+
+
+
+              iconColor="#2563EB"
+
+
+
+            />
+
+
+
+            <InfoCard
+
+
+
+              icon={<LocationIcon />}
+
+
+
+              label="Indirizzo"
+
+
+
+              value={clienteVisualizzato.indirizzo || "—"}
+
+
+
+              iconColor="#374151"
+
+
+
+              href={indirizzoMaps}
+
+
+
+            />
+
+
+
+            <InfoCard
+
+
+
+              icon={<PhoneIcon />}
+
+
+
+              label="Telefono"
+
+
+
+              value={clienteVisualizzato.telefono || "—"}
+
+
+
+              iconColor="#16A34A"
+
+
+
+              href={telefonoHref}
+
+
+
+            />
+
+
+
+            <InfoCard
+
+
+
+              icon={<PersonIcon />}
+
+
+
+              label="Nascita"
+
+
+
+              value={clienteVisualizzato.nascita || "—"}
+
+
+
+              iconColor="#7C3AED"
+
+
+
+            />
+
+
+
+            <InfoCard
+
+
+
+              icon={<CardIcon />}
+
+
+
+              label="Cod. Fiscale"
+
+
+
+              value={clienteVisualizzato.cf || "—"}
+
+
+
+              iconColor="#64748B"
+
+              valueFontSize={12}
+
+
+
+            />
+
+
+
+          </div>
+
+
+
+          {/* =========================
+
+
+
+              AZIONI RAPIDE
+
+
+
+          ========================= */}
+
+
+
+          <div
+
+
+
+            style={{
+
+
+
+              padding: "0 18px",
+
+
+
+            }}
+
+
+
+          >
+
+
+
+            <h3
+
+
+
+              style={{
+
+
+
+                fontSize: 22,
+
+
+
+                fontWeight: 800,
+
+
+
+                color: "#111827",
+
+
+
+                margin: "12px 0 14px",
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              Azioni rapide
+
+
+
+            </h3>
+
+
+
+            <div
+
+
+
+              style={{
+
+
+
+                display: "grid",
+
+
+
+                gridTemplateColumns: "1fr 1fr 1fr",
+
+
+
+                gap: 12,
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              {azioni.map((azione) => (
+
+
+
+                <button
+
+
+
+                  key={azione.titolo}
+
+
+
+                  type="button"
+
+
+
+                  onClick={
+
+
+
+                    azione.titolo === "Nuovo lavoro"
+
+
+
+                      ? apriNuovoLavoro
+
+
+
+                      : azione.titolo === "Nuovo ordine"
+
+
+
+                        ? apriNuovoOrdine
+
+
+
+                        : azione.titolo === "Media"
+
+
+
+                          ? apriMedia
+
+
+
+                          : undefined
+
+
+
+                  }
+
+
+
+                  style={{
+
+
+
+                    height: 96,
+
+
+
+                    border: "none",
+
+
+
+                    borderRadius: 20,
+
+
+
+                    background: "#FFFFFF",
+
+
+
+                    boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+
+
+
+                    display: "flex",
+
+
+
+                    flexDirection: "column",
+
+
+
+                    justifyContent: "center",
+
+
+
+                    alignItems: "center",
+
+
+
+                    cursor: "pointer",
+
+
+
+                    padding: 8,
+
+
+
+                  }}
+
+
+
+                >
+
+
+
+                  <div
+
+
+
+                    style={{
+
+
+
+                      width: 46,
+
+
+
+                      height: 46,
+
+
+
+                      borderRadius: 14,
+
+
+
+                      background: azione.coloreIcona,
+
+
+
+                      display: "flex",
+
+
+
+                      justifyContent: "center",
+
+
+
+                      alignItems: "center",
+
+
+
+                      marginBottom: 8,
+
+
+
+                    }}
+
+
+
+                  >
+
+
+
+                    {azione.icon}
+
+
+
+                  </div>
+
+
+
+                  <span
+
+
+
+                    style={{
+
+
+
+                      fontSize: 13,
+
+
+
+                      fontWeight: 700,
+
+
+
+                      color: azione.coloreTesto,
+
+
+
+                      textAlign: "center",
+
+
+
+                    }}
+
+
+
+                  >
+
+
+
+                    {azione.titolo}
+
+
+
+                  </span>
+
+
+
+                </button>
+
+
+
+                ))}
+
+
+
+            </div>
+
+
+
+          </div>
+
+
+
+          {/* =========================
+
+
+
+              CRONOLOGIA
+
+
+
+          ========================= */}
+
+
+
+          <div
+
+
+
+            style={{
+
+
+
+              padding: "24px 18px 110px",
+
+
+
+            }}
+
+
+
+          >
+
+
+
+            <h3
+
+
+
+              style={{
+
+
+
+                fontSize: 22,
+
+
+
+                fontWeight: 800,
+
+
+
+                color: "#111827",
+
+
+
+                margin: "0 0 14px",
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              Cronologia interventi
+
+
+
+            </h3>
+
+
+
+            <div
+
+
+
+              style={{
+
+
+
+                display: "flex",
+
+
+
+                flexDirection: "column",
+
+
+
+                gap: 10,
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              {cronologia.length === 0 ? (
+
+
+
+                <div
+
+
+
+                  style={{
+
+
+
+                    background: "#FFFFFF",
+
+
+
+                    borderRadius: 18,
+
+
+
+                    padding: "18px 16px",
+
+
+
+                    boxShadow: "0 3px 10px rgba(0,0,0,.06)",
+
+
+
+                    color: "#64748B",
+
+
+
+                    fontSize: 14,
+
+
+
+                    fontWeight: 600,
+
+
+
+                    textAlign: "center",
+
+
+
+                  }}
+
+
+
+                >
+
+
+
+                  Nessun lavoro registrato per questo veicolo.
+
+
+
+                </div>
+
+
+
+              ) : (
+
+
+
+                cronologia.map((intervento) => (
+
+                  <div
+
+                    key={`${intervento.data}-${intervento.titolo}`}
+
+                    role="button"
+
+                    tabIndex={0}
+
+                    onClick={() => {
+
+                      sessionStorage.setItem(
+
+                        "goldencar_apri_scheda",
+
+                        String(intervento.jobNumber)
+
+                      );
+
+                      router.push("/veicolo/scheda");
+
+                    }}
+
+                    onKeyDown={(e) => {
+
+                      if (e.key === "Enter" || e.key === " ") {
+
+                        e.preventDefault();
+
+                        sessionStorage.setItem(
+
+                          "goldencar_apri_scheda",
+
+                          String(intervento.jobNumber)
+
+                        );
+
+                        router.push("/veicolo/scheda");
+
+                      }
+
+                    }}
+
+                    style={{
+
+                      width: "100%",
+
+                      border: "none",
+
+                      background: "#FFFFFF",
+
+                      borderRadius: 18,
+
+                      padding: 14,
+
+                      boxShadow: "0 3px 10px rgba(0,0,0,.06)",
+
+                      display: "flex",
+
+                      alignItems: "center",
+
+                      gap: 12,
+
+                      textAlign: "left",
+
+                      cursor: "pointer",
+
+                    }}
+
+                  >
+
+                    {intervento.stato === "Concluso" ? (
+
+                      <button
+
+                        type="button"
+
+                        onClick={(e) => {
+
+                          e.stopPropagation();
+
+                          if (intervento.pdfUrl) {
+
+                            window.open(intervento.pdfUrl, "_blank", "noopener,noreferrer");
+
+                          }
+
+                        }}
+
+                        disabled={!intervento.pdfUrl}
+
+                        aria-label="Apri PDF del lavoro"
+
+                        style={{
+
+                          width: 40,
+
+                          height: 40,
+
+                          border: "none",
+
+                          borderRadius: 12,
+
+                          background: "#F3F4F6",
+
+                          display: "flex",
+
+                          alignItems: "center",
+
+                          justifyContent: "center",
+
+                          flexShrink: 0,
+
+                          cursor: intervento.pdfUrl ? "pointer" : "default",
+
+                          padding: 0,
+
+                          opacity: intervento.pdfUrl ? 1 : 0.7,
+
+                        }}
+
+                      >
+
+                        <PaperclipIcon />
+
+                      </button>
+
+                    ) : (
+
+                      <div
+
+                        style={{
+
+                          width: 40,
+
+                          height: 40,
+
+                          borderRadius: 12,
+
+                          background: "#F3F4F6",
+
+                          display: "flex",
+
+                          alignItems: "center",
+
+                          justifyContent: "center",
+
+                          flexShrink: 0,
+
+                        }}
+
+                      >
+
+                        <WrenchIcon />
+
+                      </div>
+
+                    )}
+
+                    <div
+
+                      style={{
+
+                        flex: 1,
+
+                        minWidth: 0,
+
+                      }}
+
+                    >
+
+                      <div
+
+                        style={{
+
+                          fontWeight: 800,
+
+                          fontSize: 15,
+
+                          color: "#111827",
+
+                          marginBottom: 3,
+
+                        }}
+
+                      >
+
+                        {intervento.tipo}
+
+                      </div>
+
+                      <div
+
+                        style={{
+
+                          fontSize: 12,
+
+                          color: "#64748B",
+
+                        }}
+
+                      >
+
+                        {intervento.data}
+
+                      </div>
+
+                    </div>
+
+                    <div
+
+                      style={{
+
+                        background: intervento.statoBg,
+
+                        color: intervento.statoColor,
+
+                        padding: "7px 10px",
+
+                        borderRadius: 999,
+
+                        fontSize: 11,
+
+                        fontWeight: 700,
+
+                        whiteSpace: "nowrap",
+
+                        flexShrink: 0,
+
+                      }}
+
+                    >
+
+                      {intervento.stato}
+
+                    </div>
+
+                  </div>
+
+              )))}
+
+
+
+            </div>
+
+
+
+          </div>
+
+
+
+        </>
+
+
+
+      ) : null}
+
+
+
+      {mediaAperto && (
+
+
+
+        <div
+
+
+
+          role="dialog"
+
+
+
+          aria-modal="true"
+
+
+
+          style={{
+
+
+
+            position: "fixed",
+
+
+
+            inset: 0,
+
+
+
+            zIndex: 100,
+
+
+
+            background: "rgba(15,23,42,.55)",
+
+
+
+            display: "flex",
+
+
+
+            alignItems: "center",
+
+
+
+            justifyContent: "center",
+
+
+
+            padding: 14,
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          <div
+
+
+
+            style={{
+
+
+
+              width: "100%",
+
+
+
+              maxWidth: 620,
+
+
+
+              maxHeight: "92vh",
+
+
+
+              overflow: "auto",
+
+
+
+              background: "#F8FAFC",
+
+
+
+              borderRadius: 26,
+
+
+
+              boxShadow: "0 20px 60px rgba(15,23,42,.25)",
+
+
+
+              padding: 18,
+
+
+
+            }}
+
+
+
+          >
+
+
+
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+
+
+
+              <div>
+
+
+
+                <div style={{ fontSize: 22, fontWeight: 900, color: "#111827" }}>MEDIA</div>
+
+
+
+                <div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>
+
+
+
+                  Foto e documenti del veicolo
+
+
+
+                </div>
+
+
+
+              </div>
+
+
+
+              <button
+
+
+
+                type="button"
+
+
+
+                onClick={chiudiMedia}
+
+
+
+                aria-label="Chiudi media"
+
+
+
+                style={{
+
+
+
+                  width: 40, height: 40, border: "none", borderRadius: 12,
+
+
+
+                  background: "#E5E7EB", color: "#374151", fontSize: 22, cursor: "pointer",
+
+
+
+                }}
+
+
+
+              >
+
+
+
+                ×
+
+
+
+              </button>
+
+
+
+            </div>
+
+
+
+            {mediaCaricamento ? (
+
+
+
+              <div style={{ background: "#FFFFFF", borderRadius: 18, padding: 36, textAlign: "center", color: "#64748B", fontWeight: 700 }}>
+
+
+
+                Caricamento media...
+
+
+
+              </div>
+
+
+
+            ) : mediaItems.length === 0 ? (
+
+
+
+              <div style={{ background: "#FFFFFF", borderRadius: 18, padding: 36, textAlign: "center", color: "#64748B", fontWeight: 600 }}>
+
+
+
+                Nessuna foto o documento collegato a questo veicolo.
+
+
+
+              </div>
+
+
+
+            ) : (
+
+
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+
+
+
+                {mediaGroups.map(([jobNumber, group]) => (
+
+
+
+                  <section key={jobNumber}>
+
+
+
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 5 }}>
+
+
+
+                      <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
+
+
+
+                        SCHEDA #{group.jobNumber}
+
+
+
+                      </div>
+
+
+
+                      <div style={{ fontSize: 12, color: "#64748B" }}>
+
+
+
+                        {formatMediaDate(group.jobDate)}
+
+
+
+                      </div>
+
+
+
+                    </div>
+
+
+
+                    <div style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>
+
+
+
+                      {group.jobType}
+
+
+
+                    </div>
+
+
+
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 9 }}>
+
+
+
+                      {group.items.map((item) => (
+
+
+
+                        <button
+
+
+
+                          key={item.id}
+
+
+
+                          type="button"
+
+
+
+                          onClick={() => setMediaVisualizzato(item)}
+
+
+
+                          style={{
+
+
+
+                            border: "none", padding: 0, background: "#FFFFFF", borderRadius: 15,
+
+
+
+                            overflow: "hidden", minWidth: 0, cursor: "pointer",
+
+
+
+                            boxShadow: "0 3px 10px rgba(0,0,0,.07)",
+
+
+
+                          }}
+
+
+
+                        >
+
+
+
+                          {item.url && isImageMedia(item) ? (
+
+
+
+                            <img
+
+
+
+                              src={item.url}
+
+
+
+                              alt={item.name}
+
+
+
+                              style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover" }}
+
+
+
+                            />
+
+
+
+                          ) : (
+
+
+
+                            <div style={{
+
+
+
+                              aspectRatio: "1 / 1", display: "flex", flexDirection: "column",
+
+
+
+                              alignItems: "center", justifyContent: "center", padding: 8,
+
+
+
+                              color: "#475569", background: "#EEF1F5",
+
+
+
+                            }}>
+
+
+
+                              <div style={{ fontSize: 28 }}>▤</div>
+
+
+
+                              <div style={{
+
+
+
+                                marginTop: 7, fontSize: 10, fontWeight: 800,
+
+
+
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%",
+
+
+
+                              }}>
+
+
+
+                                {item.name}
+
+
+
+                              </div>
+
+
+
+                            </div>
+
+
+
+                          )}
+
+
+
+                        </button>
+
+
+
+                      ))}
+
+
+
+                    </div>
+
+
+
+                  </section>
+
+
+
+                ))}
+
+
+
+              </div>
+
+
+
+            )}
+
+
+
+          </div>
+
+
+
+        </div>
+
+
+
+      )}
+
+
+
+      {mediaVisualizzato && (
+
+
+
+        <div
+
+
+
+          role="dialog"
+
+
+
+          aria-modal="true"
+
+
+
+          style={{
+
+
+
+            position: "fixed", inset: 0, zIndex: 120, background: "rgba(0,0,0,.88)",
+
+
+
+            display: "flex", flexDirection: "column",
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", color: "#FFFFFF" }}>
+
+
+
+            <div style={{ minWidth: 0 }}>
+
+
+
+              <div style={{
+
+
+
+                fontSize: 14, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis",
+
+
+
+                whiteSpace: "nowrap", maxWidth: 260,
+
+
+
+              }}>
+
+
+
+                {mediaVisualizzato.name}
+
+
+
+              </div>
+
+
+
+              <div style={{ fontSize: 11, opacity: 0.7 }}>
+
+
+
+                Scheda #{mediaVisualizzato.jobNumber} · {formatMediaDate(mediaVisualizzato.createdAt)}
+
+
+
+              </div>
+
+
+
+            </div>
+
+
+
+            <button
+
+
+
+              type="button"
+
+
+
+              onClick={() => setMediaVisualizzato(null)}
+
+
+
+              style={{
+
+
+
+                width: 40, height: 40, border: "none", borderRadius: 12,
+
+
+
+                background: "rgba(255,255,255,.12)", color: "#FFFFFF", fontSize: 22, cursor: "pointer",
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              ×
+
+
+
+            </button>
+
+
+
+          </div>
+
+
+
+          <div style={{
+
+
+
+            flex: 1, minHeight: 0, display: "flex", alignItems: "center",
+
+
+
+            justifyContent: "center", padding: 16, overflow: "auto",
+
+
+
+          }}>
+
+
+
+            {mediaVisualizzato.url && isImageMedia(mediaVisualizzato) ? (
+
+
+
+              <img
+
+
+
+                src={mediaVisualizzato.url}
+
+
+
+                alt={mediaVisualizzato.name}
+
+
+
+                style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", borderRadius: 10 }}
+
+
+
+              />
+
+
+
+            ) : mediaVisualizzato.url && mediaVisualizzato.type === "application/pdf" ? (
+
+
+
+              <iframe
+
+
+
+                src={mediaVisualizzato.url}
+
+
+
+                title={mediaVisualizzato.name}
+
+
+
+                style={{ width: "100%", height: "70vh", border: "none", borderRadius: 10, background: "#FFFFFF" }}
+
+
+
+              />
+
+
+
+            ) : (
+
+
+
+              <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 28, textAlign: "center", color: "#111827", maxWidth: 360 }}>
+
+
+
+                <div style={{ fontSize: 48 }}>▤</div>
+
+
+
+                <div style={{ marginTop: 12, fontWeight: 800, wordBreak: "break-word" }}>
+
+
+
+                  {mediaVisualizzato.name}
+
+
+
+                </div>
+
+
+
+                <div style={{ marginTop: 7, fontSize: 13, color: "#64748B" }}>
+
+
+
+                  Questo tipo di documento non può essere visualizzato direttamente qui.
+
+
+
+                </div>
+
+
+
+              </div>
+
+
+
+            )}
+
+
+
+          </div>
+
+
+
+          <div style={{ display: "flex", gap: 10, padding: "12px 16px 20px" }}>
+
+
+
+            <button
+
+
+
+              type="button"
+
+
+
+              onClick={() => scaricaMedia(mediaVisualizzato)}
+
+
+
+              disabled={!mediaVisualizzato.url}
+
+
+
+              style={{
+
+
+
+                flex: 1, height: 48, border: "none", borderRadius: 15,
+
+
+
+                background: "#FFFFFF", color: "#111827", fontWeight: 900,
+
+
+
+                cursor: mediaVisualizzato.url ? "pointer" : "default",
+
+
+
+                opacity: mediaVisualizzato.url ? 1 : 0.55,
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              SCARICA
+
+
+
+            </button>
+
+
+
+            <button
+
+
+
+              type="button"
+
+
+
+              onClick={() => eliminaMedia(mediaVisualizzato)}
+
+
+
+              style={{
+
+
+
+                flex: 1, height: 48, border: "none", borderRadius: 15,
+
+
+
+                background: "#DC2626", color: "#FFFFFF", fontWeight: 900, cursor: "pointer",
+
+
+
+              }}
+
+
+
+            >
+
+
+
+              ELIMINA
+
+
+
+            </button>
+
+
+
+          </div>
+
+
+
+        </div>
+
+
+
+      )}
+
+
+
+      <BottomBar />
+
+
+
+    </main>
+
+
+
+    </>
+
+
+
+  );
+
+
+
+}
+
+
+
+function InfoCard({
+
+
+
+  icon,
+
+
+
+  label,
+
+
+
+  value,
+
+
+
+  iconColor,
+
+
+
+  href,
+
+  valueFontSize,
+
+
+
+}: {
+
+
+
+  icon: ReactNode;
+
+
+
+  label: string;
+
+
+
+  value: string;
+
+
+
+  iconColor: string;
+
+
+
+  href?: string;
+
+  valueFontSize?: number;
+
+
+
+}) {
+
+
+
+  const content = (
+
+
+
+    <>
+
+
+
+      <div
+
+
+
+        style={{
+
+
+
+          display: "flex",
+
+
+
+          alignItems: "center",
+
+
+
+          gap: 8,
+
+
+
+          marginBottom: 8,
+
+
+
+        }}
+
+
+
+      >
+
+
+
+        {icon}
+
+
+
+        <div
+
+
+
+          style={{
+
+
+
+            fontSize: 12,
+
+
+
+            color: "#6B7280",
+
+
+
+          }}
+
+
+
+        >
+
+
+
+          {label}
+
+
+
+        </div>
+
+
+
+      </div>
+
+
+
+      <div
+
+
+
+        style={{
+
+
+
+          fontWeight: 700,
+
+
+
+          fontSize: valueFontSize ?? 14,
+
+
+
+          color: "#111827",
+
+
+
+          lineHeight: 1.2,
+
+
+
+          wordBreak: "break-word",
+
+
+
+        }}
+
+
+
+      >
+
+
+
+        {value}
+
+
+
+      </div>
+
+
+
+    </>
+
+
+
+  );
+
+
+
+  const style = {
+
+
+
+    background: "#FFFFFF",
+
+
+
+
+    borderRadius: 18,
+
+
+
+    padding: 14,
+
+
+
+    boxShadow: "0 3px 10px rgba(0,0,0,.06)",
+
+
+
+    minHeight: 84,
+
+
+
+    textDecoration: "none",
+
+
+
+    color: "inherit",
+
+
+
+    cursor: href ? "pointer" : "default",
+
+
+
+    display: "block",
+
+
+
+  } as const;
+
+
+
+  if (href) {
+
+
+
+    return (
+
+
+
+      <a href={href} style={style}>
+
+
+
+        {content}
+
+
+
+      </a>
+
+
+
+    );
+
+
+
+  }
+
+
+
+  return <div style={style}>{content}</div>;
+
+
+
+}
+
+
+
+function ClientChoice({
+
+
+
+  nome,
+
+
+
+  active,
+
+
+
+  onClick,
+
+
+
+}: {
+
+
+
+  nome: string;
+
+
+
+  active: boolean;
+
+
+
+  onClick: () => void;
+
+
+
+}) {
+
+
+
+  return (
+
+
+
+    <button
+
+
+
+      type="button"
+
+
+
+      onClick={onClick}
+
+
+
+      style={{
+
+
+
+        width: "100%",
+
+
+
+        border: "none",
+
+
+
+        borderBottom: "1px solid #E5E7EB",
+
+
+
+        background: active ? "#F7F4E8" : "#FFFFFF",
+
+
+
+        color: active ? "#111827" : "#374151",
+
+
+
+        padding: "12px 14px",
+
+
+
+        textAlign: "left",
+
+
+
+        fontSize: 13,
+
+
+
+        fontWeight: active ? 800 : 600,
+
+
+
+        cursor: "pointer",
+
+
+
+      }}
+
+
+
+    >
+
+
+
+      {nome}
+
+
+
+    </button>
+
+
+
+  );
+
+
+
+}
+
+
+
+const SearchIcon = () => (
+
+
+
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+
+
+
+    <circle
+
+
+
+      cx="11"
+
+
+
+      cy="11"
+
+
+
+      r="7"
+
+
+
+      stroke="#6B7280"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M20 20L17 17"
+
+
+
+      stroke="#6B7280"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const PlusIcon = () => (
+
+
+
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M12 5V19M5 12H19"
+
+
+
+      stroke="#111827"
+
+
+
+      strokeWidth="2.5"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const SmallPlusIcon = () => (
+
+
+
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M12 5V19M5 12H19"
+
+
+
+      stroke="#111827"
+
+
+
+      strokeWidth="2.4"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const MinusIcon = () => (
+
+
+
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M5 12H19"
+
+
+
+      stroke="#FFFFFF"
+
+
+
+      strokeWidth="2.4"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const ChevronDownIcon = ({ open }: { open: boolean }) => (
+
+
+
+  <svg
+
+
+
+    width="14"
+
+
+
+    height="14"
+
+
+
+    viewBox="0 0 24 24"
+
+
+
+    fill="none"
+
+
+
+    style={{
+
+
+
+      transform: open ? "rotate(180deg)" : "rotate(0deg)",
+
+
+
+      transition: "transform .15s ease",
+
+
+
+    }}
+
+
+
+  >
+
+
+
+    <path
+
+
+
+      d="M6 9L12 15L18 9"
+
+
+
+      stroke="#6B7280"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const CarIcon = () => (
+
+
+
+  <svg width="42" height="42" viewBox="0 0 24 24" fill="none">
+
+
+
+    <g
+
+
+
+      stroke="#111827"
+
+
+
+      strokeWidth="1.8"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    >
+
+
+
+      <path d="M2 9L4 10L5.3 6.2C5.8 4.8 6.3 4 8.3 4H15.7C17.7 4 18.2 4.8 18.7 6.2L20 10L22 9" />
+
+
+
+      <path d="M6.8 10H17.2C20 10 22 11.4 22 14.8V17.5C22 18.9 20.9 20 19.5 20H19C17.9 20 17 19.1 17 18C17 17.7 16.8 17.5 16.5 17.5H7.5C7.2 17.5 7 17.7 7 18C7 19.1 6.1 20 5 20H4.5C3.1 20 2 18.9 2 17.5V14.8C2 11.4 4 10 6.8 10Z" />
+
+
+
+    </g>
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const RevisionIcon = () => (
+
+
+
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+
+
+
+    <g stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+
+
+
+      <path d="M6 6L10.5 10.5" />
+
+
+
+      <path d="M6 6H3L2 3L3 2L6 3V6Z" />
+
+
+
+      <path d="M19.259 2.74101L16.6314 5.36863C16.2354 5.76465 16.0373 5.96265 15.9632 6.19098C15.8979 6.39183 15.8979 6.60817 15.9632 6.80902C16.0373 7.03735 16.2354 7.23535 16.6314 7.63137L16.8686 7.86863C17.2646 8.26465 17.4627 8.46265 17.691 8.53684C17.8918 8.6021 18.1082 8.6021 18.309 8.53684C18.5373 8.46265 18.7354 8.26465 19.1314 7.86863L21.5893 5.41072C21.854 6.05488 22 6.76039 22 7.5C22 10.5376 19.5376 13 16.5 13C16.1338 13 15.7759 12.9642 15.4298 12.8959C14.9436 12.8001 14.7005 12.7521 14.5532 12.7668C14.3965 12.7824 14.3193 12.8059 14.1805 12.8802C14.0499 12.9501 13.919 13.081 13.657 13.343L6.5 20.5C5.67157 21.3284 4.32843 21.3284 3.5 20.5C2.67157 19.6716 2.67157 18.3284 3.5 17.5L10.657 10.343C10.919 10.081 11.0499 9.95005 11.2332 9.44681C11.2479 9.29945 11.1999 9.05638 11.1041 8.57024C11.0358 8.22406 11 7.86621 11 7.5C11 4.46243 13.4624 2 16.5 2C17.5055 2 18.448 2.26982 19.259 2.74101Z" />
+
+
+
+      <path d="M12.0001 14.9999L17.5 20.4999C18.3284 21.3283 19.6716 21.3283 20.5 20.4999C21.3284 19.6715 21.3284 18.3283 20.5 17.4999L15.9753 12.9753C15.655 12.945 15.3427 12.8872 15.0408 12.8043C14.6517 12.6975 14.2249 12.7751 13.9397 13.0603L12.0001 14.9999Z" />
+
+
+
+    </g>
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const KeyIcon = () => (
+
+
+
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 512 512" style={{ color: "#2563EB" }}>
+
+
+
+    <title>car-key</title>
+
+
+
+    <path fill="currentColor" d="M285.628 42.475c-39.602 0-73 28.513-73 65c0 18.43 8.528 34.82 22.066 46.533l8.473-16.67c-7.876-8.202-12.54-18.667-12.54-29.863c0-25.37 23.91-47 55-47s55 21.63 55 47c0 17.403-11.253 33.046-28.356 41.154l-7.482 21.556a79 79 0 0 0 5.613-1.58l9.158 16.013c-10.326 7.263-20.32 16.266-31.034 27.472l81.35 179.392c50.265 2.318 98.764-24.335 123.754-68.01L385.8 158.635c-20.166 4.027-36.39 9.054-50.875 16.598l-8.09-14.144c19.057-11.615 31.793-31.09 31.793-53.613c0-36.487-33.398-65-73-65zm-122.666 5.947c-2.66.03-5.454.47-8.152 1.348c-6.17 2.004-11.39 6.134-13.66 10.59l-.288.57l-64.904 92.297c-2.135 4.452-2.382 10.947-.457 16.97c1.97 6.157 6.045 11.305 10.202 13.422l143.682 73.16c4.072 2.075 10.59 2.405 16.648.427c5.945-1.94 10.996-5.885 13.403-10.492l25.36-74.26l.15.004l6.327-18.23c-.086.008-.175.01-.26.018l4.905-14.365l.29-.568c2.27-4.456 2.54-11.12.55-17.282s-6.1-11.355-10.434-13.562l-32.078-16.333c-6.543 8.178-8.55 19.868-.346 30.87l2.11 3.532l10.288 5.4l-8.256 16.214l-.146-.07l-8.118 15.97l.135.065l-6.303 12.376l-101.59-51.728l18.606-36.538l4.082-8.02l30.854 15.712c1.556-9.81 4.922-19.248 10.335-28.404L172.103 50.31c-2.514-1.28-5.72-1.925-9.14-1.888zm217.928 131.38l24.082 43.82l-71.864 39.49l-19.748-35.93l-4.334-7.887zm-7.106 24.444L333.472 226.4l6.742 12.27l40.312-22.154zM114.5 218.482l-20.87 40.993l69.508 35.392l20.873-40.992zm297.214 17.41l24.08 43.817l-71.863 39.49l-19.745-35.93l-4.334-7.887l71.864-39.492zm-7.106 24.442l-40.314 22.154l6.744 12.27l40.313-22.154zM99.72 282.774h-.002L18.372 442.53l6.123 18.83l77.264-151.737l16.038 8.168l-77.262 151.735l22.375-7.275l12.968-4.217l-6.986-21.556l21.496-6.97L83.392 408l21.52-6.998l-5.37-16.504l41.17-80.852l-40.992-20.873z" />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const LocationIcon = () => (
+
+
+
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" style={{ color: "#374151" }}>
+
+
+
+    <title>location</title>
+
+
+
+    <path fill="currentColor" d="M19 9A7 7 0 1 0 5 9c0 1.387.409 2.677 1.105 3.765h-.008L12 22l5.903-9.235h-.007A6.97 6.97 0 0 0 19 9m-7 3a3 3 0 1 1 0-6a3 3 0 0 1 0 6" />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const PersonIcon = () => (
+
+
+
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+
+
+
+    <circle cx="12" cy="8" r="4" stroke="#374151" strokeWidth="2" />
+
+
+
+    <path d="M4 21C4.8 16.8 7.5 14.5 12 14.5C16.5 14.5 19.2 16.8 20 21" stroke="#374151" strokeWidth="2" strokeLinecap="round" />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const PhoneIcon = () => (
+
+
+
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M6.6 3.5L8.8 3C9.4 2.9 9.9 3.2 10.1 3.7L11.1 6.2C11.3 6.7 11.2 7.2 10.8 7.6L9.3 9.1C10.2 11 11.8 12.7 13.7 13.6L15.2 12.1C15.6 11.7 16.1 11.6 16.6 11.8L19.1 12.8C19.6 13 19.9 13.5 19.8 14.1L19.3 16.3C19.2 16.8 18.8 17.2 18.4 17.4C17.5 17.8 16.6 18 15.7 18C10.3 18 6 13.7 6 8.3C6 7.4 6.2 6.5 6.6 5.6C6.8 5.2 6.2 3.5 6.6 3.5Z"
+
+
+
+      stroke="#16A34A"
+
+
+
+      strokeWidth="1.8"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const CardIcon = () => (
+
+
+
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+
+
+
+    <rect
+
+
+
+      x="3"
+
+
+
+      y="5"
+
+
+
+      width="18"
+
+
+
+      height="14"
+
+
+
+      rx="2"
+
+
+
+      stroke="#64748B"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M3 9H21"
+
+
+
+      stroke="#64748B"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M7 14H11"
+
+
+
+      stroke="#64748B"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const PaperclipIcon = () => (
+
+
+
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M8.5 12.5L14.7 6.3C16.1 4.9 18.3 4.9 19.7 6.3C21.1 7.7 21.1 9.9 19.7 11.3L11 20C8.8 22.2 5.2 22.2 3 20C0.8 17.8 0.8 14.2 3 12L10.4 4.6C12.1 2.9 14.9 2.9 16.6 4.6C18.3 6.3 18.3 9.1 16.6 10.8L9.8 17.6C8.8 18.6 7.2 18.6 6.2 17.6C5.2 16.6 5.2 15 6.2 14L12.5 7.7"
+
+
+
+      stroke="#374151"
+
+
+
+      strokeWidth="1.8"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const WrenchIcon = () => (
+
+
+
+  <svg
+
+
+
+    width="22"
+
+
+
+    height="22"
+
+
+
+    viewBox="0 0 24 24"
+
+
+
+    fill="none"
+
+
+
+    xmlns="http://www.w3.org/2000/svg"
+
+
+
+    aria-hidden="true"
+
+
+
+  >
+
+
+
+    <g
+
+
+
+      stroke="#D4AF37"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    >
+
+
+
+      <path d="M6 6L10.5 10.5" />
+
+
+
+      <path d="M6 6H3L2 3L3 2L6 3V6Z" />
+
+
+
+      <path d="M19.259 2.74101L16.6314 5.36863C16.2354 5.76465 16.0373 5.96265 15.9632 6.19098C15.8979 6.39183 15.8979 6.60817 15.9632 6.80902C16.0373 7.03735 16.2354 7.23535 16.6314 7.63137L16.8686 7.86863C17.2646 8.26465 17.4627 8.46265 17.691 8.53684C17.8918 8.6021 18.1082 8.6021 18.309 8.53684C18.5373 8.46265 18.7354 8.26465 19.1314 7.86863L21.5893 5.41072C21.854 6.05488 22 6.76039 22 7.5C22 10.5376 19.5376 13 16.5 13C16.1338 13 15.7759 12.9642 15.4298 12.8959C14.9436 12.8001 14.7005 12.7521 14.5532 12.7668C14.3965 12.7824 14.3193 12.8059 14.1805 12.8802C14.0499 12.9501 13.919 13.081 13.657 13.343L6.5 20.5C5.67157 21.3284 4.32843 21.3284 3.5 20.5C2.67157 19.6716 2.67157 18.3284 3.5 17.5L10.657 10.343C10.919 10.081 11.0499 9.95005 11.1198 9.81949C11.1941 9.68068 11.2176 9.60347 11.2332 9.44681C11.2479 9.29945 11.1999 9.05638 11.1041 8.57024C11.0358 8.22406 11 7.86621 11 7.5C11 4.46243 13.4624 2 16.5 2C17.5055 2 18.448 2.26982 19.259 2.74101Z" />
+
+
+
+      <path d="M12.0001 14.9999L17.5 20.4999C18.3284 21.3283 19.6716 21.3283 20.5 20.4999C21.3284 19.6715 21.3284 18.3283 20.5 17.4999L15.9753 12.9753C15.655 12.945 15.3427 12.8872 15.0408 12.8043C14.6517 12.6975 14.2249 12.7751 13.9397 13.0603L12.0001 14.9999Z" />
+
+
+
+    </g>
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const CameraScanIcon = () => (
+
+
+
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+
+
+
+    <g
+
+
+
+      stroke="#8A6A00"
+
+
+
+      strokeWidth="1.8"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    >
+
+
+
+      <path d="M7 4H5C4.4 4 4 4.4 4 5V7" />
+
+
+
+      <path d="M17 4H19C19.6 4 20 4.4 20 5V7" />
+
+
+
+      <path d="M7 20H5C4.4 20 4 19.6 4 19V17" />
+
+
+
+      <path d="M17 20H19C19.6 20 20 19.6 20 19V17" />
+
+
+
+      <rect x="7" y="7" width="10" height="10" rx="2" />
+
+
+
+      <path d="M12 10V14M10 12H14" />
+
+
+
+    </g>
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const DocGreen = () => (
+
+
+
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M7 3H15L18 6V21H6V3H7Z"
+
+
+
+      stroke="#15803D"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M9 11H15M9 15H13"
+
+
+
+      stroke="#15803D"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const CubeGold = () => (
+
+
+
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+
+
+
+    <path
+
+
+
+      d="M12 3L20 7.5V16.5L12 21L4 16.5V7.5L12 3Z"
+
+
+
+      stroke="#B7791F"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M8 6L16 10M12 12V21"
+
+
+
+      stroke="#B7791F"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
+
+
+
+const PhotoGray = () => (
+
+
+
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+
+
+
+    <rect
+
+
+
+      x="3"
+
+
+
+      y="5"
+
+
+
+      width="18"
+
+
+
+      height="14"
+
+
+
+      rx="2"
+
+
+
+      stroke="#475569"
+
+
+
+      strokeWidth="2"
+
+
+
+    />
+
+
+
+    <circle
+
+
+
+      cx="9"
+
+
+
+      cy="10"
+
+
+
+      r="1.5"
+
+
+
+      fill="#475569"
+
+
+
+    />
+
+
+
+    <path
+
+
+
+      d="M5 17L10 12L14 15L17 12L19 14.5"
+
+
+
+      stroke="#475569"
+
+
+
+      strokeWidth="2"
+
+
+
+      strokeLinecap="round"
+
+
+
+      strokeLinejoin="round"
+
+
+
+    />
+
+
+
+  </svg>
+
+
+
+);
