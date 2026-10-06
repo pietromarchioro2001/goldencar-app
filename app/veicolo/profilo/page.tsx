@@ -512,10 +512,37 @@ export default function NuovoProfiloPage() {
     };
   }
 
+  /*
+   * Prima di creare l'ID controlliamo se la targa esiste già.
+   * In questo modo lo stesso veicolo mantiene SEMPRE la stessa
+   * cartella su R2 anche se il profilo viene salvato di nuovo.
+   */
+  const raw = localStorage.getItem("goldencar_vehicles");
+  const vehicles = raw ? JSON.parse(raw) : [];
+  const list = Array.isArray(vehicles) ? vehicles : [];
+
+  const normalizedPlate = form.targa
+    .trim()
+    .replace(/[^A-Z0-9]/gi, "")
+    .toUpperCase();
+
+  const existingIndex = list.findIndex(
+    (item: any) =>
+      String(item?.veicolo?.targa || "")
+        .replace(/[^A-Z0-9]/gi, "")
+        .toUpperCase() === normalizedPlate
+  );
+
+  const existingVehicleId =
+    existingIndex >= 0 && typeof list[existingIndex]?.id === "string"
+      ? list[existingIndex].id
+      : null;
+
   const veicoloId =
-    typeof crypto !== "undefined" && crypto.randomUUID
+    existingVehicleId ||
+    (typeof crypto !== "undefined" && crypto.randomUUID
       ? crypto.randomUUID()
-      : `vehicle-${Date.now()}`;
+      : `vehicle-${Date.now()}`);
 
   const nuovoProfilo = {
     id: veicoloId,
@@ -622,19 +649,6 @@ export default function NuovoProfiloPage() {
      * SALVATAGGIO PROFILO
      * ==========================================
      */
-
-    const raw = localStorage.getItem("goldencar_vehicles");
-    const vehicles = raw ? JSON.parse(raw) : [];
-    const list = Array.isArray(vehicles) ? vehicles : [];
-
-    const normalizedPlate = nuovoProfilo.veicolo.targa;
-
-    const existingIndex = list.findIndex(
-      (item: any) =>
-        String(item?.veicolo?.targa || "")
-          .replace(/[^A-Z0-9]/gi, "")
-          .toUpperCase() === normalizedPlate
-    );
 
     if (existingIndex >= 0) {
       list[existingIndex] = {
