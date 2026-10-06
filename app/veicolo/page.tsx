@@ -726,21 +726,21 @@ export default function Veicolo() {
   const valorNormalizzato = (value: string) =>
     value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
-  const trovaProfilo = (query: string): ProfiloVeicolo | null => {
-    if (typeof window === "undefined") return null;
+  const trovaProfili = (query: string): ProfiloVeicolo[] => {
+    if (typeof window === "undefined") return [];
 
     const valore = query.trim().toLowerCase();
-    if (!valore) return null;
+    if (!valore) return [];
 
     try {
       const raw = localStorage.getItem("goldencar_vehicles");
       const vehicles = raw ? JSON.parse(raw) : [];
 
-      if (!Array.isArray(vehicles)) return null;
+      if (!Array.isArray(vehicles)) return [];
 
       const queryNormalizzata = valorNormalizzato(valore);
 
-      const trovato = vehicles.find((item: any) => {
+      return vehicles.filter((item: any) => {
         const cliente1 = item?.cliente1 ?? {};
         const cliente2 = item?.cliente2 ?? null;
         const veicolo = item?.veicolo ?? {};
@@ -761,18 +761,20 @@ export default function Veicolo() {
           .filter(Boolean)
           .map((value) => String(value).toLowerCase());
 
-        return valoriRicerca.some((value) =>
-          value.includes(valore) ||
-          valorNormalizzato(value).includes(queryNormalizzata)
+        return valoriRicerca.some(
+          (value) =>
+            value.includes(valore) ||
+            valorNormalizzato(value).includes(queryNormalizzata)
         );
-      });
-
-      return trovato ?? null;
+      }) as ProfiloVeicolo[];
     } catch (error) {
       console.error("Errore lettura profili veicolo:", error);
-      return null;
+      return [];
     }
   };
+
+  const trovaProfilo = (query: string): ProfiloVeicolo | null =>
+    trovaProfili(query)[0] ?? null;
 
   useEffect(() => {
     const salvata = sessionStorage.getItem("goldencar_veicolo_ricerca");
@@ -792,11 +794,14 @@ export default function Veicolo() {
 
   const ricercaNormalizzata = ricerca.trim().toLowerCase();
 
-  const profiloCorrisponde = Boolean(
-    profiloVeicolo &&
-    ricercaNormalizzata &&
-    trovaProfilo(ricercaNormalizzata)
-  );
+  const risultatiRicerca = ricercaNormalizzata
+    ? trovaProfili(ricercaNormalizzata)
+    : [];
+
+  const mostraProfilo =
+    veicoloSelezionato &&
+    ricercaNormalizzata.length > 0 &&
+    Boolean(profiloVeicolo);
 
   const gestisciRicerca = (value: string) => {
     setRicerca(value);
@@ -810,22 +815,19 @@ export default function Veicolo() {
       return;
     }
 
-    const trovato = trovaProfilo(query);
-
-    if (trovato) {
-      setProfiloVeicolo(trovato);
-      sessionStorage.setItem("goldencar_veicolo_ricerca", value);
-      setVeicoloSelezionato(true);
-    } else {
-      setProfiloVeicolo(null);
-      setVeicoloSelezionato(false);
-    }
+    setVeicoloSelezionato(false);
+    setProfiloVeicolo(null);
+    sessionStorage.removeItem("goldencar_veicolo_ricerca");
   };
 
-  const mostraProfilo =
-    veicoloSelezionato &&
-    ricercaNormalizzata.length > 0 &&
-    profiloCorrisponde;
+  const selezionaVeicolo = (profilo: ProfiloVeicolo) => {
+    const targa = profilo.veicolo.targa.trim().toUpperCase();
+
+    setProfiloVeicolo(profilo);
+    setVeicoloSelezionato(true);
+    setRicerca(targa);
+    sessionStorage.setItem("goldencar_veicolo_ricerca", targa);
+  };
 
   const azioni = [
 
@@ -1816,80 +1818,119 @@ export default function Veicolo() {
 
 
       {/* =========================
-
-
-
-          RISULTATO RICERCA
-
-
-
+          RISULTATI RICERCA
       ========================= */}
 
-
-
-      {!mostraProfilo && ricercaNormalizzata.length > 0 ? (
-
-
-
+      {ricercaNormalizzata.length > 0 && !mostraProfilo && (
         <div
-
-
-
           style={{
-
-
-
-            margin: "22px 18px 0",
-
-
-
-            borderRadius: 22,
-
-
-
+            position: "relative",
+            zIndex: 30,
+            margin: "8px 18px 0",
+            borderRadius: 18,
             background: "#FFFFFF",
-
-
-
-            boxShadow: "0 4px 14px rgba(15,23,42,.08)",
-
-
-
-            padding: 24,
-
-
-
-            textAlign: "center",
-
-
-
-            color: "#6B7280",
-
-
-
+            boxShadow: "0 8px 24px rgba(15,23,42,.14)",
+            overflow: "hidden",
+            border: "1px solid #E5E7EB",
           }}
-
-
-
         >
+          {risultatiRicerca.length > 0 ? (
+            risultatiRicerca.map((profilo, index) => {
+              const cliente1 = [profilo.cliente1.nome, profilo.cliente1.cognome]
+                .filter(Boolean)
+                .join(" ");
+              const cliente2 = profilo.cliente2
+                ? [profilo.cliente2.nome, profilo.cliente2.cognome]
+                    .filter(Boolean)
+                    .join(" ")
+                : "";
+              const clienti = [cliente1, cliente2].filter(Boolean).join(" · ");
 
+              return (
+                <button
+                  key={profilo.id}
+                  type="button"
+                  onClick={() => selezionaVeicolo(profilo)}
+                  style={{
+                    width: "100%",
+                    border: "none",
+                    borderBottom:
+                      index < risultatiRicerca.length - 1
+                        ? "1px solid #E5E7EB"
+                        : "none",
+                    background: "#FFFFFF",
+                    padding: "13px 15px",
+                    textAlign: "left",
+                    cursor: "pointer",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: 12,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 850,
+                          color: "#111827",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {clienti || "Cliente non indicato"}
+                      </div>
+                      <div
+                        style={{
+                          marginTop: 4,
+                          fontSize: 13,
+                          color: "#64748B",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {profilo.veicolo.veicolo || "Veicolo non indicato"}
+                      </div>
+                    </div>
 
-
-          Nessun veicolo trovato
-
-
-
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        padding: "7px 9px",
+                        borderRadius: 9,
+                        background: "#F8F5E8",
+                        color: "#8A6A00",
+                        fontSize: 12,
+                        fontWeight: 900,
+                        letterSpacing: ".04em",
+                      }}
+                    >
+                      {profilo.veicolo.targa || "—"}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div
+              style={{
+                padding: "15px 16px",
+                color: "#6B7280",
+                fontSize: 14,
+                fontWeight: 700,
+              }}
+            >
+              Nessun veicolo trovato
+            </div>
+          )}
         </div>
-
-
-
-      ) : mostraProfilo ? (
-
-
-
-        <>
-
-
+      )}
 
           {/* =========================
 
