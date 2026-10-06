@@ -129,7 +129,7 @@ export async function r2Request(
   return fetch(url, {
     method,
     headers,
-    body: body && method !== "GET" && method !== "HEAD" ? body : undefined,
+    body: body && method !== "GET" && method !== "HEAD" ? new Uint8Array(body) : undefined,
     cache: "no-store",
   });
 }
