@@ -43,6 +43,7 @@ export default function NuovoProfiloPage() {
     useState<"idle" | "analisi" | "ok" | "errore">("idle");
   const [statoScansioneVeicolo, setStatoScansioneVeicolo] =
     useState<"idle" | "analisi" | "ok" | "errore">("idle");
+  const [veicoloGiaEsistente, setVeicoloGiaEsistente] = useState(false);
 
 
 
@@ -70,6 +71,32 @@ export default function NuovoProfiloPage() {
   });
 
 
+
+  useEffect(() => {
+    const targaNormalizzata = form.targa.trim().replace(/[^A-Z0-9]/gi, "").toUpperCase();
+
+    if (!targaNormalizzata) {
+      setVeicoloGiaEsistente(false);
+      return;
+    }
+
+    try {
+      const raw = localStorage.getItem("goldencar_vehicles");
+      const vehicles = raw ? JSON.parse(raw) : [];
+      const list = Array.isArray(vehicles) ? vehicles : [];
+
+      const esiste = list.some(
+        (item: any) =>
+          String(item?.veicolo?.targa || "")
+            .replace(/[^A-Z0-9]/gi, "")
+            .toUpperCase() === targaNormalizzata
+      );
+
+      setVeicoloGiaEsistente(esiste);
+    } catch {
+      setVeicoloGiaEsistente(false);
+    }
+  }, [form.targa]);
 
   const [cliente2, setCliente2] = useState<ClienteData>({
 
@@ -477,6 +504,11 @@ export default function NuovoProfiloPage() {
   };
 
   const handleSave = async () => {
+  if (veicoloGiaEsistente) {
+    alert("Questa targa è già presente nell'archivio. Apri il veicolo esistente invece di creare un nuovo profilo.");
+    return;
+  }
+
   const cf1 = form.cf.trim().toUpperCase();
 
   if (!cf1) {
@@ -1426,6 +1458,45 @@ export default function NuovoProfiloPage() {
               onChange={(value) => update("targa", value)}
 
             />
+            
+            {veicoloGiaEsistente && (
+              <div style={{
+                marginTop: -4,
+                marginBottom: 12,
+                padding: "12px 14px",
+                borderRadius: 14,
+                background: "#FFF7ED",
+                border: "1px solid #FDBA74",
+                color: "#9A3412",
+                fontSize: 13,
+                fontWeight: 800,
+                lineHeight: 1.35,
+              }}>
+                ⚠️ <strong>TARGA GIÀ PRESENTE</strong>
+                <br />
+                Questo veicolo è già registrato.
+                <button
+                  type="button"
+                  onClick={() => {
+                    sessionStorage.setItem("goldencar_veicolo_ricerca", form.targa.trim().toUpperCase());
+                    router.push("/veicolo");
+                  }}
+                  style={{
+                    marginTop: 9,
+                    width: "100%",
+                    height: 40,
+                    border: "none",
+                    borderRadius: 10,
+                    background: "#111827",
+                    color: "#FFFFFF",
+                    fontWeight: 900,
+                    cursor: "pointer",
+                  }}
+                >
+                  APRI VEICOLO ESISTENTE
+                </button>
+              </div>
+            )}
 
 
 
