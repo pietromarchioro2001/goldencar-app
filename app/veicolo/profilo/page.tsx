@@ -548,12 +548,12 @@ export default function NuovoProfiloPage() {
     const fotoLibretto = [
       {
         file: fileCliente,
-        key: `veicoli/${veicoloId}/libretto/libretto-cliente.jpg`,
+        key: `veicoli/${veicoloId}/libretto-cliente.jpg`,
         tipo: "cliente" as const,
       },
       {
         file: fileVeicolo,
-        key: `veicoli/${veicoloId}/libretto/libretto-veicolo.jpg`,
+        key: `veicoli/${veicoloId}/libretto-veicolo.jpg`,
         tipo: "veicolo" as const,
       },
     ];
