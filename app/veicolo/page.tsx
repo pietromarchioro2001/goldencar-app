@@ -777,19 +777,10 @@ export default function Veicolo() {
     const valore = query.trim().toLowerCase();
     if (!valore) return [];
 
-    let vehicles = profiliArchivio;
-
-    // Fallback temporaneo: finché Supabase non è disponibile,
-    // manteniamo compatibilità con l'archivio locale esistente.
-    if (vehicles.length === 0) {
-      try {
-        const raw = localStorage.getItem("goldencar_vehicles");
-        const localVehicles = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(localVehicles)) vehicles = localVehicles;
-      } catch (error) {
-        console.error("Errore lettura profili veicolo locali:", error);
-      }
-    }
+    // La ricerca dell'archivio principale usa esclusivamente Supabase.
+    // Non usiamo più localStorage come fallback, così eventuali problemi
+    // di connessione non mostrano dati vecchi o non presenti nel database.
+    const vehicles = profiliArchivio;
 
     const queryNormalizzata = valorNormalizzato(valore);
 
