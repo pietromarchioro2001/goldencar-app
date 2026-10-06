@@ -1094,7 +1094,7 @@ export default function SchedaLavoroPage() {
       return;
     }
     const added: MediaAttachment[] = [];
-    const nextUrls: Record<string, string> = [];
+    const nextUrls: Record<string, string> = {};
     try {
       for (const file of Array.from(files)) {
         const id =
