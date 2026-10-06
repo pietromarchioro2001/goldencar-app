@@ -605,84 +605,38 @@ export default function Veicolo() {
 
 
   const aggiornaRevisione = () => {
-
-
+    // La revisione del veicolo ora arriva direttamente dall'archivio Supabase.
+    // Manteniamo il dato locale solo come fallback per le vecchie revisioni.
+    if (veicoloProfilo.revisione.trim()) {
+      setDataRevisione(veicoloProfilo.revisione.trim());
+      return;
+    }
 
     if (typeof window === "undefined") return;
 
-
-
     const targaVeicolo = veicoloProfilo.targa.trim().toUpperCase();
 
-
-
     try {
-
-
-
       const raw = localStorage.getItem("goldencar_revisions");
-
-
-
       const revisioni = raw ? JSON.parse(raw) : [];
 
-
-
       if (!Array.isArray(revisioni)) {
-
-
-
         setDataRevisione("");
-
-
-
         return;
-
-
-
       }
 
-
-
-      const revisione = revisioni.find((item: any) =>
-
-
-
-        String(item?.targa || "").trim().toUpperCase() === targaVeicolo
-
-
-
+      const revisione = revisioni.find(
+        (item: any) =>
+          String(item?.targa || "").trim().toUpperCase() === targaVeicolo
       );
-
-
 
       setDataRevisione(
-
-
-
         String(revisione?.scadenza || revisione?.revisione || "")
-
-
-
       );
-
-
-
     } catch {
-
-
-
       setDataRevisione("");
-
-
-
     }
-
-
-
   };
-
-
 
   useEffect(() => {
 
