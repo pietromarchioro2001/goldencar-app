@@ -697,18 +697,26 @@ export default function Veicolo() {
 
   const caricaProfiliSupabase = async () => {
     try {
-      const [{ data: vehicles, error: vehiclesError }, { data: clients, error: clientsError }] =
-        await Promise.all([
-          supabase
-            .from("vehicles")
-            .select("id, client_id, veicolo, motore, targa, immatricolazione, revisione"),
-          supabase
-            .from("clients")
-            .select("*"),
-        ]);
+      // Carichiamo prima i veicoli: la ricerca deve funzionare anche se
+      // una delle tabelle collegate ha un problema di RLS.
+      const { data: vehicles, error: vehiclesError } = await supabase
+        .from("vehicles")
+        .select("id, client_id, veicolo, motore, targa, immatricolazione, revisione");
 
-      if (vehiclesError) throw vehiclesError;
-      if (clientsError) throw clientsError;
+      if (vehiclesError) {
+        console.error("Errore Supabase vehicles:", vehiclesError);
+        throw vehiclesError;
+      }
+
+      // Clienti e relazioni vengono caricati separatamente.
+      // Se una delle due query fallisce, manteniamo comunque i veicoli.
+      const { data: clients, error: clientsError } = await supabase
+        .from("clients")
+        .select("*");
+
+      if (clientsError) {
+        console.error("Errore Supabase clients:", clientsError);
+      }
 
       const clientsById = new Map(
         (clients ?? []).map((client: any) => [String(client.id), client])
@@ -718,21 +726,27 @@ export default function Veicolo() {
         .from("vehicle_clients")
         .select("vehicle_id, client_id, ruolo");
 
+      if (relationsError) {
+        console.error("Errore Supabase vehicle_clients:", relationsError);
+      }
+
       const relationsByVehicle = new Map<string, any[]>();
-      if (!relationsError) {
-        for (const relation of relations ?? []) {
-          const key = String(relation.vehicle_id);
-          const list = relationsByVehicle.get(key) ?? [];
-          list.push(relation);
-          relationsByVehicle.set(key, list);
-        }
+
+      for (const relation of relations ?? []) {
+        const key = String(relation.vehicle_id);
+        const list = relationsByVehicle.get(key) ?? [];
+        list.push(relation);
+        relationsByVehicle.set(key, list);
       }
 
       const mapped: ProfiloVeicolo[] = (vehicles ?? []).map((vehicle: any) => {
-        const relationsForVehicle = relationsByVehicle.get(String(vehicle.id)) ?? [];
+        const relationsForVehicle =
+          relationsByVehicle.get(String(vehicle.id)) ?? [];
+
         const primaryRelation =
-          relationsForVehicle.find((item) => item.ruolo === "PRINCIPALE") ??
-          relationsForVehicle[0];
+          relationsForVehicle.find(
+            (item) => item.ruolo === "PRINCIPALE"
+          ) ?? relationsForVehicle[0];
 
         const primaryClientId =
           primaryRelation?.client_id ?? vehicle.client_id ?? null;
@@ -745,10 +759,17 @@ export default function Veicolo() {
 
         return {
           id: String(vehicle.id),
-          cliente1: normalizzaCliente(clientsById.get(String(primaryClientId))),
+
+          cliente1: normalizzaCliente(
+            clientsById.get(String(primaryClientId))
+          ),
+
           cliente2: secondRelation
-            ? normalizzaCliente(clientsById.get(String(secondRelation.client_id)))
+            ? normalizzaCliente(
+                clientsById.get(String(secondRelation.client_id))
+              )
             : null,
+
           veicolo: {
             veicolo: String(vehicle.veicolo ?? ""),
             motore: String(vehicle.motore ?? ""),
@@ -759,10 +780,16 @@ export default function Veicolo() {
         };
       });
 
+      console.log(
+        "GOLDENCAR Supabase: veicoli caricati:",
+        mapped.length
+      );
+
       setProfiliArchivio(mapped);
       return mapped;
     } catch (error) {
       console.error("Errore caricamento veicoli da Supabase:", error);
+      setProfiliArchivio([]);
       return [];
     }
   };
