@@ -54,6 +54,7 @@ type MediaAttachment = {
   type: string;
   size: number;
   createdAt: string;
+  r2Key?: string;
 };
 
 const MEDIA_DB_NAME = "goldencar_media";
@@ -1040,21 +1041,91 @@ export default function SchedaLavoroPage() {
 
 
 
+  const getVehicleIdByPlate = (plate: string) => {
+    try {
+      const raw = localStorage.getItem("goldencar_vehicles");
+      const vehicles = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(vehicles)) return "";
+      const normalized = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+      const found = vehicles.find(
+        (item: any) =>
+          String(item?.veicolo?.targa || "")
+            .replace(/[^A-Z0-9]/gi, "")
+            .toUpperCase() === normalized
+      );
+      return typeof found?.id === "string" ? found.id : "";
+    } catch {
+      return "";
+    }
+  };
+
+  const uploadFileToR2 = async (key: string, file: Blob, contentType: string) => {
+    const response = await fetch("/api/r2/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key, contentType }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data?.ok || !data?.uploadUrl) {
+      throw new Error(data?.error || "Impossibile preparare l'upload R2.");
+    }
+    const upload = await fetch(data.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+    });
+    if (!upload.ok) throw new Error("Upload del file su R2 non riuscito.");
+  };
+
+  const getR2DownloadUrl = async (key: string) => {
+    const response = await fetch("/api/r2/file?key=" + encodeURIComponent(key));
+    const data = await response.json();
+    if (!response.ok || !data?.ok || !data?.downloadUrl) {
+      throw new Error(data?.error || "Impossibile preparare il download R2.");
+    }
+    return data.downloadUrl as string;
+  };
+
   const handleMediaFiles = async (files: FileList | null) => {
     if (!files || !files.length || !draft) return;
-    const added: MediaAttachment[] = [];
-    const nextUrls: Record<string, string> = {};
-    for (const file of Array.from(files)) {
-      const id = `${draft.jobNumber}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      const meta: MediaAttachment = { id, name: file.name, type: file.type || "application/octet-stream", size: file.size, createdAt: new Date().toISOString() };
-      await saveMediaBlob(id, file);
-      added.push(meta);
-      nextUrls[id] = URL.createObjectURL(file);
+    const vehicleId = getVehicleIdByPlate(draft.targa);
+    if (!vehicleId) {
+      alert("Non è stato trovato l'ID del veicolo. Il file non può essere archiviato.");
+      return;
     }
-    setDraft((previous) => previous ? { ...previous, media: [...previous.media, ...added] } : previous);
-    setMediaUrls((previous) => ({ ...previous, ...nextUrls }));
-    setSaved(false);
-    if (mediaInputRef.current) mediaInputRef.current.value = "";
+    const added: MediaAttachment[] = [];
+    const nextUrls: Record<string, string> = [];
+    try {
+      for (const file of Array.from(files)) {
+        const id =
+          draft.jobNumber + "-" + Date.now() + "-" +
+          Math.random().toString(36).slice(2, 9);
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const r2Key = "veicoli/" + vehicleId + "/media-" + id + "-" + safeName;
+        const meta: MediaAttachment = {
+          id,
+          name: file.name,
+          type: file.type || "application/octet-stream",
+          size: file.size,
+          createdAt: new Date().toISOString(),
+          r2Key,
+        };
+        await uploadFileToR2(r2Key, file, meta.type);
+        await saveMediaBlob(id, file);
+        added.push(meta);
+        nextUrls[id] = URL.createObjectURL(file);
+      }
+      setDraft((previous) =>
+        previous ? { ...previous, media: [...previous.media, ...added] } : previous
+      );
+      setMediaUrls((previous) => ({ ...previous, ...nextUrls }));
+      setSaved(false);
+    } catch (error) {
+      console.error("Errore upload media R2:", error);
+      alert(error instanceof Error ? error.message : "Non è stato possibile archiviare il file.");
+    } finally {
+      if (mediaInputRef.current) mediaInputRef.current.value = "";
+    }
   };
 
   const salvaOrdineProdotti = (lavoro: JobDraft) => {
