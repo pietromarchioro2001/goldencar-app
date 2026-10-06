@@ -399,6 +399,9 @@ export default function Veicolo() {
   const [profiloVeicolo, setProfiloVeicolo] =
     useState<ProfiloVeicolo | null>(null);
 
+  const [profiliArchivio, setProfiliArchivio] =
+    useState<ProfiloVeicolo[]>([]);
+
   const clienteVuoto: ClienteData = {
     nome: "",
     cognome: "",
