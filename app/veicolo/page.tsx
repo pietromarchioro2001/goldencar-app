@@ -2403,7 +2403,7 @@ export default function Veicolo() {
 
 
 
-                            nome={cliente2Profilo.nome}
+                            nome={cliente2Profilo?.nome ?? ""}
 
 
 
