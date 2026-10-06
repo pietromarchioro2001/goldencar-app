@@ -32,6 +32,19 @@ type ClienteData = {
 
 type ClienteSelezionato = 1 | 2;
 
+type ProfiloVeicolo = {
+  id: string;
+  cliente1: ClienteData;
+  cliente2: ClienteData | null;
+  veicolo: {
+    veicolo: string;
+    motore: string;
+    targa: string;
+    immatricolazione: string;
+    revisione: string;
+  };
+};
+
 
 
 type MediaAttachment = {
@@ -382,41 +395,30 @@ export default function Veicolo() {
 
 
 
-  // Cliente visualizzato nel profilo attuale.
+  const [profiloVeicolo, setProfiloVeicolo] =
+    useState<ProfiloVeicolo | null>(null);
 
-
-
-  // Quando collegheremo Supabase, questi dati arriveranno dal database.
-
-
-
-  const cliente1Profilo: ClienteData = {
-
-
-
-    nome: "Mario Rossi", cognome: "", luogoNascita: "", provinciaNascita: "",
-
-
-
-    indirizzo: "Via Roma 12", telefono: "3471234567", nascita: "12/03/1985", cf: "RSSMRA80C14L378Z",
-
-
-
+  const clienteVuoto: ClienteData = {
+    nome: "",
+    cognome: "",
+    luogoNascita: "",
+    provinciaNascita: "",
+    indirizzo: "",
+    telefono: "",
+    nascita: "",
+    cf: "",
   };
 
+  const cliente1Profilo = profiloVeicolo?.cliente1 ?? clienteVuoto;
+  const cliente2Profilo = profiloVeicolo?.cliente2 ?? null;
 
-
-  const cliente2Profilo: ClienteData = {
-
-
-
-    nome: "", cognome: "", luogoNascita: "", provinciaNascita: "", indirizzo: "", telefono: "", nascita: "", cf: "",
-
-
-
+  const veicoloProfilo = profiloVeicolo?.veicolo ?? {
+    veicolo: "",
+    motore: "",
+    targa: "",
+    immatricolazione: "",
+    revisione: "",
   };
-
-
 
   const [clienteSelezionato, setClienteSelezionato] = useState<ClienteSelezionato>(1);
 
@@ -426,11 +428,14 @@ export default function Veicolo() {
 
 
 
-  const clienteVisualizzato = clienteSelezionato === 1 ? cliente1Profilo : cliente2Profilo;
+  const clienteVisualizzato =
+    clienteSelezionato === 1
+      ? cliente1Profilo
+      : cliente2Profilo ?? cliente1Profilo;
 
 
 
-  const hasCliente2Profilo = Boolean(cliente2Profilo.nome.trim());
+  const hasCliente2Profilo = Boolean(cliente2Profilo?.nome?.trim());
 
 
 
@@ -474,7 +479,7 @@ export default function Veicolo() {
 
 
 
-    const targaVeicolo = "AB123CD".trim().toUpperCase();
+    const targaVeicolo = veicoloProfilo.targa.trim().toUpperCase();
 
 
 
@@ -594,7 +599,7 @@ export default function Veicolo() {
 
 
 
-  }, []);
+  }, [veicoloProfilo.targa]);
 
 
 
@@ -606,7 +611,7 @@ export default function Veicolo() {
 
 
 
-    const targaVeicolo = "AB123CD".trim().toUpperCase();
+    const targaVeicolo = veicoloProfilo.targa.trim().toUpperCase();
 
 
 
@@ -714,133 +719,113 @@ export default function Veicolo() {
 
 
 
-  }, []);
+  }, [veicoloProfilo.targa]);
 
 
+
+  const valorNormalizzato = (value: string) =>
+    value.replace(/[^a-z0-9]/gi, "").toLowerCase();
+
+  const trovaProfilo = (query: string): ProfiloVeicolo | null => {
+    if (typeof window === "undefined") return null;
+
+    const valore = query.trim().toLowerCase();
+    if (!valore) return null;
+
+    try {
+      const raw = localStorage.getItem("goldencar_vehicles");
+      const vehicles = raw ? JSON.parse(raw) : [];
+
+      if (!Array.isArray(vehicles)) return null;
+
+      const queryNormalizzata = valorNormalizzato(valore);
+
+      const trovato = vehicles.find((item: any) => {
+        const cliente1 = item?.cliente1 ?? {};
+        const cliente2 = item?.cliente2 ?? null;
+        const veicolo = item?.veicolo ?? {};
+
+        const valoriRicerca = [
+          veicolo.targa,
+          veicolo.veicolo,
+          veicolo.motore,
+          cliente1.nome,
+          cliente1.cognome,
+          cliente1.telefono,
+          cliente1.cf,
+          cliente2?.nome,
+          cliente2?.cognome,
+          cliente2?.telefono,
+          cliente2?.cf,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value).toLowerCase());
+
+        return valoriRicerca.some((value) =>
+          value.includes(valore) ||
+          valorNormalizzato(value).includes(queryNormalizzata)
+        );
+      });
+
+      return trovato ?? null;
+    } catch (error) {
+      console.error("Errore lettura profili veicolo:", error);
+      return null;
+    }
+  };
 
   useEffect(() => {
-
-
-
     const salvata = sessionStorage.getItem("goldencar_veicolo_ricerca");
 
+    if (!salvata) return;
 
+    const trovato = trovaProfilo(salvata);
 
-    if (salvata) {
-
-
-
+    if (trovato) {
       setRicerca(salvata);
-
-
-
+      setProfiloVeicolo(trovato);
       setVeicoloSelezionato(true);
-
-
-
+    } else {
+      sessionStorage.removeItem("goldencar_veicolo_ricerca");
     }
-
-
-
   }, []);
-
-
 
   const ricercaNormalizzata = ricerca.trim().toLowerCase();
 
-
-
-  const profiloCorrisponde = [
-
-
-
-    "AB123CD", "Fiat Panda", cliente1Profilo.nome, cliente1Profilo.telefono, cliente2Profilo.nome, cliente2Profilo.telefono,
-
-
-
-  ].some((valore) => valore.toLowerCase().includes(ricercaNormalizzata));
-
-
+  const profiloCorrisponde = Boolean(
+    profiloVeicolo &&
+    ricercaNormalizzata &&
+    trovaProfilo(ricercaNormalizzata)
+  );
 
   const gestisciRicerca = (value: string) => {
-
-
-
     setRicerca(value);
 
-
-
-    const query = value.trim().toLowerCase();
-
-
+    const query = value.trim();
 
     if (!query) {
-
-
-
       sessionStorage.removeItem("goldencar_veicolo_ricerca");
-
-
-
       setVeicoloSelezionato(false);
-
-
-
+      setProfiloVeicolo(null);
       return;
-
-
-
     }
 
+    const trovato = trovaProfilo(query);
 
-
-    const corrisponde = [
-
-
-
-      "AB123CD", "Fiat Panda", cliente1Profilo.nome, cliente1Profilo.telefono, cliente2Profilo.nome, cliente2Profilo.telefono,
-
-
-
-    ].some((valore) => valore.toLowerCase().includes(query));
-
-
-
-    if (corrisponde) {
-
-
-
+    if (trovato) {
+      setProfiloVeicolo(trovato);
       sessionStorage.setItem("goldencar_veicolo_ricerca", value);
-
-
-
       setVeicoloSelezionato(true);
-
-
-
     } else {
-
-
-
+      setProfiloVeicolo(null);
       setVeicoloSelezionato(false);
-
-
-
     }
-
-
-
   };
 
-
-
   const mostraProfilo =
-
-
-
-    veicoloSelezionato && ricercaNormalizzata.length > 0 && profiloCorrisponde;
-
-
+    veicoloSelezionato &&
+    ricercaNormalizzata.length > 0 &&
+    profiloCorrisponde;
 
   const azioni = [
 
@@ -984,7 +969,7 @@ export default function Veicolo() {
 
 
 
-      codiceFiscale: clienteVisualizzato.cf, veicolo: "Fiat Panda", targa: "AB123CD",
+      codiceFiscale: clienteVisualizzato.cf, veicolo: veicoloProfilo.veicolo, targa: veicoloProfilo.targa,
 
 
 
@@ -1012,9 +997,9 @@ export default function Veicolo() {
 
         telefono: clienteVisualizzato.telefono,
 
-        veicolo: "Fiat Panda",
+        veicolo: veicoloProfilo.veicolo,
 
-        targa: "AB123CD",
+        targa: veicoloProfilo.targa,
 
       })
 
