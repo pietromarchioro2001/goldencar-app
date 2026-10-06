@@ -8,18 +8,6 @@ type R2Config = {
   endpoint: string;
 };
 
-function checkAscii(name: string, value: string) {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-
-    if (code > 255) {
-      throw new Error(
-        `${name} contiene un carattere non valido all'indice ${i} (code ${code}).`
-      );
-    }
-  }
-}
-
 function getConfig(): R2Config {
   const accountId = process.env.R2_ACCOUNT_ID?.trim();
   const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
@@ -33,21 +21,7 @@ function getConfig(): R2Config {
       : "");
 
   if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !endpoint) {
-    throw new Error(
-      "Configurazione R2 incompleta nelle variabili d'ambiente."
-    );
-  }
-
-  // Controlliamo i valori senza MAI stamparli.
-  checkAscii("R2_ACCOUNT_ID", accountId);
-  checkAscii("R2_ACCESS_KEY_ID", accessKeyId);
-  checkAscii("R2_BUCKET", bucket);
-  checkAscii("R2_ENDPOINT", endpoint);
-
-  try {
-    new URL(endpoint);
-  } catch {
-    throw new Error("R2_ENDPOINT non è un URL valido.");
+    throw new Error("Configurazione R2 incompleta nelle variabili d'ambiente.");
   }
 
   return {
@@ -154,10 +128,6 @@ export async function r2Request(
   const authorization =
     `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-  // Controllo finale anche sull'header che verrà realmente inviato.
-  checkAscii("Authorization", authorization);
-  checkAscii("host", host);
 
   const headers: Record<string, string> = {
     "x-amz-content-sha256": payloadHash,
