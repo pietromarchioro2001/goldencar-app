@@ -1932,6 +1932,8 @@ export default function Veicolo() {
         </div>
       )}
 
+      {mostraProfilo ? (
+        <>
           {/* =========================
 
 
