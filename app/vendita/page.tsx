@@ -8,7 +8,7 @@ import BottomBar from "@/components/BottomBar";
 
 
 
-type Photo = { id: string; name: string; type: string };
+type Photo = { id: string; name: string; type: string; r2Key?: string };
 
 type Car = {
 
@@ -125,19 +125,102 @@ export default function VenditePage(){
 
   function update(k:string,v:any){setDraft((d:any)=>({...d,[k]:v}))}
 
-  function newCar(){setDraft(empty());setEquipmentSearch("");setEditing(false);setView("form")}
+  function newCar(){setDraft({...empty(),id:id()});setEquipmentSearch("");setEditing(false);setView("form")}
 
   function edit(c:Car){setDraft({...c});setEquipmentSearch("");setEditing(true);setView("form")}
 
-  async function photos(e:ChangeEvent<HTMLInputElement>){for(const f of Array.from(e.target.files||[])){const x=id();await put(x,f);setDraft((d:any)=>({...d,foto:[...d.foto,{id:x,name:f.name,type:f.type}]}))}e.target.value=""}
+  async function uploadPhotoToR2(key:string,file:File){
+  const presignResponse=await fetch("/api/r2/file",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({key,contentType:file.type||"image/jpeg"})
+  });
+  const presignData=await presignResponse.json().catch(()=>null);
+  if(!presignResponse.ok||!presignData?.ok){
+    throw new Error(presignData?.error||"Non riesco a preparare il caricamento della foto.");
+  }
+  const uploadResponse=await fetch(presignData.uploadUrl,{
+    method:"PUT",
+    headers:{"Content-Type":file.type||"image/jpeg"},
+    body:file
+  });
+  if(!uploadResponse.ok){
+    throw new Error(`Upload foto annunci fallito (${uploadResponse.status}).`);
+  }
+}
 
-  async function removePhoto(x:string){await del(x);setDraft((d:any)=>({...d,foto:d.foto.filter((p:any)=>p.id!==x)}))}
+async function deletePhotoFromR2(key?:string){
+  if(!key)return;
+  const response=await fetch("/api/r2/file",{
+    method:"DELETE",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({key})
+  });
+  if(!response.ok){
+    const data=await response.json().catch(()=>null);
+    throw new Error(data?.error||"Non riesco a eliminare la foto da R2.");
+  }
+}
+
+async function photos(e:ChangeEvent<HTMLInputElement>){
+  const files=Array.from(e.target.files||[]);
+  const announcementId=String(draft.id||id());
+
+  try{
+    for(const f of files){
+      const photoId=id();
+      const safeName=f.name.trim().replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/-+/g,"-").replace(/^-|-$/g,"")||"foto.jpg";
+      const key=`annunci/${announcementId}/foto-${photoId}-${safeName}`;
+
+      await put(photoId,f);
+      await uploadPhotoToR2(key,f);
+
+      setDraft((d:any)=>({
+        ...d,
+        id:announcementId,
+        foto:[...d.foto,{id:photoId,name:f.name,type:f.type,r2Key:key}]
+      }));
+    }
+  }catch(error){
+    console.error("Errore upload foto annuncio:",error);
+    alert(error instanceof Error?error.message:"Non riesco a caricare la foto dell'annuncio.");
+  }finally{
+    e.target.value="";
+  }
+}
+
+  async function removePhoto(x:string){
+  const photo=draft.foto.find((p:any)=>p.id===x);
+  try{
+    await del(x);
+    await deletePhotoFromR2(photo?.r2Key);
+    setDraft((d:any)=>({...d,foto:d.foto.filter((p:any)=>p.id!==x)}));
+  }catch(error){
+    console.error("Errore eliminazione foto annuncio:",error);
+    alert(error instanceof Error?error.message:"Non riesco a eliminare la foto.");
+  }
+}
 
   function equipment(x:string){update("dotazioni",draft.dotazioni.includes(x)?draft.dotazioni.filter((a:string)=>a!==x):[...draft.dotazioni,x])}
 
   function save(){if(!draft.marca||!draft.modello){alert("Inserisci almeno marca e modello.");return}const c:Car={...draft,id:editing?draft.id:id(),createdAt:editing?draft.createdAt:new Date().toISOString()};setCars(a=>editing?a.map(x=>x.id===c.id?c:x):[c,...a]);setSelected(c);setView("profile")}
 
-  async function confirmDelete(){if(!remove)return;for(const p of remove.foto)await del(p.id);setCars(a=>a.filter(x=>x.id!==remove.id));setRemove(null);setSelected(null);setView("list")}
+  async function confirmDelete(){
+  if(!remove)return;
+  try{
+    for(const p of remove.foto){
+      await del(p.id);
+      await deletePhotoFromR2(p.r2Key);
+    }
+    setCars(a=>a.filter(x=>x.id!==remove.id));
+    setRemove(null);
+    setSelected(null);
+    setView("list");
+  }catch(error){
+    console.error("Errore eliminazione annuncio:",error);
+    alert(error instanceof Error?error.message:"Non riesco a eliminare tutte le foto dell'annuncio.");
+  }
+}
 
 
 
