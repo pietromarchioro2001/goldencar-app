@@ -23,6 +23,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import BottomBar from "@/components/BottomBar";
+import { supabase } from "@/lib/supabase";
 import { pdf } from "@react-pdf/renderer";
 import SchedaLavoroPDF, {
   type SchedaLavoroPDFData,
@@ -102,6 +103,8 @@ async function loadMediaBlobs(ids: string[]) {
 }
 
 type JobDraft = VeicoloScheda & {
+  jobId?: string;
+  vehicleId?: string;
 
   jobNumber: number;
 
@@ -373,13 +376,52 @@ function createOrReuseNewJobNumber() {
 
 
 
-function emptyDraft(vehicle: VeicoloScheda): JobDraft {
+function jobIdToNumber(id: string): number {
+  const match = String(id || "").match(/^(\d{2})-(\d{3})$/);
+  return match ? Number(match[1]) * 1000 + Number(match[2]) : 0;
+}
+
+function normalizeJobStatus(value: unknown): JobDraft["status"] {
+  const stato = String(value || "").toUpperCase();
+  return stato === "CONCLUSO" || stato === "CHIUSO" ? "CONCLUSO" : "IN_LAVORAZIONE";
+}
+
+function parseJobDetails(value: unknown): Record<string, any> {
+  if (!value) return {};
+  if (typeof value === "object") return value as Record<string, any>;
+  try { const parsed = JSON.parse(String(value)); return parsed && typeof parsed === "object" ? parsed : {}; } catch { return {}; }
+}
+
+function rowToJobDraft(row: any): JobDraft {
+  const details = parseJobDetails(row?.dettagli);
+  let products: JobDraft["products"] = Array.isArray(details.products) ? details.products : [];
+  if (!products.length && row?.prodotti_utilizzati) {
+    try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); products = Array.isArray(parsed) ? parsed : []; } catch {}
+  }
+  return {
+    jobId: String(row.id), vehicleId: String(row.vehicle_id || ""), jobNumber: jobIdToNumber(String(row.id)),
+    createdAt: row.created_at || new Date().toISOString(),
+    nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "",
+    veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri),
+    types: Array.isArray(details.types) ? details.types : (row.tipo ? String(row.tipo).split(" · ").filter(Boolean) : []),
+    problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [""], products,
+    works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [""], labor: row.manodopera == null ? "" : String(row.manodopera), notes: row.note == null ? "" : String(row.note),
+    invoiceNumber: row.fattura == null ? "" : String(row.fattura), paymentAmount: row.payment_amount == null ? "" : String(row.payment_amount),
+    paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : "DA_PAGARE", media: Array.isArray(details.media) ? details.media : [],
+    status: normalizeJobStatus(row.stato), pdfUrl: details.pdfUrl || "",
+    tagliando: details.tagliando || { oil:false, oilType:"", oilQuantity:"", oilFilter:false, airFilter:false, cabinFilter:false, fuelFilter:false, sparkPlugs:false, other:"" },
+    freni: details.freni || { frontPads:false, rearPads:false, frontDiscs:false, rearDiscs:false, brakeFluid:false, calipers:false, other:"" },
+    pneumatici: details.pneumatici || { mounting:false, removal:false, replacement:false, rotation:false, balancing:false, repair:false, season:"", quantity:"4", storage:false, description:"" },
+  };
+}
+
+function emptyDraft(vehicle: VeicoloScheda & { vehicleId?: string }, jobNumber = 0): JobDraft {
 
   return {
 
     ...vehicle,
 
-    jobNumber: createOrReuseNewJobNumber(),
+    jobNumber,
 
     createdAt: new Date().toISOString(),
 
@@ -505,103 +547,54 @@ export default function SchedaLavoroPage() {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
-    try {
+    const init = async () => {
+      try {
+        const existingJobId = sessionStorage.getItem("goldencar_apri_scheda");
 
-      const existingJobNumber = sessionStorage.getItem(
-
-        "goldencar_apri_scheda"
-
-      );
-
-
-
-      if (existingJobNumber) {
-
-        const rawJob = localStorage.getItem(
-
-          `goldencar_job_${existingJobNumber}`
-
-        );
-
-
-
-        if (rawJob) {
-
-          const parsed = JSON.parse(rawJob) as Partial<JobDraft>;
-          const normalized = {
-            ...parsed,
-            works: Array.isArray(parsed.works)
-              ? parsed.works
-              : parsed.works
-                ? [parsed.works]
-                : [""],
-            media: Array.isArray(parsed.media) ? parsed.media : [],
-          } as JobDraft;
-
-          setDraft(normalized);
-          setSaved(true);
-
-          loadMediaBlobs(normalized.media.map((item) => item.id))
-            .then((urls) => {
-              const nextUrls: Record<string, string> = {};
-              urls.forEach((url, id) => { nextUrls[id] = url; });
-              setMediaUrls(nextUrls);
-            })
-            .catch((error) => console.error("Errore caricamento media:", error));
-
-          sessionStorage.removeItem("goldencar_apri_scheda");
-          sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
-
-          return;
-
+        if (existingJobId) {
+          const { data, error } = await supabase.from("jobs").select("*").eq("id", existingJobId).maybeSingle();
+          if (!error && data) {
+            const normalized = rowToJobDraft(data);
+            setDraft(normalized); setSaved(true);
+            loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
+              const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
+            }).catch((loadError) => console.error("Errore caricamento media:", loadError));
+            sessionStorage.removeItem("goldencar_apri_scheda"); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+            return;
+          }
+          const rawJob = localStorage.getItem(`goldencar_job_${existingJobId}`);
+          if (rawJob) {
+            const parsed = JSON.parse(rawJob) as Partial<JobDraft>;
+            const normalized = { ...parsed, works: Array.isArray(parsed.works) ? parsed.works : parsed.works ? [parsed.works] : [""], media: Array.isArray(parsed.media) ? parsed.media : [] } as JobDraft;
+            setDraft(normalized); setSaved(true);
+            loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
+              const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
+            }).catch((loadError) => console.error("Errore caricamento media:", loadError));
+            sessionStorage.removeItem("goldencar_apri_scheda"); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+            return;
+          }
         }
 
+        let vehicle: VeicoloScheda & { vehicleId?: string } = { ...defaultVehicle };
+        const rawVehicle = sessionStorage.getItem("goldencar_nuova_scheda");
+        if (rawVehicle) { vehicle = { ...vehicle, ...JSON.parse(rawVehicle) }; sessionStorage.removeItem("goldencar_nuova_scheda"); }
+        if (!vehicle.vehicleId) throw new Error("ID del veicolo non disponibile. Torna al profilo del veicolo e riprova.");
 
+        const { data: created, error: createError } = await supabase.from("jobs").insert({
+          vehicle_id: vehicle.vehicleId, titolo: "Intervento", tipo: null, stato: "APERTO",
+          dettagli: { nomeCliente: vehicle.nomeCliente, indirizzo: vehicle.indirizzo, telefono: vehicle.telefono, codiceFiscale: vehicle.codiceFiscale, veicolo: vehicle.veicolo, targa: vehicle.targa, types: [], media: [] },
+        }).select("*").single();
 
-        sessionStorage.removeItem("goldencar_apri_scheda");
-        sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
-
+        if (createError || !created) throw createError || new Error("Impossibile creare la scheda su Supabase.");
+        setDraft(rowToJobDraft(created)); setSaved(true); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+      } catch (error) {
+        console.error("Errore apertura scheda:", error);
+        alert(error instanceof Error ? error.message : "Impossibile aprire la scheda di lavoro.");
+        router.back();
       }
-
-
-
-      let vehicle = defaultVehicle;
-
-
-
-      const rawVehicle = sessionStorage.getItem("goldencar_nuova_scheda");
-
-
-
-      if (rawVehicle) {
-
-        vehicle = {
-
-          ...defaultVehicle,
-
-          ...JSON.parse(rawVehicle),
-
-        };
-
-
-
-        sessionStorage.removeItem("goldencar_nuova_scheda");
-
-      }
-
-
-
-      setDraft(emptyDraft(vehicle));
-
-    } catch (error) {
-
-      console.error("Errore apertura scheda:", error);
-
-      setDraft(emptyDraft(defaultVehicle));
-
-    }
-
-  }, []);
+    };
+    void init();
+  }, [router]);
 
 
 
@@ -1273,30 +1266,31 @@ export default function SchedaLavoroPage() {
       if (!confirmed) return;
     }
   
-    const next = {
-      ...draft,
-      status: conclude
-        ? "CONCLUSO"
-        : "IN_LAVORAZIONE",
-    } as JobDraft;
-  
-    localStorage.setItem(
-      `goldencar_job_${draft.jobNumber}`,
-      JSON.stringify(next)
-    );
-  
-    salvaOrdineProdotti(next);
-  
-    sessionStorage.removeItem(
-      "goldencar_nuova_scheda_job_number"
-    );
-  
-    setDraft(next);
-    setSaved(true);
-  
-    if (conclude) {
-      await generateAndOpenPdf(next);
-    }
+    const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
+    if (!draft.jobId || !draft.vehicleId) { alert("La scheda non è collegata correttamente al veicolo su Supabase."); return; }
+
+    const details = {
+      nomeCliente: next.nomeCliente, indirizzo: next.indirizzo, telefono: next.telefono, codiceFiscale: next.codiceFiscale,
+      veicolo: next.veicolo, targa: next.targa, types: next.types, products: next.products, media: next.media,
+      tagliando: next.tagliando, freni: next.freni, pneumatici: next.pneumatici, pdfUrl: next.pdfUrl || "",
+    };
+    const parsedPayment = next.paymentAmount.trim() ? Number(next.paymentAmount.replace(",", ".")) : null;
+
+    const { error } = await supabase.from("jobs").update({
+      titolo: next.types?.[0] || "Intervento", tipo: next.types?.join(" · ") || null,
+      problemi: next.problems.filter(Boolean).join("\n"), lavori: next.works.filter(Boolean).join("\n"),
+      prodotti_utilizzati: JSON.stringify(next.products), chilometri: next.kilometers.trim() ? next.kilometers.trim() : null,
+      manodopera: next.labor.trim() || null, note: next.notes.trim() || null, fattura: next.invoiceNumber.trim() || null,
+      stato: conclude ? "CONCLUSO" : "APERTO", closed_at: conclude ? new Date().toISOString() : null,
+      payment_amount: Number.isFinite(parsedPayment as number) ? parsedPayment : null,
+      payment_status: next.paymentAmount.trim() ? next.paymentStatus : null, dettagli: details,
+    }).eq("id", draft.jobId);
+
+    if (error) { console.error("Errore salvataggio scheda Supabase:", error); alert(`Impossibile salvare la scheda: ${error.message}`); return; }
+
+    salvaOrdineProdotti(next); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+    setDraft(next); setSaved(true);
+    if (conclude) await generateAndOpenPdf(next);
   };
 
 
@@ -1319,7 +1313,12 @@ export default function SchedaLavoroPage() {
     if (!draft) return;
 
     try {
-      localStorage.removeItem(`goldencar_job_${draft.jobNumber}`);
+      if (draft.jobId) {
+        const { error } = await supabase.from("jobs").delete().eq("id", draft.jobId);
+        if (error) throw new Error(`Errore eliminazione scheda Supabase: ${error.message}`);
+      } else {
+        localStorage.removeItem(`goldencar_job_${draft.jobNumber}`);
+      }
       await deleteMediaBlobs(draft.media.map((item) => item.id));
 
       const rawManual = localStorage.getItem("goldencar_pagamenti_manuali");
