@@ -133,6 +133,7 @@ type LavoroSalvato = {
 
 
   pdfUrl?: string;
+  pdfR2Key?: string;
 
 
 
@@ -517,6 +518,7 @@ export default function Veicolo() {
           ? "CONCLUSO" : "IN_LAVORAZIONE",
         invoiceNumber: row.fattura || "",
         pdfUrl: details.pdfUrl || "",
+        pdfR2Key: details.pdfR2Key || "",
         media: Array.isArray(details.media) ? details.media : [],
       };
     });
@@ -3353,15 +3355,25 @@ export default function Veicolo() {
 
                           e.stopPropagation();
 
-                          if (intervento.pdfUrl) {
-
+                          if (intervento.pdfR2Key) {
+                            void (async () => {
+                              try {
+                                const response = await fetch("/api/r2/file?key=" + encodeURIComponent(intervento.pdfR2Key));
+                                const data = await response.json();
+                                if (!response.ok || !data?.ok || !data?.downloadUrl) throw new Error(data?.error || "PDF non disponibile.");
+                                window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+                              } catch (error) {
+                                console.error("Errore apertura PDF R2:", error);
+                                alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF.");
+                              }
+                            })();
+                          } else if (intervento.pdfUrl) {
                             window.open(intervento.pdfUrl, "_blank", "noopener,noreferrer");
-
                           }
 
                         }}
 
-                        disabled={!intervento.pdfUrl}
+                        disabled={!intervento.pdfR2Key && !intervento.pdfUrl}
 
                         aria-label="Apri PDF del lavoro"
 
@@ -3385,11 +3397,11 @@ export default function Veicolo() {
 
                           flexShrink: 0,
 
-                          cursor: intervento.pdfUrl ? "pointer" : "default",
+                          cursor: (intervento.pdfR2Key || intervento.pdfUrl) ? "pointer" : "default",
 
                           padding: 0,
 
-                          opacity: intervento.pdfUrl ? 1 : 0.7,
+                          opacity: (intervento.pdfR2Key || intervento.pdfUrl) ? 1 : 0.7,
 
                         }}
 
