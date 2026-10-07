@@ -1110,60 +1110,6 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const salvaOrdineProdotti = async (lavoro: JobDraft) => {
-    const daOrdinare = lavoro.products.filter((product) => product.orderRequested && product.name.trim());
-    if (!daOrdinare.length || !lavoro.jobId || !lavoro.vehicleId) return;
-
-    const nuoviProdotti = daOrdinare.map((product) => ({
-      name: product.name.trim(),
-      quantity: product.quantity || "1",
-      details: product.details.trim(),
-    }));
-
-    try {
-      const { data: existing, error: findError } = await supabase
-        .from("orders")
-        .select("id, prodotti")
-        .eq("job_id", lavoro.jobId)
-        .maybeSingle();
-
-      if (findError) throw findError;
-
-      const precedenti = existing && Array.isArray(existing.prodotti) ? existing.prodotti : [];
-      const merged = [...precedenti];
-
-      for (const product of nuoviProdotti) {
-        const index = merged.findIndex(
-          (item: any) => String(item?.name || "").toLowerCase() === product.name.toLowerCase()
-        );
-        if (index >= 0) merged[index] = product;
-        else merged.push(product);
-      }
-
-      const payload = {
-        job_id: lavoro.jobId,
-        vehicle_id: lavoro.vehicleId,
-        cliente: lavoro.nomeCliente,
-        telefono: lavoro.telefono,
-        targa: lavoro.targa,
-        veicolo: lavoro.veicolo,
-        prodotti: merged,
-      };
-
-      if (existing?.id) {
-        const { error } = await supabase.from("orders").update(payload).eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const newId = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-        const { error } = await supabase.from("orders").insert({ id: newId, ...payload });
-        if (error) throw error;
-      }
-    } catch (error) {
-      console.error("Errore salvataggio ordine Supabase:", error);
-      alert("Ordine non salvato.");
-    }
-  };
-
   const generateAndOpenPdf = async (lavoro: JobDraft) => {
     try {
       if (!lavoro.jobId || !lavoro.vehicleId) {
@@ -1232,6 +1178,40 @@ export default function SchedaLavoroPage() {
     }
   };
 
+  const apriOrdineConProdotti = async () => {
+    if (!draft) return;
+
+    const daOrdinare = draft.products
+      .filter((product) => product.orderRequested && product.name.trim())
+      .map((product) => ({
+        name: product.name.trim(),
+        quantity: product.quantity || "1",
+        details: product.details.trim(),
+      }));
+
+    if (!daOrdinare.length) {
+      alert("Seleziona almeno un prodotto da ordinare.");
+      return;
+    }
+
+    await saveDraft(false);
+
+    sessionStorage.setItem(
+      "goldencar_nuovo_ordine",
+      JSON.stringify({
+        vehicleId: draft.vehicleId,
+        jobId: draft.jobId,
+        nomeCliente: draft.nomeCliente,
+        telefono: draft.telefono,
+        veicolo: draft.veicolo,
+        targa: draft.targa,
+        prodotti: daOrdinare,
+      })
+    );
+
+    router.push("/ordini");
+  };
+
   const saveDraft = async (conclude = false) => {
     if (!draft) return;
   
@@ -1279,7 +1259,6 @@ export default function SchedaLavoroPage() {
 
     if (error) { console.error("Errore salvataggio scheda Supabase:", error); alert(`Impossibile salvare la scheda: ${error.message}`); return; }
 
-    await salvaOrdineProdotti(next);
     sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
     setDraft(next); setSaved(true);
     if (conclude) await generateAndOpenPdf(next);
@@ -2026,7 +2005,7 @@ export default function SchedaLavoroPage() {
                   addProduct={addProduct}
 
                   markUnsaved={() => setSaved(false)}
-
+                  onOrder={apriOrdineConProdotti}
                 />
 
               </section>
@@ -2080,7 +2059,7 @@ export default function SchedaLavoroPage() {
                   addProduct={addProduct}
 
                   markUnsaved={() => setSaved(false)}
-
+                  onOrder={apriOrdineConProdotti}
                 />
 
               </section>
@@ -2498,8 +2477,8 @@ export default function SchedaLavoroPage() {
                     addProduct={addProduct}
 
                     markUnsaved={() => setSaved(false)}
-
-                  />
+                  onOrder={apriOrdineConProdotti}
+                />
 
                 </section>
 
@@ -3497,6 +3476,7 @@ function ProductChecklist({
   addProduct,
 
   markUnsaved,
+  onOrder,
 
 }: {
 
@@ -3523,6 +3503,7 @@ function ProductChecklist({
   addProduct: () => void;
 
   markUnsaved: () => void;
+  onOrder: () => void;
 
 }) {
 
@@ -3899,6 +3880,29 @@ function ProductChecklist({
         + ALTRO PRODOTTO
 
       </button>
+
+      {draft.products.some(
+        (product) => product.orderRequested && product.name.trim()
+      ) && (
+        <button
+          type="button"
+          onClick={onOrder}
+          style={{
+            width: "100%",
+            height: 46,
+            marginTop: 8,
+            border: 0,
+            borderRadius: 14,
+            background: "#D4AF37",
+            color: "#111827",
+            fontSize: 12,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          ORDINA SELEZIONATI
+        </button>
+      )}
 
 
 
