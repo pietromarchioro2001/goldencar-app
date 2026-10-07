@@ -101,9 +101,7 @@ export default function Agenda() {
             fontWeight: 700,
             fontSize: 13,
           }}
-        >
-          LOGO
-        </div>
+        ><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
 
         <h1
           style={{
