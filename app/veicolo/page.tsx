@@ -467,145 +467,73 @@ export default function Veicolo() {
 
 
 
-  // I lavori della scheda vengono salvati temporaneamente in localStorage.
-
-
-
-  // Per ora li leggiamo qui; in seguito questa parte verrà sostituita con Supabase.
-
-
-
-  const aggiornaLavori = () => {
-
-
-
+  const aggiornaLavori = async () => {
     if (typeof window === "undefined") return;
+    if (!profiloVeicolo?.id) { setLavori([]); return; }
 
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("vehicle_id", profiloVeicolo.id)
+      .order("created_at", { ascending: false });
 
-
-    const targaVeicolo = veicoloProfilo.targa.trim().toUpperCase();
-
-
-
-    const risultati: LavoroSalvato[] = [];
-
-
-
-    for (let i = 0; i < localStorage.length; i++) {
-
-
-
-      const key = localStorage.key(i);
-
-
-
-      if (!key?.startsWith("goldencar_job_")) continue;
-
-
-
-      try {
-
-
-
-        const raw = localStorage.getItem(key);
-
-
-
-        if (!raw) continue;
-
-
-
-        const lavoro = JSON.parse(raw) as LavoroSalvato;
-
-
-
-        if ((lavoro.targa || "").trim().toUpperCase() === targaVeicolo) risultati.push(lavoro);
-
-
-
-      } catch {
-
-
-
-        // Ignora eventuali valori non validi nel localStorage.
-
-
-
-      }
-
-
-
+    if (error) {
+      console.error("Errore caricamento lavori Supabase:", error);
+      setLavori([]);
+      return;
     }
 
+    const risultati: LavoroSalvato[] = (data || []).map((row: any) => {
+      let details: any = {};
+      try {
+        details = row.dettagli && typeof row.dettagli === "object"
+          ? row.dettagli
+          : JSON.parse(String(row.dettagli || "{}"));
+      } catch {}
 
+      const idMatch = String(row.id || "").match(/^(\d{2})-(\d{3})$/);
+      const jobNumber = idMatch
+        ? Number(idMatch[1]) * 1000 + Number(idMatch[2])
+        : 0;
 
-    risultati.sort((a, b) => {
-
-
-
-      const dateDiff = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-
-
-
-      if (dateDiff !== 0) return dateDiff;
-
-
-
-      return Number(b.jobNumber || 0) - Number(a.jobNumber || 0);
-
-
-
+      return {
+        jobId: String(row.id),
+        vehicleId: String(row.vehicle_id || ""),
+        jobNumber,
+        createdAt: row.created_at || new Date().toISOString(),
+        nomeCliente: details.nomeCliente || "",
+        indirizzo: details.indirizzo || "",
+        telefono: details.telefono || "",
+        codiceFiscale: details.codiceFiscale || "",
+        veicolo: details.veicolo || veicoloProfilo.veicolo,
+        targa: details.targa || veicoloProfilo.targa,
+        kilometers: row.chilometri == null ? "" : String(row.chilometri),
+        types: Array.isArray(details.types)
+          ? details.types
+          : row.tipo ? String(row.tipo).split(" · ").filter(Boolean) : [],
+        works: row.lavori || "",
+        status: String(row.stato || "").toUpperCase() === "CONCLUSO" ||
+          String(row.stato || "").toUpperCase() === "CHIUSO"
+          ? "CONCLUSO" : "IN_LAVORAZIONE",
+        invoiceNumber: row.fattura || "",
+        pdfUrl: details.pdfUrl || "",
+        media: Array.isArray(details.media) ? details.media : [],
+      };
     });
 
-
-
     setLavori(risultati);
-
-
-
   };
 
-
-
   useEffect(() => {
-
-
-
-    aggiornaLavori();
-
-
-
-    const onStorage = () => aggiornaLavori();
-
-
-
+    void aggiornaLavori();
+    const onStorage = () => { void aggiornaLavori(); };
     window.addEventListener("storage", onStorage);
-
-
-
     window.addEventListener("focus", onStorage);
-
-
-
     return () => {
-
-
-
       window.removeEventListener("storage", onStorage);
-
-
-
       window.removeEventListener("focus", onStorage);
-
-
-
     };
-
-
-
-  }, [veicoloProfilo.targa]);
-
-
+  }, [profiloVeicolo?.id, veicoloProfilo.targa]);
 
   const aggiornaRevisione = () => {
     // La revisione del veicolo ora arriva direttamente dall'archivio Supabase.
