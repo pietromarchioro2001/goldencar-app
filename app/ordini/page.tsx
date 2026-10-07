@@ -153,6 +153,17 @@ export default function OrdiniPage() {
 
 
 
+  const apriDaHome = () => {
+    if (sessionStorage.getItem("goldencar_nuovo_ordine") === "1") {
+      sessionStorage.removeItem("goldencar_nuovo_ordine");
+      setNuovoAperto(true);
+    }
+    if (sessionStorage.getItem("goldencar_rubrica_fornitori") === "1") {
+      sessionStorage.removeItem("goldencar_rubrica_fornitori");
+      setRubricaAperta(true);
+    }
+  };
+
   const carica = async () => {
     try {
       const [
