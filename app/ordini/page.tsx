@@ -182,6 +182,13 @@ export default function OrdiniPage() {
     }
   };
 
+  const normalizzaRicerca = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+
   const carica = async () => {
     try {
       const [
@@ -189,34 +196,59 @@ export default function OrdiniPage() {
         { data: supplierRows, error: suppliersError },
         { data: vehicleRows, error: vehiclesError },
         { data: clientRows, error: clientsError },
+        { data: relationRows, error: relationsError },
       ] = await Promise.all([
         supabase.from("orders").select("*").order("created_at", { ascending: false }),
         supabase.from("suppliers").select("*").order("nome", { ascending: true }),
-        supabase.from("vehicles").select("id, veicolo, targa, client_id"),
-        supabase.from("clients").select("id, nome, cognome, telefono"),
+        supabase.from("vehicles").select("id, veicolo, targa, motore, client_id"),
+        supabase.from("clients").select("id, nome, cognome, telefono, codice_fiscale"),
+        supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo"),
       ]);
 
       if (ordersError) throw new Error("Caricamento ordini fallito: " + ordersError.message);
       if (suppliersError) throw new Error("Caricamento fornitori fallito: " + suppliersError.message);
       if (vehiclesError) throw new Error("Caricamento veicoli fallito: " + vehiclesError.message);
       if (clientsError) throw new Error("Caricamento clienti fallito: " + clientsError.message);
+      if (relationsError) throw new Error("Caricamento relazioni veicoli fallito: " + relationsError.message);
 
       const clientsById = new Map((clientRows ?? []).map((client: any) => [String(client.id), client]));
       const suppliersById = new Map((supplierRows ?? []).map((supplier: any) => [String(supplier.id), supplier]));
 
+      const relationsByVehicle = new Map<string, any[]>();
+      (relationRows ?? []).forEach((relation: any) => {
+        const key = String(relation.vehicle_id);
+        const list = relationsByVehicle.get(key) ?? [];
+        list.push(relation);
+        relationsByVehicle.set(key, list);
+      });
+
       setVeicoli((vehicleRows ?? []).map((vehicle: any) => {
-        const client = clientsById.get(String(vehicle.client_id));
+        const relations = relationsByVehicle.get(String(vehicle.id)) ?? [];
+        const primary = relations.find((item) => item.ruolo === "PRINCIPALE") ?? relations[0];
+        const primaryClientId = primary?.client_id ?? vehicle.client_id ?? null;
+        const secondary = relations.find(
+          (item) =>
+            item.ruolo === "SECONDO" &&
+            String(item.client_id) !== String(primaryClientId)
+        );
+        const client1 = clientsById.get(String(primaryClientId));
+        const client2 = secondary ? clientsById.get(String(secondary.client_id)) : null;
+
+        const mapClient = (client: any) => client ? {
+          nome: String(client.nome ?? ""),
+          cognome: String(client.cognome ?? ""),
+          telefono: String(client.telefono ?? ""),
+          cf: String(client.codice_fiscale ?? ""),
+        } : { nome: "", cognome: "", telefono: "", cf: "" };
+
         return {
           id: String(vehicle.id),
-          cliente1: {
-            nome: String(client?.nome ?? ""),
-            cognome: String(client?.cognome ?? ""),
-            telefono: String(client?.telefono ?? ""),
-            cf: String(client?.codice_fiscale ?? ""),
-          },
+          cliente1: mapClient(client1),
+          cliente2: client2 ? mapClient(client2) : null,
           veicolo: {
             veicolo: String(vehicle.veicolo ?? ""),
             targa: String(vehicle.targa ?? ""),
+            motore: String(vehicle.motore ?? ""),
           },
         };
       }));
