@@ -414,10 +414,43 @@ export default function Home() {
     setSolleciti(aggregaSolleciti(lavoriCaricati, manuali));
     /* =========================
        ORDINI
+       Gli ordini sono gestiti da Supabase, quindi la Home
+       deve leggere la stessa sorgente usata dalla pagina ORDINI.
     ========================= */
-    setOrdini(
-      leggiArray<Ordine>("goldencar_orders")
-    );
+    const { data: orderRows, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, numero, cliente, veicolo, prodotti")
+      .order("created_at", { ascending: false });
+
+    if (ordersError) {
+      console.error("Errore caricamento ordini Home:", ordersError);
+      setOrdini([]);
+    } else {
+      setOrdini(
+        (orderRows ?? []).map((row: any) => {
+          const prodotti = Array.isArray(row.prodotti) ? row.prodotti : [];
+          const descrizione = prodotti
+            .map((product: any) => {
+              const nome = String(product?.name ?? "").trim();
+              if (!nome) return "";
+              const quantita = String(product?.quantity ?? "1").trim() || "1";
+              const dettagli = String(product?.details ?? "").trim();
+              return `${quantita} × ${nome}${dettagli ? ` — ${dettagli}` : ""}`;
+            })
+            .filter(Boolean)
+            .join(" · ");
+
+          return {
+            id: String(row.id ?? ""),
+            numero: String(row.numero ?? ""),
+            cliente: String(row.cliente ?? ""),
+            veicolo: String(row.veicolo ?? ""),
+            descrizione,
+            stato: "DA EVADERE",
+          };
+        })
+      );
+    }
   };
   const leggiArray = <T,>(key: string): T[] => {
     try {
