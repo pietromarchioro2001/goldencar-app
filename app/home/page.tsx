@@ -1323,6 +1323,7 @@ export default function Home() {
           <button
             type="button"
             onClick={() => {
+              sessionStorage.removeItem("goldencar_nuovo_ordine");
               sessionStorage.setItem("goldencar_nuovo_ordine", "1");
               router.push("/ordini");
             }}
