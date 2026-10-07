@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
 import { supabase } from "@/lib/supabase";
 type Lavoro = {
-  jobNumber: number;
+  jobNumber: number | string;
   createdAt: string;
   nomeCliente?: string;
   veicolo?: string;
