@@ -134,6 +134,7 @@ type JobDraft = VeicoloScheda & {
   status: "IN_LAVORAZIONE" | "CONCLUSO";
 
   pdfUrl?: string;
+  pdfR2Key?: string;
 
   tagliando: {
 
@@ -408,7 +409,7 @@ function rowToJobDraft(row: any): JobDraft {
     works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [""], labor: row.manodopera == null ? "" : String(row.manodopera), notes: row.note == null ? "" : String(row.note),
     invoiceNumber: row.fattura == null ? "" : String(row.fattura), paymentAmount: row.payment_amount == null ? "" : String(row.payment_amount),
     paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : "DA_PAGARE", media: Array.isArray(details.media) ? details.media : [],
-    status: normalizeJobStatus(row.stato), pdfUrl: details.pdfUrl || "",
+    status: normalizeJobStatus(row.stato), pdfUrl: details.pdfUrl || "", pdfR2Key: details.pdfR2Key || "",
     tagliando: details.tagliando || { oil:false, oilType:"", oilQuantity:"", oilFilter:false, airFilter:false, cabinFilter:false, fuelFilter:false, sparkPlugs:false, other:"" },
     freni: details.freni || { frontPads:false, rearPads:false, frontDiscs:false, rearDiscs:false, brakeFluid:false, calipers:false, other:"" },
     pneumatici: details.pneumatici || { mounting:false, removal:false, replacement:false, rotation:false, balancing:false, repair:false, season:"", quantity:"4", storage:false, description:"" },
@@ -1035,21 +1036,9 @@ export default function SchedaLavoroPage() {
 
 
   const getVehicleIdByPlate = (plate: string) => {
-    try {
-      const raw = localStorage.getItem("goldencar_vehicles");
-      const vehicles = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(vehicles)) return "";
-      const normalized = plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
-      const found = vehicles.find(
-        (item: any) =>
-          String(item?.veicolo?.targa || "")
-            .replace(/[^A-Z0-9]/gi, "")
-            .toUpperCase() === normalized
-      );
-      return typeof found?.id === "string" ? found.id : "";
-    } catch {
-      return "";
-    }
+    // La scheda è già collegata al veicolo tramite Supabase: non dobbiamo
+    // più cercare l'ID nella vecchia cache localStorage.
+    return draft?.vehicleId || "";
   };
 
   const uploadFileToR2 = async (key: string, file: Blob, contentType: string) => {
@@ -1197,48 +1186,69 @@ export default function SchedaLavoroPage() {
 
   const generateAndOpenPdf = async (lavoro: JobDraft) => {
     try {
+      if (!lavoro.jobId || !lavoro.vehicleId) {
+        throw new Error("La scheda non è collegata correttamente al veicolo.");
+      }
+
       const pdfData: SchedaLavoroPDFData = {
         nomeCliente: lavoro.nomeCliente,
         indirizzo: lavoro.indirizzo,
         telefono: lavoro.telefono,
         codiceFiscale: lavoro.codiceFiscale,
-  
         veicolo: lavoro.veicolo,
         targa: lavoro.targa,
         kilometers: lavoro.kilometers,
-  
         jobNumber: lavoro.jobNumber,
         createdAt: lavoro.createdAt,
         labor: lavoro.labor,
         workType: lavoro.types?.join(" · ") || "",
-  
         problems: lavoro.problems,
-  
         works: lavoro.works.filter(Boolean).join("\n"),
-  
         products: lavoro.products,
-  
         notes: lavoro.notes,
-  
         invoiceNumber: lavoro.invoiceNumber,
-  
         status: lavoro.status,
       };
-  
-      const blob = await pdf(
-        <SchedaLavoroPDF lavoro={pdfData} />
-      ).toBlob();
-  
-      const url = URL.createObjectURL(blob);
-  
-      window.open(url, "_blank", "noopener,noreferrer");
-  
+
+      const blob = await pdf(<SchedaLavoroPDF lavoro={pdfData} />).toBlob();
+
+      // Un PDF appartiene a un singolo lavoro: viene salvato con la chiave
+      // del lavoro, così Supabase deve conservare solo il riferimento al file.
+      const pdfR2Key = "veicoli/" + lavoro.vehicleId + "/schede/" + lavoro.jobId + ".pdf";
+      await uploadFileToR2(pdfR2Key, blob, "application/pdf");
+
+      const currentDetails = {
+        nomeCliente: lavoro.nomeCliente,
+        indirizzo: lavoro.indirizzo,
+        telefono: lavoro.telefono,
+        codiceFiscale: lavoro.codiceFiscale,
+        veicolo: lavoro.veicolo,
+        targa: lavoro.targa,
+        types: lavoro.types,
+        products: lavoro.products,
+        media: lavoro.media,
+        tagliando: lavoro.tagliando,
+        freni: lavoro.freni,
+        pneumatici: lavoro.pneumatici,
+        pdfUrl: "",
+        pdfR2Key,
+      };
+
+      const { error } = await supabase
+        .from("jobs")
+        .update({ dettagli: currentDetails })
+        .eq("id", lavoro.jobId);
+
+      if (error) throw new Error("PDF salvato su R2, ma non è stato possibile collegarlo alla scheda su Supabase: " + error.message);
+
+      const next = { ...lavoro, pdfR2Key, pdfUrl: "" };
+      setDraft(next);
+
+      const downloadUrl = await getR2DownloadUrl(pdfR2Key);
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
-      console.error("Errore generazione PDF:", error);
-  
-      alert(
-        "Non è stato possibile generare il PDF della scheda."
-      );
+      console.error("Errore generazione/salvataggio PDF:", error);
+      alert(error instanceof Error ? error.message : "Non è stato possibile generare il PDF della scheda.");
     }
   };
 
@@ -1367,36 +1377,26 @@ export default function SchedaLavoroPage() {
 
 
 
-  const openPdf = () => {
-
+  const openPdf = async () => {
     if (!draft) return;
 
+    try {
+      if (draft.pdfR2Key) {
+        const downloadUrl = await getR2DownloadUrl(draft.pdfR2Key);
+        window.open(downloadUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
 
+      if (draft.pdfUrl) {
+        window.open(draft.pdfUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
 
-    if (draft.pdfUrl) {
-
-      window.open(
-
-        draft.pdfUrl,
-
-        "_blank",
-
-        "noopener,noreferrer"
-
-      );
-
-      return;
-
+      alert("Questa scheda non ha ancora un PDF archiviato su R2.");
+    } catch (error) {
+      console.error("Errore apertura PDF R2:", error);
+      alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF.");
     }
-
-
-
-    alert(
-
-      "Il PDF verrà collegato qui quando implementeremo la generazione dell'archivio."
-
-    );
-
   };
 
 
