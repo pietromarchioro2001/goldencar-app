@@ -2079,19 +2079,33 @@ export default function Veicolo() {
                     <input value={profiloEdit.veicolo.targa} onChange={(e) => aggiornaVeicoloEdit("targa", e.target.value.toUpperCase())}
                       placeholder="Targa" style={{ ...editInputStyle, marginTop: 6, fontSize: 16 }} />
                     <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                      <input value={profiloEdit.cliente1.nome} onChange={(e) => aggiornaClienteEdit(1, "nome", e.target.value)}
-                        placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
-                      <input value={profiloEdit.cliente1.cognome} onChange={(e) => aggiornaClienteEdit(1, "cognome", e.target.value)}
-                        placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                      {profiloEdit.cliente1.cognome.trim() ? (
+                        <>
+                          <input value={profiloEdit.cliente1.nome} onChange={(e) => aggiornaClienteEdit(1, "nome", e.target.value)}
+                            placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
+                          <input value={profiloEdit.cliente1.cognome} onChange={(e) => aggiornaClienteEdit(1, "cognome", e.target.value)}
+                            placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                        </>
+                      ) : (
+                        <input value={profiloEdit.cliente1.nome} onChange={(e) => aggiornaClienteEdit(1, "nome", e.target.value)}
+                          placeholder="Nome e cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                      )}
                     </div>
                     {profiloEdit.cliente2 && (
                       <>
                         <div style={{ marginTop: 10, fontSize: 11, fontWeight: 800, color: "#64748B" }}>SECONDO CLIENTE</div>
                         <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                          <input value={profiloEdit.cliente2.nome} onChange={(e) => aggiornaClienteEdit(2, "nome", e.target.value)}
-                            placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
-                          <input value={profiloEdit.cliente2.cognome} onChange={(e) => aggiornaClienteEdit(2, "cognome", e.target.value)}
-                            placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                          {profiloEdit.cliente2.cognome.trim() ? (
+                            <>
+                              <input value={profiloEdit.cliente2.nome} onChange={(e) => aggiornaClienteEdit(2, "nome", e.target.value)}
+                                placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
+                              <input value={profiloEdit.cliente2.cognome} onChange={(e) => aggiornaClienteEdit(2, "cognome", e.target.value)}
+                                placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                            </>
+                          ) : (
+                            <input value={profiloEdit.cliente2.nome} onChange={(e) => aggiornaClienteEdit(2, "nome", e.target.value)}
+                              placeholder="Nome e cognome" style={{ ...editInputStyle, fontSize: 15 }} />
+                          )}
                         </div>
                       </>
                     )}
