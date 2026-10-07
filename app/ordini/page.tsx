@@ -169,6 +169,9 @@ export default function OrdiniPage() {
   const apriDaHome = () => {
     if (sessionStorage.getItem("goldencar_nuovo_ordine") === "1") {
       sessionStorage.removeItem("goldencar_nuovo_ordine");
+      sessionStorage.removeItem("goldencar_nuovo_ordine");
+      setContext(null);
+      setVeicoloSelezionato(null);
       setNuovoAperto(true);
     }
     if (sessionStorage.getItem("goldencar_rubrica_fornitori") === "1") {
@@ -204,8 +207,10 @@ export default function OrdiniPage() {
         return {
           id: String(vehicle.id),
           cliente1: {
-            nome: [client?.nome, client?.cognome].filter(Boolean).join(" "),
+            nome: String(client?.nome ?? ""),
+            cognome: String(client?.cognome ?? ""),
             telefono: String(client?.telefono ?? ""),
+            cf: String(client?.codice_fiscale ?? ""),
           },
           veicolo: {
             veicolo: String(vehicle.veicolo ?? ""),
@@ -1039,7 +1044,9 @@ export default function OrdiniPage() {
                           item.veicolo?.targa,
                           item.veicolo?.veicolo,
                           item.cliente1?.nome,
+                          item.cliente1?.cognome,
                           item.cliente1?.telefono,
+                          item.cliente1?.cf,
                         ]
                           .filter(Boolean)
                           .map((value) => String(value).toLowerCase());
