@@ -2815,9 +2815,10 @@ export default function Veicolo() {
                           e.stopPropagation();
 
                           if (intervento.pdfR2Key) {
+                            const pdfR2Key = intervento.pdfR2Key;
                             void (async () => {
                               try {
-                                const response = await fetch("/api/r2/file?key=" + encodeURIComponent(intervento.pdfR2Key));
+                                const response = await fetch("/api/r2/file?key=" + encodeURIComponent(pdfR2Key));
                                 const data = await response.json();
                                 if (!response.ok || !data?.ok || !data?.downloadUrl) throw new Error(data?.error || "PDF non disponibile.");
                                 window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
