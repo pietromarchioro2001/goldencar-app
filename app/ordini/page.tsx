@@ -76,7 +76,13 @@ type Veicolo = {
     cf?: string;
   };
 
-  veicolo?: { veicolo?: string; targa?: string };
+  veicolo?: {
+    veicolo?: string;
+    motore?: string;
+    targa?: string;
+    immatricolazione?: string;
+    revisione?: string;
+  };
 
 };
 
