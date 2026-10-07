@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { pdf } from "@react-pdf/renderer";
+import { supabase } from "@/lib/supabase";
 import SchedaLavoroPDF, { type SchedaLavoroPDFData } from "@/app/pdf/SchedaLavoroPDF";
 import BottomBar from "@/components/BottomBar";
 
@@ -76,30 +77,70 @@ export default function LavoriPage() {
   const [ricerca, setRicerca] = useState("");
   const [pdfLoading, setPdfLoading] = useState<number | null>(null);
 
-  const caricaLavori = () => {
-    const conclusi: Lavoro[] = [];
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (!key || !key.startsWith("goldencar_job_")) continue;
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const parsed = JSON.parse(raw) as Lavoro;
-        if (parsed?.status === "CONCLUSO") conclusi.push(parsed);
-      } catch {}
+  const caricaLavori = async () => {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .in("stato", ["CONCLUSO", "CHIUSO"])
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Errore caricamento lavori Supabase:", error);
+      setLavori([]);
+      return;
     }
-    conclusi.sort((a, b) => {
-      const dateA = new Date(a.createdAt || 0).getTime();
-      const dateB = new Date(b.createdAt || 0).getTime();
-      if (dateA !== dateB) return dateB - dateA;
-      return Number(b.jobNumber || 0) - Number(a.jobNumber || 0);
+
+    const conclusi: Lavoro[] = (data || []).map((row: any) => {
+      let details: any = {};
+      try {
+        details = row.dettagli && typeof row.dettagli === "object"
+          ? row.dettagli
+          : JSON.parse(String(row.dettagli || "{}"));
+      } catch {}
+
+      const idMatch = String(row.id || "").match(/^(\d{2})-(\d{3})$/);
+      const jobNumber = idMatch
+        ? Number(idMatch[1]) * 1000 + Number(idMatch[2])
+        : 0;
+
+      let products: any[] = Array.isArray(details.products) ? details.products : [];
+      if (!products.length && row.prodotti_utilizzati) {
+        try {
+          const parsed = JSON.parse(String(row.prodotti_utilizzati));
+          if (Array.isArray(parsed)) products = parsed;
+        } catch {}
+      }
+
+      return {
+        jobId: String(row.id),
+        nomeCliente: details.nomeCliente || "",
+        indirizzo: details.indirizzo || "",
+        telefono: details.telefono || "",
+        codiceFiscale: details.codiceFiscale || "",
+        veicolo: details.veicolo || "",
+        targa: details.targa || "",
+        kilometers: row.chilometri == null ? "" : String(row.chilometri),
+        jobNumber,
+        createdAt: row.created_at || "",
+        labor: row.manodopera == null ? "" : String(row.manodopera),
+        workType: Array.isArray(details.types)
+          ? details.types.join(" · ")
+          : row.tipo || "",
+        problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [],
+        works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [],
+        notes: row.note || "",
+        invoiceNumber: row.fattura || "",
+        products,
+        status: "CONCLUSO",
+      } as Lavoro;
     });
+
     setLavori(conclusi);
   };
 
   useEffect(() => {
-    caricaLavori();
-    const refresh = () => caricaLavori();
+    void caricaLavori();
+    const refresh = () => { void caricaLavori(); };
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
