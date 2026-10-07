@@ -1156,11 +1156,7 @@ export default function OrdiniPage() {
 
 
 
-          <button type="button" onClick={creaOrdine} style={saveButtonStyle}>
-
-            CREA ORDINE
-
-          </button>
+          <button type="button" onClick={creaOrdine} style={saveButtonStyle}>INVIA</button>
 
         </Overlay>
 
