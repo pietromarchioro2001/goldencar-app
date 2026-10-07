@@ -225,9 +225,7 @@ export default function RevisioniPage() {
             color: "#9CA3AF",
             flexShrink: 0,
           }}
-        >
-          LOGO
-        </div>
+        ><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
   
         <h1
           style={{
