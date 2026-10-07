@@ -1292,27 +1292,18 @@ export default function Home() {
           onClose={() =>
             setModal(null)
           }
+          topRight={
+            <button
+              type="button"
+              onClick={() =>
+                router.push("/ordini")
+              }
+              style={modalLinkStyle}
+            >
+              LISTA ORDINI
+            </button>
+          }
         >
-          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 12 }}>
-            <button type="button" onClick={() => {
-              sessionStorage.setItem("goldencar_rubrica_fornitori", "1");
-              router.push("/ordini");
-            }} style={{
-              height: 42, padding: "0 15px", border: "1px solid #D7DEE8", borderRadius: 13,
-              background: "#FFFFFF", color: "#041E49", fontSize: 12, fontWeight: 900, cursor: "pointer",
-            }}>
-              RUBRICA
-            </button>
-            <button type="button" onClick={() => {
-              sessionStorage.setItem("goldencar_nuovo_ordine", "1");
-              router.push("/ordini");
-            }} aria-label="Nuovo ordine" style={{
-              width: 42, height: 42, border: "none", borderRadius: 13, background: "#D4AF37",
-              color: "#041E49", fontSize: 25, fontWeight: 800, lineHeight: 1, cursor: "pointer",
-            }}>
-              +
-            </button>
-          </div>
           {ordini.length === 0 ? (
             <EmptyState text="Nessun ordine presente." />
           ) : (
@@ -1329,8 +1320,31 @@ export default function Home() {
               )
             )
           )}
+          <button
+            type="button"
+            onClick={() => {
+              sessionStorage.setItem("goldencar_nuovo_ordine", "1");
+              router.push("/ordini");
+            }}
+            style={{
+              width: 52,
+              height: 52,
+              margin: "14px auto 0",
+              border: "none",
+              borderRadius: 17,
+              background: "#D4AF37",
+              color: "#111827",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+            }}
+            aria-label="Nuovo ordine"
+          >
+            <PlusIcon />
+          </button>
         </Modal>
-      )}
+      )}}
     </>
   );
 }
