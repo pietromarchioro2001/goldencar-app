@@ -2753,7 +2753,7 @@ export default function SchedaLavoroPDF({ lavoro }: Props) {
 
 
 
-                src="/logo-goldencar.png"
+                src="/logo.png"
 
 
 
