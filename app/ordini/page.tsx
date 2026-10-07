@@ -76,6 +76,13 @@ type Veicolo = {
     cf?: string;
   };
 
+  cliente2?: {
+    nome?: string;
+    cognome?: string;
+    telefono?: string;
+    cf?: string;
+  };
+
   veicolo?: {
     veicolo?: string;
     motore?: string;
