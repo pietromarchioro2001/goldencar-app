@@ -64,7 +64,7 @@ type PagamentoDettaglio = {
   descrizione: string;
   importo: number;
   stato: "DA_PAGARE" | "PAGATO";
-  jobNumber?: number;
+  jobNumber?: number | string;
   manuale?: boolean;
 };
 type ClienteRicerca = {
