@@ -27,6 +27,8 @@ type Lavoro = {
   paymentAmount?: string;
   paymentStatus?: "DA_PAGARE" | "PAGATO";
   status: "IN_LAVORAZIONE" | "CONCLUSO";
+  jobId?: string;
+  pdfR2Key?: string;
 };
 
 function PaperclipIcon() {
@@ -132,6 +134,7 @@ export default function LavoriPage() {
         invoiceNumber: row.fattura || "",
         products,
         status: "CONCLUSO",
+        pdfR2Key: details.pdfR2Key || "",
       } as Lavoro;
     });
 
@@ -159,13 +162,24 @@ export default function LavoriPage() {
     if (pdfLoading === lavoro.jobNumber) return;
     setPdfLoading(lavoro.jobNumber);
     try {
+      if (lavoro.pdfR2Key) {
+        const response = await fetch("/api/r2/file?key=" + encodeURIComponent(lavoro.pdfR2Key));
+        const data = await response.json();
+        if (!response.ok || !data?.ok || !data?.downloadUrl) {
+          throw new Error(data?.error || "PDF non disponibile su R2.");
+        }
+        window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+
+      // Compatibilità con le vecchie schede concluse prima dell'archivio R2.
       const blob = await pdf(<SchedaLavoroPDF lavoro={toPdfData(lavoro)} />).toBlob();
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (error) {
       console.error("Errore apertura PDF scheda:", error);
-      alert("Non è stato possibile aprire il PDF della scheda.");
+      alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF della scheda.");
     } finally {
       setPdfLoading(null);
     }
