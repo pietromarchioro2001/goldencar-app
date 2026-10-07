@@ -402,28 +402,98 @@ export default function Home() {
     if (typeof window === "undefined") return;
     /* =========================
        LAVORI
+       Anche la Home usa Supabase per le schede lavoro.
     ========================= */
-    const lavoriCaricati: Lavoro[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key?.startsWith("goldencar_job_")) continue;
-      try {
-        const raw = localStorage.getItem(key);
-        if (!raw) continue;
-        const lavoro = JSON.parse(raw) as Lavoro;
-        if (lavoro.jobNumber) {
-          lavoriCaricati.push(lavoro);
+    const { data: jobRows, error: jobsError } = await supabase
+      .from("jobs")
+      .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_status, dettagli")
+      .order("created_at", { ascending: false });
+
+    if (jobsError) {
+      console.error("Errore caricamento lavori Home:", jobsError);
+      setLavori([]);
+    } else {
+      const vehicleIds = (jobRows ?? [])
+        .map((row: any) => row.vehicle_id)
+        .filter(Boolean)
+        .map(String);
+
+      const [{ data: vehicleRows }, { data: relationRows }, { data: clientRows }] =
+        await Promise.all([
+          vehicleIds.length
+            ? supabase.from("vehicles").select("id, veicolo, targa").in("id", vehicleIds)
+            : Promise.resolve({ data: [] as any[] }),
+          vehicleIds.length
+            ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
+            : Promise.resolve({ data: [] as any[] }),
+          supabase.from("clients").select("id, nome, cognome, telefono"),
+        ]);
+
+      const vehiclesById = new Map(
+        (vehicleRows ?? []).map((row: any) => [String(row.id), row])
+      );
+      const clientsById = new Map(
+        (clientRows ?? []).map((row: any) => [String(row.id), row])
+      );
+      const primaryClientByVehicle = new Map<string, any>();
+
+      for (const relation of relationRows ?? []) {
+        const vehicleId = String(relation.vehicle_id);
+        if (
+          relation.ruolo === "PRINCIPALE" ||
+          !primaryClientByVehicle.has(vehicleId)
+        ) {
+          primaryClientByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
         }
-      } catch {
-        // ignora dati non validi
       }
+
+      const lavoriCaricati: Lavoro[] = (jobRows ?? []).map((row: any) => {
+        const vehicle = vehiclesById.get(String(row.vehicle_id));
+        const client = primaryClientByVehicle.get(String(row.vehicle_id));
+        const nomeCliente = [client?.nome, client?.cognome]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+
+        const dettagli = row.dettagli && typeof row.dettagli === "object"
+          ? row.dettagli
+          : {};
+
+        const jobNumberRaw = String(row.id ?? "");
+        const jobNumber = jobNumberRaw;
+
+        return {
+          jobNumber,
+          createdAt: String(row.created_at ?? ""),
+          nomeCliente: nomeCliente || "Cliente",
+          veicolo: String(vehicle?.veicolo ?? ""),
+          targa: String(vehicle?.targa ?? ""),
+          telefono: String(client?.telefono ?? ""),
+          paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
+          paymentStatus:
+            row.payment_status === "PAGATO"
+              ? "PAGATO"
+              : row.payment_status === "PARZIALE"
+                ? "DA_PAGARE"
+                : "DA_PAGARE",
+          types: Array.isArray(dettagli.types)
+            ? dettagli.types
+            : row.tipo
+              ? [String(row.tipo)]
+              : [],
+          works: Array.isArray(dettagli.works)
+            ? dettagli.works
+            : String(row.lavori ?? ""),
+          status:
+            String(row.stato ?? "").toUpperCase() === "CONCLUSO"
+              ? "CONCLUSO"
+              : "IN_LAVORAZIONE",
+          pdfUrl: String(dettagli.pdfUrl ?? ""),
+        };
+      });
+
+      setLavori(lavoriCaricati);
     }
-    lavoriCaricati.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() -
-        new Date(a.createdAt).getTime()
-    );
-    setLavori(lavoriCaricati);
     /* =========================
        AGENDA
     ========================= */
