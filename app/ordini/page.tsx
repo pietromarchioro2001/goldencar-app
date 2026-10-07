@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useRouter } from "next/navigation";
 
 import BottomBar from "@/components/BottomBar";
+import { supabase } from "@/lib/supabase";
 
 
 
