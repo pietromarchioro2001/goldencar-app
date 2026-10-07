@@ -730,7 +730,7 @@ export default function OrdiniPage() {
 
                   </div>
 
-                  {ordine.jobNumber && (
+                  {ordine.jobId && (
 
                     <div
 
@@ -754,7 +754,7 @@ export default function OrdiniPage() {
 
                     >
 
-                      SCHEDA #{ordine.jobNumber}
+                      SCHEDA #{ordine.jobId}
 
                     </div>
 
