@@ -81,7 +81,7 @@ type Veicolo = {
     cognome?: string;
     telefono?: string;
     cf?: string;
-  };
+  } | null;
 
   veicolo?: {
     veicolo?: string;
