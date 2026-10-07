@@ -261,6 +261,13 @@ export default function OrdiniPage() {
         };
       }));
 
+      const suppliersById = new Map(
+        (supplierRows ?? []).map((supplier: any) => [
+          String(supplier.id),
+          supplier,
+        ])
+      );
+
       setFornitori((supplierRows ?? []).map((row: any) => ({
         id: String(row.id),
         nome: String(row.nome ?? ""),
