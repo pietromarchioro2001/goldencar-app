@@ -124,7 +124,7 @@ export default function OrdiniPage() {
 
   useEffect(() => {
 
-    carica();
+    void carica();
 
     const rawContext = sessionStorage.getItem("goldencar_nuovo_ordine");
 
@@ -150,45 +150,74 @@ export default function OrdiniPage() {
 
 
 
-  const carica = () => {
-
+  const carica = async () => {
     try {
+      const [
+        { data: orderRows, error: ordersError },
+        { data: supplierRows, error: suppliersError },
+        { data: vehicleRows, error: vehiclesError },
+        { data: clientRows, error: clientsError },
+      ] = await Promise.all([
+        supabase.from("orders").select("*").order("created_at", { ascending: false }),
+        supabase.from("suppliers").select("*").order("nome", { ascending: true }),
+        supabase.from("vehicles").select("id, veicolo, targa, client_id"),
+        supabase.from("clients").select("id, nome, cognome, telefono"),
+      ]);
 
-      const rawOrders = localStorage.getItem("goldencar_orders");
+      if (ordersError) throw new Error("Caricamento ordini fallito: " + ordersError.message);
+      if (suppliersError) throw new Error("Caricamento fornitori fallito: " + suppliersError.message);
+      if (vehiclesError) throw new Error("Caricamento veicoli fallito: " + vehiclesError.message);
+      if (clientsError) throw new Error("Caricamento clienti fallito: " + clientsError.message);
 
-      const rawSuppliers = localStorage.getItem("goldencar_suppliers");
+      const clientsById = new Map((clientRows ?? []).map((client: any) => [String(client.id), client]));
+      const suppliersById = new Map((supplierRows ?? []).map((supplier: any) => [String(supplier.id), supplier]));
 
-      const rawVehicles = localStorage.getItem("goldencar_vehicles");
+      setVeicoli((vehicleRows ?? []).map((vehicle: any) => {
+        const client = clientsById.get(String(vehicle.client_id));
+        return {
+          id: String(vehicle.id),
+          cliente1: {
+            nome: [client?.nome, client?.cognome].filter(Boolean).join(" "),
+            telefono: String(client?.telefono ?? ""),
+          },
+          veicolo: {
+            veicolo: String(vehicle.veicolo ?? ""),
+            targa: String(vehicle.targa ?? ""),
+          },
+        };
+      }));
 
+      setFornitori((supplierRows ?? []).map((row: any) => ({
+        id: String(row.id),
+        nome: String(row.nome ?? ""),
+        whatsapp: String(row.whatsapp ?? ""),
+      })));
 
-
-      const parsedOrders = rawOrders ? JSON.parse(rawOrders) : [];
-
-      const parsedSuppliers = rawSuppliers ? JSON.parse(rawSuppliers) : [];
-
-      const parsedVehicles = rawVehicles ? JSON.parse(rawVehicles) : [];
-
-
-
-      setOrdini(Array.isArray(parsedOrders) ? parsedOrders : []);
-
-      setFornitori(Array.isArray(parsedSuppliers) ? parsedSuppliers : []);
-
-      setVeicoli(Array.isArray(parsedVehicles) ? parsedVehicles : []);
-
-    } catch {
-
+      setOrdini((orderRows ?? []).map((row: any) => {
+        const supplier = suppliersById.get(String(row.supplier_id));
+        return {
+          id: String(row.id),
+          numero: String(row.numero ?? ""),
+          createdAt: String(row.created_at ?? ""),
+          jobId: row.job_id ? String(row.job_id) : undefined,
+          vehicleId: row.vehicle_id ? String(row.vehicle_id) : undefined,
+          cliente: String(row.cliente ?? ""),
+          telefono: String(row.telefono ?? ""),
+          targa: String(row.targa ?? ""),
+          veicolo: String(row.veicolo ?? ""),
+          prodotti: Array.isArray(row.prodotti) ? row.prodotti : [],
+          supplierId: row.supplier_id ? String(row.supplier_id) : undefined,
+          supplierName: supplier?.nome ? String(supplier.nome) : undefined,
+          supplierPhone: supplier?.whatsapp ? String(supplier.whatsapp) : undefined,
+        };
+      }));
+    } catch (error) {
+      console.error("Errore caricamento Ordini:", error);
       setOrdini([]);
-
       setFornitori([]);
-
       setVeicoli([]);
-
     }
-
   };
-
-
 
   const resetNuovo = () => {
 
@@ -322,171 +351,102 @@ export default function OrdiniPage() {
 
 
 
-  const creaOrdine = () => {
-
+  const creaOrdine = async () => {
     if (!descrizione.trim()) {
-
       alert("Inserisci cosa devo ordinare.");
-
       return;
-
     }
-
-
-
     if (!cliente && !veicolo && !targa) {
-
       alert("Seleziona un veicolo.");
-
       return;
-
     }
 
+    const prodotti = [{ name: descrizione.trim(), quantity: "1", details: "" }];
+    const id = `ordine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    const { data, error } = await supabase.from("orders").insert({
+      id,
+      job_id: context?.jobId || null,
+      vehicle_id: context?.vehicleId || veicoloSelezionato?.id || null,
+      supplier_id: fornitoreId || null,
+      cliente,
+      telefono,
+      veicolo,
+      targa,
+      prodotti,
+    }).select("*").single();
 
-    const nextNumber =
-
-      ordini.reduce((max, ordine) => {
-
-        const n = Number(String(ordine.numero || "").replace(/\D/g, ""));
-
-        return Number.isFinite(n) ? Math.max(max, n) : max;
-
-      }, 0) + 1;
-
-
+    if (error) {
+      console.error("Errore creazione ordine:", error);
+      alert("Non è stato possibile creare l'ordine: " + error.message);
+      return;
+    }
 
     const supplier = fornitori.find((item) => item.id === fornitoreId);
-
-
-
     const ordine: Ordine = {
-
-      id: `ordine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-
-      numero: String(nextNumber).padStart(3, "0"),
-
-      createdAt: new Date().toISOString(),
-
+      id: String(data.id),
+      numero: String(data.numero ?? ""),
+      createdAt: String(data.created_at ?? new Date().toISOString()),
+      jobId: data.job_id ? String(data.job_id) : undefined,
+      vehicleId: data.vehicle_id ? String(data.vehicle_id) : undefined,
       cliente,
-
       telefono,
-
       veicolo,
-
       targa,
-
-      prodotti: [
-
-        {
-
-          name: descrizione.trim(),
-
-          quantity: "1",
-
-          details: "",
-
-        },
-
-      ],
-
+      prodotti,
       supplierId: supplier?.id,
-
       supplierName: supplier?.nome,
-
       supplierPhone: supplier?.whatsapp,
-
     };
 
-
-
-    const next = [ordine, ...ordini];
-
-    localStorage.setItem("goldencar_orders", JSON.stringify(next));
-
-    setOrdini(next);
-
+    setOrdini((current) => [ordine, ...current]);
     resetNuovo();
-
   };
 
-
-
-  const aggiungiFornitore = () => {
-
+  const aggiungiFornitore = async () => {
     if (!nuovoFornitore.trim() || !nuovoWhatsApp.trim()) {
-
       alert("Inserisci nome e numero WhatsApp.");
-
       return;
-
     }
 
-
-
     const fornitore: Fornitore = {
-
       id: `fornitore-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-
       nome: nuovoFornitore.trim(),
-
       whatsapp: nuovoWhatsApp.replace(/[^\d+]/g, ""),
-
     };
 
+    const { error } = await supabase.from("suppliers").insert(fornitore);
+    if (error) {
+      console.error("Errore salvataggio fornitore:", error);
+      alert("Non è stato possibile salvare il fornitore: " + error.message);
+      return;
+    }
 
-
-    const next = [...fornitori, fornitore];
-
-    localStorage.setItem("goldencar_suppliers", JSON.stringify(next));
-
-    setFornitori(next);
-
+    setFornitori((current) => [...current, fornitore].sort((a, b) => a.nome.localeCompare(b.nome)));
     setNuovoFornitore("");
-
     setNuovoWhatsApp("");
-
   };
 
-
-
-  const assegnaFornitore = (ordineId: string, id: string) => {
-
+  const assegnaFornitore = async (ordineId: string, id: string) => {
     const supplier = fornitori.find((item) => item.id === id);
-
     if (!supplier) return;
 
+    const { error } = await supabase.from("orders").update({
+      supplier_id: supplier.id,
+    }).eq("id", ordineId);
 
+    if (error) {
+      console.error("Errore assegnazione fornitore:", error);
+      alert("Non è stato possibile assegnare il fornitore: " + error.message);
+      return;
+    }
 
-    const next = ordini.map((ordine) =>
-
+    setOrdini((current) => current.map((ordine) =>
       ordine.id === ordineId
-
-        ? {
-
-            ...ordine,
-
-            supplierId: supplier.id,
-
-            supplierName: supplier.nome,
-
-            supplierPhone: supplier.whatsapp,
-
-          }
-
+        ? { ...ordine, supplierId: supplier.id, supplierName: supplier.nome, supplierPhone: supplier.whatsapp }
         : ordine
-
-    );
-
-
-
-    localStorage.setItem("goldencar_orders", JSON.stringify(next));
-
-    setOrdini(next);
-
+    ));
   };
-
-
 
   const inviaWhatsApp = (ordine: Ordine) => {
 
