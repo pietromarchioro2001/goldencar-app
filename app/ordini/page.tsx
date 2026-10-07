@@ -1073,6 +1073,7 @@ export default function OrdiniPage() {
                 </div>
 
                 </div>
+              </div>
 
             ))}
 
