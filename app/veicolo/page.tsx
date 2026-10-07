@@ -1568,7 +1568,6 @@ export default function Veicolo() {
 
 
       </div>
-      </div>
 
       {/* =========================
 
