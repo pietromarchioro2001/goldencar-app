@@ -1344,7 +1344,7 @@ export default function Home() {
             <PlusIcon />
           </button>
         </Modal>
-      )}}
+      )}
     </>
   );
 }
