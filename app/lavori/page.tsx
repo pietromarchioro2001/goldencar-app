@@ -187,7 +187,8 @@ export default function LavoriPage() {
 
   return <>
     <main className="app" style={{ minHeight: "100vh", paddingBottom: 120 }}>
-      <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+        <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
         <h1 style={{ fontSize: 31, fontWeight: 800, color: "#041E49", letterSpacing: "-0.7px", margin: "3px 0 0" }}>LAVORI</h1>
