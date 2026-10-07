@@ -935,9 +935,7 @@ export default function Home() {
               fontWeight: 700,
               color: "#9CA3AF",
             }}
-          >
-            LOGO
-          </div>
+          ><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
           <h1
             style={{
               fontSize: 31,
