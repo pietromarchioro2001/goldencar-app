@@ -108,6 +108,7 @@ type ContextOrdine = {
   veicolo?: string;
 
   targa?: string;
+  prodotti?: ProdottoOrdine[];
 
 };
 
@@ -157,7 +158,18 @@ export default function OrdiniPage() {
       setNuovoAperto(true);
     } else if (rawContext) {
       try {
-        setContext(JSON.parse(rawContext));
+        const parsed = JSON.parse(rawContext) as ContextOrdine;
+        setContext(parsed);
+        if (Array.isArray(parsed.prodotti) && parsed.prodotti.length) {
+          setDescrizione(
+            parsed.prodotti
+              .map((product) => {
+                const dettagli = product.details ? ` — ${product.details}` : "";
+                return `${product.quantity || "1"} × ${product.name}${dettagli}`;
+              })
+              .join("\n")
+          );
+        }
       } catch {
         setContext(null);
       }
@@ -180,20 +192,6 @@ export default function OrdiniPage() {
       setVeicoloSelezionato(vehicle);
     }
   }, [context, veicoli, veicoloSelezionato]);
-
-  const apriDaHome = () => {
-    if (sessionStorage.getItem("goldencar_nuovo_ordine") === "1") {
-      sessionStorage.removeItem("goldencar_nuovo_ordine");
-      sessionStorage.removeItem("goldencar_nuovo_ordine");
-      setContext(null);
-      setVeicoloSelezionato(null);
-      setNuovoAperto(true);
-    }
-    if (sessionStorage.getItem("goldencar_rubrica_fornitori") === "1") {
-      sessionStorage.removeItem("goldencar_rubrica_fornitori");
-      setRubricaAperta(true);
-    }
-  };
 
   const valorNormalizzatoOrdini = (value: string) =>
     value.replace(/[^a-z0-9]/gi, "").toLowerCase();
@@ -468,7 +466,10 @@ export default function OrdiniPage() {
       return;
     }
 
-    const prodotti = [{ name: descrizione.trim(), quantity: "1", details: "" }];
+    const prodotti =
+      context?.prodotti?.length
+        ? context.prodotti
+        : [{ name: descrizione.trim(), quantity: "1", details: "" }];
     const id = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 
     const { data, error } = await supabase.from("orders").insert({
@@ -558,6 +559,24 @@ export default function OrdiniPage() {
         ? { ...ordine, supplierId: supplier.id, supplierName: supplier.nome, supplierPhone: supplier.whatsapp }
         : ordine
     ));
+  };
+
+  const eliminaOrdine = async (ordineId: string) => {
+    const conferma = window.confirm("Eliminare questo ordine?\n\nL'ordine verrà rimosso definitivamente dalla lista.");
+    if (!conferma) return;
+
+    const { error } = await supabase
+      .from("orders")
+      .delete()
+      .eq("id", ordineId);
+
+    if (error) {
+      console.error("Errore eliminazione ordine:", error);
+      alert("Non è stato possibile eliminare l'ordine: " + error.message);
+      return;
+    }
+
+    setOrdini((current) => current.filter((ordine) => ordine.id !== ordineId));
   };
 
   const inviaWhatsApp = (ordine: Ordine) => {
@@ -759,7 +778,31 @@ export default function OrdiniPage() {
 
             {ordiniOrdinati.map((ordine) => (
 
-              <div key={ordine.id} style={cardStyle}>
+              <div
+                key={ordine.id}
+                style={{
+                  display: "flex",
+                  alignItems: "stretch",
+                  gap: 8,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => eliminaOrdine(ordine.id)}
+                  aria-label={`Elimina ordine ${ordine.numero || ""}`}
+                  title="Elimina ordine"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    marginTop: 15,
+                    borderRadius: "50%",
+                    border: "2px solid #CBD5E1",
+                    background: "#FFFFFF",
+                    flexShrink: 0,
+                    cursor: "pointer",
+                  }}
+                />
+                <div style={{ ...cardStyle, flex: 1, minWidth: 0 }}>
 
                 <div
 
@@ -1029,7 +1072,7 @@ export default function OrdiniPage() {
 
                 </div>
 
-              </div>
+                </div>
 
             ))}
 
