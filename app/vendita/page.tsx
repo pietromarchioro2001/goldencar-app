@@ -228,7 +228,7 @@ async function photos(e:ChangeEvent<HTMLInputElement>){
 
     {view==="list"&&<><div style={S.pageHeader}>
 
-      <div style={S.logoBox}>LOGO</div>
+      <div style={S.logoBox}><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
 
       <h1 style={S.pageTitle}>VENDITE</h1>
 
