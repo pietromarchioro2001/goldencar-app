@@ -336,38 +336,68 @@ export default function Home() {
   };
   const handleRecognizedPlate = async (plate: string) => {
     const normalized = normalizePlate(plate);
-    let vehicles: VeicoloSalvato[] = [];
+
     try {
-      const raw = localStorage.getItem("goldencar_vehicles");
-      const parsed = raw ? JSON.parse(raw) : [];
-      vehicles = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      vehicles = [];
-    }
-    const vehicle = vehicles.find(
-      (item) => normalizePlate(item?.veicolo?.targa || "") === normalized
-    );
-    stopCheckInCamera();
-    if (vehicle) {
-      const cliente = vehicle.cliente1 || {};
-      const veicolo = vehicle.veicolo || {};
-      sessionStorage.setItem(
-        "goldencar_nuova_scheda",
-        JSON.stringify({
-          nomeCliente: cliente.nome || "",
-          indirizzo: cliente.indirizzo || "",
-          telefono: cliente.telefono || "",
-          codiceFiscale: cliente.cf || "",
-          veicolo: veicolo.veicolo || "",
-          targa: normalized,
-        })
+      const { data: vehicle, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id, veicolo, motore, targa, immatricolazione, revisione")
+        .ilike("targa", normalized)
+        .maybeSingle();
+
+      if (vehicleError) throw new Error(vehicleError.message);
+
+      stopCheckInCamera();
+
+      if (vehicle) {
+        const { data: relations } = await supabase
+          .from("vehicle_clients")
+          .select("client_id, ruolo")
+          .eq("vehicle_id", vehicle.id)
+          .order("ruolo", { ascending: true });
+
+        const primaryRelation =
+          (relations ?? []).find((item: any) => item.ruolo === "PRINCIPALE") ??
+          (relations ?? [])[0];
+
+        let cliente: any = null;
+        if (primaryRelation?.client_id) {
+          const { data: client } = await supabase
+            .from("clients")
+            .select("nome, cognome, indirizzo, telefono, codice_fiscale, data_nascita")
+            .eq("id", primaryRelation.client_id)
+            .maybeSingle();
+          cliente = client;
+        }
+
+        sessionStorage.setItem(
+          "goldencar_nuova_scheda",
+          JSON.stringify({
+            vehicleId: String(vehicle.id),
+            nomeCliente: [cliente?.nome, cliente?.cognome].filter(Boolean).join(" "),
+            indirizzo: cliente?.indirizzo || "",
+            telefono: cliente?.telefono || "",
+            codiceFiscale: cliente?.codice_fiscale || "",
+            veicolo: vehicle.veicolo || "",
+            targa: normalized,
+          })
+        );
+        router.push("/veicolo/scheda");
+        return;
+      }
+
+      sessionStorage.setItem("goldencar_checkin_targa", normalized);
+      router.push("/veicolo/profilo");
+    } catch (error) {
+      console.error("CHECK-IN ricerca veicolo Supabase error:", error);
+      stopCheckInCamera();
+      setCheckInError(
+        error instanceof Error
+          ? `Errore durante la ricerca del veicolo: ${error.message}`
+          : "Errore durante la ricerca del veicolo."
       );
-      router.push("/veicolo/scheda");
-      return;
     }
-    sessionStorage.setItem("goldencar_checkin_targa", normalized);
-    router.push("/veicolo/profilo");
   };
+
   const caricaDati = async () => {
     if (typeof window === "undefined") return;
     /* =========================
