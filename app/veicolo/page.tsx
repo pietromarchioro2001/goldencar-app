@@ -2,7 +2,7 @@
 
 
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
 
 
 
@@ -3818,7 +3818,7 @@ export default function Veicolo() {
 
 
 
-const editInputStyle: React.CSSProperties = {
+const editInputStyle: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   border: "1px solid #CBD5E1",
@@ -3831,7 +3831,7 @@ const editInputStyle: React.CSSProperties = {
   outline: "none",
 };
 
-const cardEditInputStyle: React.CSSProperties = {
+const cardEditInputStyle: CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
   border: "1px solid #CBD5E1",
