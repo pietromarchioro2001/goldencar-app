@@ -110,6 +110,7 @@ export default function OrdiniPage() {
   const [context, setContext] = useState<ContextOrdine | null>(null);
 
   const [veicoloSelezionato, setVeicoloSelezionato] = useState<Veicolo | null>(null);
+  const [ricercaVeicolo, setRicercaVeicolo] = useState("");
 
   const [descrizione, setDescrizione] = useState("");
 
@@ -370,19 +371,32 @@ export default function OrdiniPage() {
       alert("Inserisci cosa devo ordinare.");
       return;
     }
-    if (!cliente && !veicolo && !targa) {
-      alert("Seleziona un veicolo.");
+
+    const selectedVehicleId = context?.vehicleId || veicoloSelezionato?.id || null;
+    if (!selectedVehicleId || !veicolo || !targa) {
+      alert("Seleziona prima il veicolo.");
+      return;
+    }
+
+    if (!fornitoreId) {
+      alert("Seleziona prima un fornitore.");
+      return;
+    }
+
+    const supplier = fornitori.find((item) => item.id === fornitoreId);
+    if (!supplier?.whatsapp) {
+      alert("Il fornitore selezionato non ha un numero WhatsApp.");
       return;
     }
 
     const prodotti = [{ name: descrizione.trim(), quantity: "1", details: "" }];
-    const id = `ordine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const id = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 
     const { data, error } = await supabase.from("orders").insert({
       id,
       job_id: context?.jobId || null,
-      vehicle_id: context?.vehicleId || veicoloSelezionato?.id || null,
-      supplier_id: fornitoreId || null,
+      vehicle_id: selectedVehicleId,
+      supplier_id: supplier.id,
       cliente,
       telefono,
       veicolo,
@@ -396,7 +410,6 @@ export default function OrdiniPage() {
       return;
     }
 
-    const supplier = fornitori.find((item) => item.id === fornitoreId);
     const ordine: Ordine = {
       id: String(data.id),
       numero: String(data.numero ?? ""),
@@ -408,12 +421,18 @@ export default function OrdiniPage() {
       veicolo,
       targa,
       prodotti,
-      supplierId: supplier?.id,
-      supplierName: supplier?.nome,
-      supplierPhone: supplier?.whatsapp,
+      supplierId: supplier.id,
+      supplierName: supplier.nome,
+      supplierPhone: supplier.whatsapp,
     };
 
     setOrdini((current) => [ordine, ...current]);
+
+    const numero = supplier.whatsapp.replace(/\D/g, "");
+    const messaggio = "Ciao, per la targa " + targa + " e il veicolo " + veicolo +
+      " mi servirebbe: " + descrizione.trim();
+
+    window.open("https://wa.me/" + numero + "?text=" + encodeURIComponent(messaggio), "_blank", "noopener,noreferrer");
     resetNuovo();
   };
 
@@ -975,53 +994,61 @@ export default function OrdiniPage() {
 
             <>
 
-              <div style={labelStyle}>VEICOLO</div>
-
-              <select
-
-                value={veicoloSelezionato?.id || ""}
-
-                onChange={(event) => {
-
-                  const selected =
-
-                    veicoli.find(
-
-                      (item) => String(item.id || "") === event.target.value
-
-                    ) || null;
-
-                  setVeicoloSelezionato(selected);
-
-                }}
-
+              <div style={labelStyle}>CERCA VEICOLO</div>
+              <input
+                value={ricercaVeicolo}
+                onChange={(event) => setRicercaVeicolo(event.target.value)}
+                placeholder="Targa, veicolo, nome cliente..."
                 style={inputStyle}
+                autoFocus
+              />
 
-              >
+              {!veicoloSelezionato && (
+                <div style={{ marginTop: 8, maxHeight: 190, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 14, background: "#FFFFFF" }}>
+                  {veicoli.filter((item) => {
+                    const q = ricercaVeicolo.trim().toLowerCase();
+                    if (!q) return true;
+                    return [item.veicolo?.targa, item.veicolo?.veicolo, item.cliente1?.nome]
+                      .some((value) => String(value || "").toLowerCase().includes(q));
+                  }).slice(0, 20).map((item, index) => (
+                    <button
+                      key={String(item.id || index)}
+                      type="button"
+                      onClick={() => {
+                        setVeicoloSelezionato(item);
+                        setRicercaVeicolo("");
+                      }}
+                      style={{ width: "100%", border: 0, borderBottom: "1px solid #F1F5F9", background: "#FFFFFF", padding: "11px 13px", textAlign: "left", cursor: "pointer" }}
+                    >
+                      <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
+                        {item.veicolo?.veicolo || "Veicolo"}
+                      </div>
+                      <div style={{ marginTop: 3, fontSize: 12, color: "#64748B" }}>
+                        {item.veicolo?.targa || "—"} · {item.cliente1?.nome || "Cliente"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
 
-                <option value="">Seleziona veicolo</option>
-
-                {veicoli.map((item, index) => (
-
-                  <option
-
-                    key={String(item.id || index)}
-
-                    value={String(item.id || "")}
-
-                  >
-
-                    {item.veicolo?.veicolo || "Veicolo"} ·{" "}
-
-                    {item.veicolo?.targa || "—"} ·{" "}
-
-                    {item.cliente1?.nome || "Cliente"}
-
-                  </option>
-
-                ))}
-
-              </select>
+              {veicoloSelezionato && (
+                <div style={{ ...linkedVehicleStyle, marginTop: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 900 }}>
+                        {veicoloSelezionato.veicolo?.veicolo || "Veicolo"}
+                      </div>
+                      <div style={{ marginTop: 3, fontSize: 13, color: "#64748B" }}>
+                        {veicoloSelezionato.veicolo?.targa || "—"} · {veicoloSelezionato.cliente1?.nome || "Cliente"}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setVeicoloSelezionato(null)}
+                      style={{ border: 0, background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 900, cursor: "pointer" }}>
+                      CAMBIA
+                    </button>
+                  </div>
+                </div>
+              )}
 
             </>
 
@@ -1113,7 +1140,7 @@ export default function OrdiniPage() {
 
           >
 
-            <option value="">Seleziona fornitore (facoltativo)</option>
+            <option value="">Seleziona fornitore</option>
 
             {fornitori.map((fornitore) => (
 
