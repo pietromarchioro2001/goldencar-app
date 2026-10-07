@@ -182,73 +182,81 @@ export default function OrdiniPage() {
     }
   };
 
-  const normalizzaRicerca = (value: string) =>
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .trim();
+  const valorNormalizzatoOrdini = (value: string) =>
+    value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 
   const carica = async () => {
     try {
       const [
         { data: orderRows, error: ordersError },
         { data: supplierRows, error: suppliersError },
-        { data: vehicleRows, error: vehiclesError },
-        { data: clientRows, error: clientsError },
-        { data: relationRows, error: relationsError },
+        { data: vehicles, error: vehiclesError },
       ] = await Promise.all([
         supabase.from("orders").select("*").order("created_at", { ascending: false }),
         supabase.from("suppliers").select("*").order("nome", { ascending: true }),
-        supabase.from("vehicles").select("id, veicolo, targa, motore, client_id"),
-        supabase.from("clients").select("id, nome, cognome, telefono, codice_fiscale"),
-        supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo"),
+        supabase.from("vehicles").select("id, client_id, veicolo, motore, targa, immatricolazione, revisione"),
       ]);
 
       if (ordersError) throw new Error("Caricamento ordini fallito: " + ordersError.message);
       if (suppliersError) throw new Error("Caricamento fornitori fallito: " + suppliersError.message);
       if (vehiclesError) throw new Error("Caricamento veicoli fallito: " + vehiclesError.message);
-      if (clientsError) throw new Error("Caricamento clienti fallito: " + clientsError.message);
-      if (relationsError) throw new Error("Caricamento relazioni veicoli fallito: " + relationsError.message);
 
-      const clientsById = new Map((clientRows ?? []).map((client: any) => [String(client.id), client]));
-      const suppliersById = new Map((supplierRows ?? []).map((supplier: any) => [String(supplier.id), supplier]));
+      const { data: clients, error: clientsError } = await supabase
+        .from("clients")
+        .select("*");
 
+      if (clientsError) console.error("Errore Supabase clients:", clientsError);
+
+      const { data: relations, error: relationsError } = await supabase
+        .from("vehicle_clients")
+        .select("vehicle_id, client_id, ruolo");
+
+      if (relationsError) console.error("Errore Supabase vehicle_clients:", relationsError);
+
+      const clientsById = new Map(
+        (clients ?? []).map((client: any) => [String(client.id), client])
+      );
       const relationsByVehicle = new Map<string, any[]>();
-      (relationRows ?? []).forEach((relation: any) => {
+
+      for (const relation of relations ?? []) {
         const key = String(relation.vehicle_id);
         const list = relationsByVehicle.get(key) ?? [];
         list.push(relation);
         relationsByVehicle.set(key, list);
+      }
+
+      const normalizzaClienteOrdine = (item: any) => ({
+        nome: String(item?.nome ?? ""),
+        cognome: String(item?.cognome ?? ""),
+        telefono: String(item?.telefono ?? ""),
+        cf: String(item?.codice_fiscale ?? ""),
       });
 
-      setVeicoli((vehicleRows ?? []).map((vehicle: any) => {
-        const relations = relationsByVehicle.get(String(vehicle.id)) ?? [];
-        const primary = relations.find((item) => item.ruolo === "PRINCIPALE") ?? relations[0];
-        const primaryClientId = primary?.client_id ?? vehicle.client_id ?? null;
-        const secondary = relations.find(
+      setVeicoli((vehicles ?? []).map((vehicle: any) => {
+        const relationsForVehicle = relationsByVehicle.get(String(vehicle.id)) ?? [];
+        const primaryRelation =
+          relationsForVehicle.find((item) => item.ruolo === "PRINCIPALE") ??
+          relationsForVehicle[0];
+        const primaryClientId =
+          primaryRelation?.client_id ?? vehicle.client_id ?? null;
+        const secondRelation = relationsForVehicle.find(
           (item) =>
             item.ruolo === "SECONDO" &&
             String(item.client_id) !== String(primaryClientId)
         );
-        const client1 = clientsById.get(String(primaryClientId));
-        const client2 = secondary ? clientsById.get(String(secondary.client_id)) : null;
-
-        const mapClient = (client: any) => client ? {
-          nome: String(client.nome ?? ""),
-          cognome: String(client.cognome ?? ""),
-          telefono: String(client.telefono ?? ""),
-          cf: String(client.codice_fiscale ?? ""),
-        } : { nome: "", cognome: "", telefono: "", cf: "" };
 
         return {
           id: String(vehicle.id),
-          cliente1: mapClient(client1),
-          cliente2: client2 ? mapClient(client2) : null,
+          cliente1: normalizzaClienteOrdine(clientsById.get(String(primaryClientId))),
+          cliente2: secondRelation
+            ? normalizzaClienteOrdine(clientsById.get(String(secondRelation.client_id)))
+            : null,
           veicolo: {
             veicolo: String(vehicle.veicolo ?? ""),
-            targa: String(vehicle.targa ?? ""),
             motore: String(vehicle.motore ?? ""),
+            targa: String(vehicle.targa ?? ""),
+            immatricolazione: String(vehicle.immatricolazione ?? ""),
+            revisione: String(vehicle.revisione ?? ""),
           },
         };
       }));
@@ -1073,19 +1081,32 @@ export default function OrdiniPage() {
                   >
                     {veicoli
                       .filter((item) => {
-                        const q = ricercaVeicolo.trim().toLowerCase();
-                        const valori = [
+                        const valore = ricercaVeicolo.trim().toLowerCase();
+                        if (!valore) return false;
+
+                        const queryNormalizzata = valorNormalizzatoOrdini(valore);
+
+                        const valoriRicerca = [
                           item.veicolo?.targa,
                           item.veicolo?.veicolo,
+                          item.veicolo?.motore,
                           item.cliente1?.nome,
                           item.cliente1?.cognome,
                           item.cliente1?.telefono,
                           item.cliente1?.cf,
+                          item.cliente2?.nome,
+                          item.cliente2?.cognome,
+                          item.cliente2?.telefono,
+                          item.cliente2?.cf,
                         ]
                           .filter(Boolean)
                           .map((value) => String(value).toLowerCase());
 
-                        return valori.some((value) => value.includes(q));
+                        return valoriRicerca.some(
+                          (value) =>
+                            value.includes(valore) ||
+                            valorNormalizzatoOrdini(value).includes(queryNormalizzata)
+                        );
                       })
                       .slice(0, 20)
                       .map((item, index, risultati) => (
@@ -1143,17 +1164,32 @@ export default function OrdiniPage() {
                       ))}
 
                     {veicoli.filter((item) => {
-                      const q = ricercaVeicolo.trim().toLowerCase();
-                      return [
+                      const valore = ricercaVeicolo.trim().toLowerCase();
+                      if (!valore) return false;
+
+                      const queryNormalizzata = valorNormalizzatoOrdini(valore);
+
+                      const valoriRicerca = [
                         item.veicolo?.targa,
                         item.veicolo?.veicolo,
+                        item.veicolo?.motore,
                         item.cliente1?.nome,
+                        item.cliente1?.cognome,
                         item.cliente1?.telefono,
+                        item.cliente1?.cf,
+                        item.cliente2?.nome,
+                        item.cliente2?.cognome,
+                        item.cliente2?.telefono,
+                        item.cliente2?.cf,
                       ]
                         .filter(Boolean)
-                        .some((value) =>
-                          String(value).toLowerCase().includes(q)
-                        );
+                        .map((value) => String(value).toLowerCase());
+
+                      return valoriRicerca.some(
+                        (value) =>
+                          value.includes(valore) ||
+                          valorNormalizzatoOrdini(value).includes(queryNormalizzata)
+                      );
                     }).length === 0 && (
                       <div
                         style={{
