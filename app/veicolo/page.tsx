@@ -36,7 +36,9 @@ type ClienteSelezionato = 1 | 2;
 type ProfiloVeicolo = {
   id: string;
   cliente1: ClienteData;
+  cliente1Id?: string;
   cliente2: ClienteData | null;
+  cliente2Id?: string;
   veicolo: {
     veicolo: string;
     motore: string;
@@ -403,6 +405,10 @@ export default function Veicolo() {
   const [profiliArchivio, setProfiliArchivio] =
     useState<ProfiloVeicolo[]>([]);
 
+  const [modificaProfilo, setModificaProfilo] = useState(false);
+  const [salvataggioProfilo, setSalvataggioProfilo] = useState(false);
+  const [profiloEdit, setProfiloEdit] = useState<ProfiloVeicolo | null>(null);
+
   const clienteVuoto: ClienteData = {
     nome: "",
     cognome: "",
@@ -693,12 +699,16 @@ export default function Veicolo() {
           cliente1: normalizzaCliente(
             clientsById.get(String(primaryClientId))
           ),
+          cliente1Id: primaryClientId ? String(primaryClientId) : undefined,
 
           cliente2: secondRelation
             ? normalizzaCliente(
                 clientsById.get(String(secondRelation.client_id))
               )
             : null,
+          cliente2Id: secondRelation?.client_id
+            ? String(secondRelation.client_id)
+            : undefined,
 
           veicolo: {
             veicolo: String(vehicle.veicolo ?? ""),
@@ -794,6 +804,93 @@ export default function Veicolo() {
   const risultatiRicerca = ricercaNormalizzata
     ? trovaProfili(ricercaNormalizzata)
     : [];
+
+  const iniziaModificaProfilo = () => {
+    if (!profiloVeicolo) return;
+    setProfiloEdit(JSON.parse(JSON.stringify(profiloVeicolo)) as ProfiloVeicolo);
+    setModificaProfilo(true);
+    setMenuClientiAperto(false);
+  };
+
+  const annullaModificaProfilo = () => {
+    setProfiloEdit(profiloVeicolo ? JSON.parse(JSON.stringify(profiloVeicolo)) as ProfiloVeicolo : null);
+    setModificaProfilo(false);
+  };
+
+  const aggiornaClienteEdit = (cliente: 1 | 2, field: keyof ClienteData, value: string) => {
+    setProfiloEdit((previous) => {
+      if (!previous) return previous;
+      const key = cliente === 1 ? "cliente1" : "cliente2";
+      const current = previous[key] ?? { ...clienteVuoto };
+      return { ...previous, [key]: { ...current, [field]: value } };
+    });
+  };
+
+  const aggiornaVeicoloEdit = (field: keyof ProfiloVeicolo["veicolo"], value: string) => {
+    setProfiloEdit((previous) =>
+      previous ? { ...previous, veicolo: { ...previous.veicolo, [field]: value } } : previous
+    );
+  };
+
+  const salvaModificaProfilo = async () => {
+    if (!profiloVeicolo || !profiloEdit) return;
+    if (!profiloEdit.cliente1Id) {
+      alert("Il Cliente 1 non è collegato correttamente al profilo.");
+      return;
+    }
+
+    setSalvataggioProfilo(true);
+    try {
+      const cliente1 = profiloEdit.cliente1;
+      const cliente2 = profiloEdit.cliente2;
+
+      const { error: client1Error } = await supabase.from("clients").update({
+        nome: cliente1.nome.trim(),
+        cognome: cliente1.cognome.trim(),
+        indirizzo: cliente1.indirizzo.trim(),
+        telefono: cliente1.telefono.trim(),
+        data_nascita: cliente1.nascita.trim() || null,
+        codice_fiscale: cliente1.cf.trim().toUpperCase(),
+      }).eq("id", profiloEdit.cliente1Id);
+
+      if (client1Error) throw new Error("Salvataggio Cliente 1 fallito: " + client1Error.message);
+
+      if (cliente2 && profiloEdit.cliente2Id) {
+        const { error: client2Error } = await supabase.from("clients").update({
+          nome: cliente2.nome.trim(),
+          cognome: cliente2.cognome.trim(),
+          indirizzo: cliente2.indirizzo.trim(),
+          telefono: cliente2.telefono.trim(),
+          data_nascita: cliente2.nascita.trim() || null,
+          codice_fiscale: cliente2.cf.trim().toUpperCase(),
+        }).eq("id", profiloEdit.cliente2Id);
+
+        if (client2Error) throw new Error("Salvataggio Cliente 2 fallito: " + client2Error.message);
+      }
+
+      const { error: vehicleError } = await supabase.from("vehicles").update({
+        veicolo: profiloEdit.veicolo.veicolo.trim(),
+        motore: profiloEdit.veicolo.motore.trim(),
+        targa: profiloEdit.veicolo.targa.trim().toUpperCase(),
+        immatricolazione: profiloEdit.veicolo.immatricolazione.trim() || null,
+        revisione: profiloEdit.veicolo.revisione.trim() || null,
+      }).eq("id", profiloEdit.id);
+
+      if (vehicleError) throw new Error("Salvataggio veicolo fallito: " + vehicleError.message);
+
+      const aggiornato = JSON.parse(JSON.stringify(profiloEdit)) as ProfiloVeicolo;
+      setProfiloVeicolo(aggiornato);
+      setProfiliArchivio((previous) => previous.map((item) => item.id === aggiornato.id ? aggiornato : item));
+      setModificaProfilo(false);
+      setProfiloEdit(null);
+      alert("Profilo aggiornato correttamente.");
+    } catch (error) {
+      console.error("Errore modifica profilo:", error);
+      alert(error instanceof Error ? error.message : "Non è stato possibile salvare le modifiche.");
+    } finally {
+      setSalvataggioProfilo(false);
+    }
+  };
 
   const mostraProfilo =
     veicoloSelezionato &&
@@ -1944,604 +2041,123 @@ export default function Veicolo() {
 
 
           <div
-
-
-
             style={{
-
-
-
               margin: "22px 18px 0",
-
-
-
               background: "#FFFFFF",
-
-
-
               borderRadius: 26,
-
-
-
               padding: 18,
-
-
-
               boxShadow: "0 4px 14px rgba(15,23,42,.08)",
-
-
-
+              position: "relative",
             }}
-
-
-
           >
-
-
-
-            <div
-
-
-
+            <button
+              type="button"
+              onClick={modificaProfilo ? annullaModificaProfilo : iniziaModificaProfilo}
+              aria-label={modificaProfilo ? "Annulla modifica profilo" : "Modifica profilo"}
               style={{
-
-
-
-                display: "flex",
-
-
-
-                gap: 16,
-
-
-
-                alignItems: "center",
-
-
-
+                position: "absolute", top: 14, right: 14, width: 38, height: 38,
+                border: "none", borderRadius: 12, background: "#EEF3F8", color: "#041E49",
+                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
               }}
-
-
-
             >
+              {modificaProfilo ? <CloseIcon /> : <PencilIcon />}
+            </button>
 
-
-
-              <div
-
-
-
-                style={{
-
-
-
-                  width: 72,
-
-
-
-                  height: 72,
-
-
-
-                  borderRadius: 18,
-
-
-
-                  background: "#F3F4F6",
-
-
-
-                  display: "flex",
-
-
-
-                  alignItems: "center",
-
-
-
-                  justifyContent: "center",
-
-
-
-                  flexShrink: 0,
-
-
-
-                }}
-
-
-
-              >
-
-
-
+            <div style={{ display: "flex", gap: 16, alignItems: "center", paddingRight: 46 }}>
+              <div style={{
+                width: 72, height: 72, borderRadius: 18, background: "#F3F4F6",
+                display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              }}>
                 <CarIcon />
-
-
-
               </div>
 
-
-
-              <div
-
-
-
-                style={{
-
-
-
-                  flex: 1,
-
-
-
-                  minWidth: 0,
-
-
-
-                }}
-
-
-
-              >
-
-
-
-                <div
-
-
-
-                  style={{
-
-
-
-                    display: "flex",
-
-
-
-                    alignItems: "center",
-
-
-
-                    justifyContent: "space-between",
-
-
-
-                    gap: 10,
-
-
-
-                  }}
-
-
-
-                >
-
-
-
-                  <h2
-
-
-
-                    style={{
-
-
-
-                      fontSize: 20,
-
-
-
-                      fontWeight: 800,
-
-
-
-                      color: "#111827",
-
-
-
-                      margin: 0,
-
-
-
-                    }}
-
-
-
-                  >
-
-
-
-                    {veicoloProfilo.veicolo || "Nessun veicolo"}
-
-
-
-                  </h2>
-
-
-
-                  {veicoloAperto && (
-
-
-
-                    <div
-
-
-
-                      style={{
-
-
-
-                        background: "#22C55E",
-
-
-
-                        color: "#FFFFFF",
-
-
-
-                        fontSize: 12,
-
-
-
-                        fontWeight: 700,
-
-
-
-                        padding: "6px 12px",
-
-
-
-                        borderRadius: 999,
-
-
-
-                        whiteSpace: "nowrap",
-
-
-
-                      }}
-
-
-
-                    >
-
-
-
-                      APERTO
-
-
-
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {modificaProfilo && profiloEdit ? (
+                  <>
+                    <input value={profiloEdit.veicolo.veicolo} onChange={(e) => aggiornaVeicoloEdit("veicolo", e.target.value)}
+                      placeholder="Descrizione veicolo" style={editInputStyle} />
+                    <input value={profiloEdit.veicolo.targa} onChange={(e) => aggiornaVeicoloEdit("targa", e.target.value.toUpperCase())}
+                      placeholder="Targa" style={{ ...editInputStyle, marginTop: 6, fontSize: 16 }} />
+                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                      <input value={profiloEdit.cliente1.nome} onChange={(e) => aggiornaClienteEdit(1, "nome", e.target.value)}
+                        placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
+                      <input value={profiloEdit.cliente1.cognome} onChange={(e) => aggiornaClienteEdit(1, "cognome", e.target.value)}
+                        placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
                     </div>
-
-
-
-                  )}
-
-
-
-                </div>
-
-
-
-                <div
-
-
-
-                  style={{
-
-
-
-                    color: "#6B7280",
-
-
-
-                    marginTop: 4,
-
-
-
-                    fontSize: 16,
-
-
-
-                  }}
-
-
-
-                >
-
-
-
-                  {veicoloProfilo.targa || "Nessuna targa"}
-
-
-
-                </div>
-
-
-
-                <div style={{ marginTop: 6, position: "relative" }}>
-
-
-
-                  {hasCliente2Profilo ? (
-
-
-
-                    <>
-
-
-
-                      <button
-
-
-
-                        type="button"
-
-
-
-                        onClick={() => setMenuClientiAperto((prev) => !prev)}
-
-
-
-                        style={{
-
-
-
-                          border: "none",
-
-
-
-                          background: "transparent",
-
-
-
-                          padding: 0,
-
-
-
-                          display: "inline-flex",
-
-
-
-                          alignItems: "center",
-
-
-
-                          gap: 5,
-
-
-
-                          fontWeight: 600,
-
-
-
-                          color: "#374151",
-
-
-
-                          fontSize: 15,
-
-
-
-                          cursor: "pointer",
-
-
-
-                        }}
-
-
-
-                      >
-
-
-
-                        {clienteVisualizzato.nome}
-
-
-
-                        <ChevronDownIcon open={menuClientiAperto} />
-
-
-
-                      </button>
-
-
-
-                      {menuClientiAperto && (
-
-
-
-                        <div
-
-
-
-                          style={{
-
-
-
-                            position: "absolute",
-
-
-
-                            top: 28,
-
-
-
-                            left: 0,
-
-
-
-                            minWidth: 180,
-
-
-
-                            background: "#FFFFFF",
-
-
-
-                            borderRadius: 14,
-
-
-
-                            boxShadow: "0 10px 24px rgba(0,0,0,.14)",
-
-
-
-                            overflow: "hidden",
-
-
-
-                            zIndex: 20,
-
-
-
-                            border: "1px solid #E5E7EB",
-
-
-
-                          }}
-
-
-
-                        >
-
-
-
-                          <ClientChoice
-
-
-
-                            nome={cliente1Profilo.nome}
-
-
-
-                            active={clienteSelezionato === 1}
-
-
-
-                            onClick={() => {
-
-
-
-                              setClienteSelezionato(1);
-
-
-
-                              setMenuClientiAperto(false);
-
-
-
-                            }}
-
-
-
-                          />
-
-
-
-                          <ClientChoice
-
-
-
-                            nome={cliente2Profilo?.nome ?? ""}
-
-
-
-                            active={clienteSelezionato === 2}
-
-
-
-                            onClick={() => {
-
-
-
-                              setClienteSelezionato(2);
-
-
-
-                              setMenuClientiAperto(false);
-
-
-
-                            }}
-
-
-
-                          />
-
-
-
+                    {profiloEdit.cliente2 && (
+                      <>
+                        <div style={{ marginTop: 10, fontSize: 11, fontWeight: 800, color: "#64748B" }}>SECONDO CLIENTE</div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                          <input value={profiloEdit.cliente2.nome} onChange={(e) => aggiornaClienteEdit(2, "nome", e.target.value)}
+                            placeholder="Nome" style={{ ...editInputStyle, fontSize: 15 }} />
+                          <input value={profiloEdit.cliente2.cognome} onChange={(e) => aggiornaClienteEdit(2, "cognome", e.target.value)}
+                            placeholder="Cognome" style={{ ...editInputStyle, fontSize: 15 }} />
                         </div>
-
-
-
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 50 }}>
+                      <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", margin: 0 }}>
+                        {veicoloProfilo.veicolo || "Nessun veicolo"}
+                      </h2>
+                      {veicoloAperto && (
+                        <div style={{
+                          marginLeft: "auto", background: "#22C55E", color: "#FFFFFF", fontSize: 12,
+                          fontWeight: 700, padding: "6px 12px", borderRadius: 999, whiteSpace: "nowrap",
+                        }}>APERTO</div>
                       )}
-
-
-
-                    </>
-
-
-
-                  ) : (
-
-
-
-                    <div
-
-
-
-                      style={{
-
-
-
-                        fontWeight: 600,
-
-
-
-                        color: "#374151",
-
-
-
-                        fontSize: 15,
-
-
-
-                      }}
-
-
-
-                    >
-
-
-
-                      {clienteVisualizzato.nome}
-
-
-
                     </div>
-
-
-
-                  )}
-
-
-
-                </div>
-
-
-
+                    <div style={{ color: "#6B7280", marginTop: 4, fontSize: 16 }}>
+                      {veicoloProfilo.targa || "Nessuna targa"}
+                    </div>
+                    <div style={{ marginTop: 6, position: "relative" }}>
+                      {hasCliente2Profilo ? (
+                        <>
+                          <button type="button" onClick={() => setMenuClientiAperto((prev) => !prev)} style={{
+                            border: "none", background: "transparent", padding: 0, display: "inline-flex",
+                            alignItems: "center", gap: 5, fontWeight: 600, color: "#374151", fontSize: 15, cursor: "pointer",
+                          }}>
+                            {clienteVisualizzato.nome} {clienteVisualizzato.cognome}
+                            <ChevronDownIcon open={menuClientiAperto} />
+                          </button>
+                          {menuClientiAperto && (
+                            <div style={{
+                              position: "absolute", top: 28, left: 0, minWidth: 180, background: "#FFFFFF",
+                              borderRadius: 14, boxShadow: "0 10px 24px rgba(0,0,0,.14)", overflow: "hidden",
+                              zIndex: 20, border: "1px solid #E5E7EB",
+                            }}>
+                              <ClientChoice nome={cliente1Profilo.nome} active={clienteSelezionato === 1} onClick={() => { setClienteSelezionato(1); setMenuClientiAperto(false); }} />
+                              <ClientChoice nome={cliente2Profilo?.nome ?? ""} active={clienteSelezionato === 2} onClick={() => { setClienteSelezionato(2); setMenuClientiAperto(false); }} />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div style={{ fontWeight: 600, color: "#374151", fontSize: 15 }}>
+                          {clienteVisualizzato.nome} {clienteVisualizzato.cognome}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
-
-
-
             </div>
 
-
-
+            {modificaProfilo && profiloEdit && (
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button type="button" onClick={annullaModificaProfilo} style={{
+                  flex: 1, height: 44, border: "1px solid #E5E7EB", borderRadius: 13,
+                  background: "#FFFFFF", color: "#475569", fontWeight: 800, cursor: "pointer",
+                }}>ANNULLA</button>
+                <button type="button" onClick={() => void salvaModificaProfilo()} disabled={salvataggioProfilo} style={{
+                  flex: 1, height: 44, border: "none", borderRadius: 13, background: "#041E49",
+                  color: "#FFFFFF", fontWeight: 800, cursor: salvataggioProfilo ? "wait" : "pointer",
+                  opacity: salvataggioProfilo ? .65 : 1,
+                }}>{salvataggioProfilo ? "SALVATAGGIO..." : "SALVA MODIFICHE"}</button>
+              </div>
+            )}
           </div>
-
-
 
           {/* =========================
 
@@ -2556,238 +2172,81 @@ export default function Veicolo() {
 
 
           <div
-
-
-
             style={{
-
-
-
               display: "grid",
-
-
-
               gridTemplateColumns: "1fr 1fr",
-
-
-
               gap: 12,
-
-
-
               padding: "18px",
-
-
-
             }}
-
-
-
           >
-
-
-
             <InfoCard
-
-
-
               icon={<RevisionIcon />}
-
-
-
               label="Revisione"
-
-
-
-              value={
-
-
-
-                dataRevisione
-
-
-
-                  ? (() => {
-
-
-
-                      const data = new Date(dataRevisione);
-
-
-
-                      if (Number.isNaN(data.getTime())) return dataRevisione;
-
-
-
-                      return new Intl.DateTimeFormat("it-IT", {
-
-
-
-                        month: "2-digit",
-
-
-
-                        year: "numeric",
-
-
-
-                      }).format(data);
-
-
-
-                    })()
-
-
-
-                  : "—"
-
-
-
-              }
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input value={profiloEdit.veicolo.revisione} onChange={(e) => aggiornaVeicoloEdit("revisione", e.target.value)}
+                  placeholder="MM/AAAA" style={cardEditInputStyle} />
+              ) : (
+                dataRevisione ? (() => {
+                  const data = new Date(dataRevisione);
+                  if (Number.isNaN(data.getTime())) return dataRevisione;
+                  return new Intl.DateTimeFormat("it-IT", { month: "2-digit", year: "numeric" }).format(data);
+                })() : "—"
+              )}
               iconColor="#2563EB"
-
-
-
             />
-
-
-
             <InfoCard
-
-
-
               icon={<KeyIcon />}
-
-
-
               label="Immatric."
-
-
-
-              value="2018"
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input value={profiloEdit.veicolo.immatricolazione} onChange={(e) => aggiornaVeicoloEdit("immatricolazione", e.target.value)}
+                  placeholder="Data immatricolazione" style={cardEditInputStyle} />
+              ) : (veicoloProfilo.immatricolazione || "—")}
               iconColor="#2563EB"
-
-
-
             />
-
-
-
             <InfoCard
-
-
-
               icon={<LocationIcon />}
-
-
-
               label="Indirizzo"
-
-
-
-              value={clienteVisualizzato.indirizzo || "—"}
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).indirizzo}
+                  onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "indirizzo", e.target.value)}
+                  placeholder="Indirizzo" style={cardEditInputStyle} />
+              ) : (clienteVisualizzato.indirizzo || "—")}
               iconColor="#374151"
-
-
-
-              href={indirizzoMaps}
-
-
-
+              href={modificaProfilo ? undefined : indirizzoMaps}
             />
-
-
-
             <InfoCard
-
-
-
               icon={<PhoneIcon />}
-
-
-
               label="Telefono"
-
-
-
-              value={clienteVisualizzato.telefono || "—"}
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input type="tel" value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).telefono}
+                  onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "telefono", e.target.value)}
+                  placeholder="Telefono" style={cardEditInputStyle} />
+              ) : (clienteVisualizzato.telefono || "—")}
               iconColor="#16A34A"
-
-
-
-              href={telefonoHref}
-
-
-
+              href={modificaProfilo ? undefined : telefonoHref}
             />
-
-
-
             <InfoCard
-
-
-
               icon={<PersonIcon />}
-
-
-
               label="Nascita"
-
-
-
-              value={clienteVisualizzato.nascita || "—"}
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).nascita}
+                  onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "nascita", e.target.value)}
+                  placeholder="Data di nascita" style={cardEditInputStyle} />
+              ) : (clienteVisualizzato.nascita || "—")}
               iconColor="#7C3AED"
-
-
-
             />
-
-
-
             <InfoCard
-
-
-
               icon={<CardIcon />}
-
-
-
               label="Cod. Fiscale"
-
-
-
-              value={clienteVisualizzato.cf || "—"}
-
-
-
+              value={modificaProfilo && profiloEdit ? (
+                <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).cf}
+                  onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "cf", e.target.value.toUpperCase())}
+                  placeholder="Codice fiscale" style={cardEditInputStyle} />
+              ) : (clienteVisualizzato.cf || "—")}
               iconColor="#64748B"
-
               valueFontSize={12}
-
-
-
             />
-
-
-
           </div>
-
-
 
           {/* =========================
 
@@ -4359,6 +3818,49 @@ export default function Veicolo() {
 
 
 
+const editInputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #CBD5E1",
+  borderRadius: 10,
+  background: "#F8FAFC",
+  padding: "7px 9px",
+  fontSize: 19,
+  fontWeight: 800,
+  color: "#111827",
+  outline: "none",
+};
+
+const cardEditInputStyle: React.CSSProperties = {
+  width: "100%",
+  boxSizing: "border-box",
+  border: "1px solid #CBD5E1",
+  borderRadius: 9,
+  background: "#F8FAFC",
+  padding: "7px 8px",
+  fontSize: 14,
+  fontWeight: 700,
+  color: "#111827",
+  outline: "none",
+};
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+      <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0 0-3L17.5 5.5a2.12 2.12 0 0 0-3 0L4 16v4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="m13.5 6.5 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+      <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function InfoCard({
 
 
@@ -4397,7 +3899,7 @@ function InfoCard({
 
 
 
-  value: string;
+  value: ReactNode;
 
 
 
