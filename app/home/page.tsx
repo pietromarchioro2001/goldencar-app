@@ -493,6 +493,9 @@ export default function Home() {
       });
 
       setLavori(lavoriCaricati);
+      const manuali = leggiArray<PagamentoManuale>("goldencar_pagamenti_manuali");
+      setPagamentiManuali(manuali);
+      setSolleciti(aggregaSolleciti(lavoriCaricati, manuali));
     }
     /* =========================
        AGENDA
@@ -506,29 +509,7 @@ export default function Home() {
     setRevisioni(
       leggiArray<Revisione>("goldencar_revisions")
     );
-    /* =========================
-       SOLLECITI
-    ========================= */
-    const manuali = leggiArray<PagamentoManuale>("goldencar_pagamenti_manuali");
-    setPagamentiManuali(manuali);
-        setSolleciti(aggregaSolleciti(
-      (jobRows ?? []).map((row: any) => {
-        const vehicle = vehiclesById.get(String(row.vehicle_id));
-        const client = primaryClientByVehicle.get(String(row.vehicle_id));
-        return {
-          jobNumber: String(row.id ?? ""),
-          createdAt: String(row.created_at ?? ""),
-          nomeCliente: [client?.nome, client?.cognome].filter(Boolean).join(" "),
-          veicolo: String(vehicle?.veicolo ?? ""),
-          targa: String(vehicle?.targa ?? ""),
-          telefono: String(client?.telefono ?? ""),
-          paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
-          paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : "DA_PAGARE",
-          status: String(row.stato ?? "").toUpperCase() === "CONCLUSO" ? "CONCLUSO" : "IN_LAVORAZIONE",
-        } as Lavoro;
-      }),
-      manuali
-    ));  /* =========================
+/* =========================
        ORDINI
        Gli ordini sono gestiti da Supabase, quindi la Home
        deve leggere la stessa sorgente usata dalla pagina ORDINI.
