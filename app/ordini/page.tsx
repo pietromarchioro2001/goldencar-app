@@ -132,22 +132,19 @@ export default function OrdiniPage() {
 
     const rawContext = sessionStorage.getItem("goldencar_nuovo_ordine");
 
-    if (rawContext) {
-
-      try {
-
-        setContext(JSON.parse(rawContext));
-
-      } catch {
-
-        setContext(null);
-
-      }
-
+    if (rawContext === "1") {
       sessionStorage.removeItem("goldencar_nuovo_ordine");
-
+      setContext(null);
+      setVeicoloSelezionato(null);
       setNuovoAperto(true);
-
+    } else if (rawContext) {
+      try {
+        setContext(JSON.parse(rawContext));
+      } catch {
+        setContext(null);
+      }
+      sessionStorage.removeItem("goldencar_nuovo_ordine");
+      setNuovoAperto(true);
     }
 
   }, []);
