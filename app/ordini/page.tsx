@@ -4,8 +4,6 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { useRouter } from "next/navigation";
-
 import BottomBar from "@/components/BottomBar";
 import { supabase } from "@/lib/supabase";
 
@@ -31,7 +29,9 @@ type Ordine = {
 
   createdAt: string;
 
-  jobNumber?: number;
+  jobId?: string;
+
+  vehicleId?: string;
 
   cliente?: string;
 
@@ -83,6 +83,10 @@ type ContextOrdine = {
 
   telefono?: string;
 
+  vehicleId?: string;
+
+  jobId?: string;
+
   veicolo?: string;
 
   targa?: string;
@@ -92,8 +96,6 @@ type ContextOrdine = {
 
 
 export default function OrdiniPage() {
-
-  const router = useRouter();
 
   const [ordini, setOrdini] = useState<Ordine[]>([]);
 
