@@ -659,30 +659,9 @@ export default function OrdiniPage() {
 
     >
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 18,
-          padding: "28px 22px 18px",
-        }}
-      >
-        <div
-          style={{
-            width: 74,
-            height: 74,
-            borderRadius: 22,
-            background: "#FFFFFF",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 4px 12px rgba(0,0,0,.08)",
-            fontSize: 13,
-            fontWeight: 700,
-            color: "#9CA3AF",
-            flexShrink: 0,
-          }}
-        ><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
+      <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+            <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
+          </div>
 
         <h1
           style={{
