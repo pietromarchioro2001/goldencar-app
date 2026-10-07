@@ -69,7 +69,12 @@ type Veicolo = {
 
   id?: string;
 
-  cliente1?: { nome?: string; telefono?: string };
+  cliente1?: {
+    nome?: string;
+    cognome?: string;
+    telefono?: string;
+    cf?: string;
+  };
 
   veicolo?: { veicolo?: string; targa?: string };
 
