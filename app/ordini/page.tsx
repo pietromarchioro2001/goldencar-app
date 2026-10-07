@@ -154,6 +154,18 @@ export default function OrdiniPage() {
 
 
 
+  useEffect(() => {
+    if (!context?.vehicleId || veicoloSelezionato || veicoli.length === 0) return;
+
+    const vehicle = veicoli.find(
+      (item) => String(item.id) === String(context.vehicleId)
+    );
+
+    if (vehicle) {
+      setVeicoloSelezionato(vehicle);
+    }
+  }, [context, veicoli, veicoloSelezionato]);
+
   const apriDaHome = () => {
     if (sessionStorage.getItem("goldencar_nuovo_ordine") === "1") {
       sessionStorage.removeItem("goldencar_nuovo_ordine");
@@ -995,41 +1007,127 @@ export default function OrdiniPage() {
             <>
 
               <div style={labelStyle}>CERCA VEICOLO</div>
-              <input
-                value={ricercaVeicolo}
-                onChange={(event) => setRicercaVeicolo(event.target.value)}
-                placeholder="Targa, veicolo, nome cliente..."
-                style={inputStyle}
-                autoFocus
-              />
 
-              {!veicoloSelezionato && (
-                <div style={{ marginTop: 8, maxHeight: 190, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 14, background: "#FFFFFF" }}>
-                  {veicoli.filter((item) => {
-                    const q = ricercaVeicolo.trim().toLowerCase();
-                    if (!q) return true;
-                    return [item.veicolo?.targa, item.veicolo?.veicolo, item.cliente1?.nome]
-                      .some((value) => String(value || "").toLowerCase().includes(q));
-                  }).slice(0, 20).map((item, index) => (
-                    <button
-                      key={String(item.id || index)}
-                      type="button"
-                      onClick={() => {
-                        setVeicoloSelezionato(item);
-                        setRicercaVeicolo("");
-                      }}
-                      style={{ width: "100%", border: 0, borderBottom: "1px solid #F1F5F9", background: "#FFFFFF", padding: "11px 13px", textAlign: "left", cursor: "pointer" }}
-                    >
-                      <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
-                        {item.veicolo?.veicolo || "Veicolo"}
+              <div style={{ position: "relative" }}>
+                <input
+                  value={ricercaVeicolo}
+                  onChange={(event) => setRicercaVeicolo(event.target.value)}
+                  placeholder="Targa, cliente o telefono"
+                  style={inputStyle}
+                  autoFocus
+                />
+
+                {ricercaVeicolo.trim() && !veicoloSelezionato && (
+                  <div
+                    style={{
+                      position: "relative",
+                      zIndex: 20,
+                      marginTop: 8,
+                      borderRadius: 18,
+                      background: "#FFFFFF",
+                      boxShadow: "0 8px 24px rgba(15,23,42,.14)",
+                      overflow: "hidden",
+                      border: "1px solid #E5E7EB",
+                      maxHeight: 230,
+                      overflowY: "auto",
+                    }}
+                  >
+                    {veicoli
+                      .filter((item) => {
+                        const q = ricercaVeicolo.trim().toLowerCase();
+                        const valori = [
+                          item.veicolo?.targa,
+                          item.veicolo?.veicolo,
+                          item.cliente1?.nome,
+                          item.cliente1?.telefono,
+                        ]
+                          .filter(Boolean)
+                          .map((value) => String(value).toLowerCase());
+
+                        return valori.some((value) => value.includes(q));
+                      })
+                      .slice(0, 20)
+                      .map((item, index, risultati) => (
+                        <button
+                          key={String(item.id || index)}
+                          type="button"
+                          onClick={() => {
+                            setVeicoloSelezionato(item);
+                            setRicercaVeicolo("");
+                          }}
+                          style={{
+                            width: "100%",
+                            border: "none",
+                            borderBottom:
+                              index < risultati.length - 1
+                                ? "1px solid #E5E7EB"
+                                : "none",
+                            background: "#FFFFFF",
+                            padding: "13px 15px",
+                            textAlign: "left",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr auto",
+                              gap: 12,
+                              alignItems: "center",
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 14,
+                                  fontWeight: 900,
+                                  color: "#111827",
+                                }}
+                              >
+                                {item.veicolo?.veicolo || "Veicolo"}
+                              </div>
+                              <div
+                                style={{
+                                  marginTop: 3,
+                                  fontSize: 12,
+                                  color: "#64748B",
+                                }}
+                              >
+                                {item.veicolo?.targa || "—"} ·{" "}
+                                {item.cliente1?.nome || "Cliente"}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+
+                    {veicoli.filter((item) => {
+                      const q = ricercaVeicolo.trim().toLowerCase();
+                      return [
+                        item.veicolo?.targa,
+                        item.veicolo?.veicolo,
+                        item.cliente1?.nome,
+                        item.cliente1?.telefono,
+                      ]
+                        .filter(Boolean)
+                        .some((value) =>
+                          String(value).toLowerCase().includes(q)
+                        );
+                    }).length === 0 && (
+                      <div
+                        style={{
+                          padding: "16px 15px",
+                          fontSize: 13,
+                          color: "#64748B",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Nessun veicolo trovato.
                       </div>
-                      <div style={{ marginTop: 3, fontSize: 12, color: "#64748B" }}>
-                        {item.veicolo?.targa || "—"} · {item.cliente1?.nome || "Cliente"}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
 
               {veicoloSelezionato && (
                 <div style={{ ...linkedVehicleStyle, marginTop: 10 }}>
