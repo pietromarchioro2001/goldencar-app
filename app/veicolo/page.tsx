@@ -1088,15 +1088,11 @@ export default function Veicolo() {
       "goldencar_nuovo_ordine",
 
       JSON.stringify({
-
-        nomeCliente: clienteVisualizzato.nome,
-
+        nomeCliente: clienteVisualizzato.nome + (clienteVisualizzato.cognome ? " " + clienteVisualizzato.cognome : ""),
         telefono: clienteVisualizzato.telefono,
-
         veicolo: veicoloProfilo.veicolo,
-
         targa: veicoloProfilo.targa,
-
+        vehicleId: profiloVeicolo?.id,
       })
 
     );
