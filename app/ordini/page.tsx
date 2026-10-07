@@ -659,7 +659,8 @@ export default function OrdiniPage() {
 
     >
 
-      <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+        <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
 
