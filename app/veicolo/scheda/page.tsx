@@ -1110,78 +1110,58 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const salvaOrdineProdotti = (lavoro: JobDraft) => {
-    const daOrdinare = lavoro.products.filter(
-      (product) => product.orderRequested && product.name.trim()
-    );
-    if (!daOrdinare.length) return;
+  const salvaOrdineProdotti = async (lavoro: JobDraft) => {
+    const daOrdinare = lavoro.products.filter((product) => product.orderRequested && product.name.trim());
+    if (!daOrdinare.length || !lavoro.jobId || !lavoro.vehicleId) return;
 
-    type OrdineSalvato = {
-      id: string;
-      numero: string;
-      createdAt: string;
-      jobNumber: number;
-      cliente?: string;
-      telefono?: string;
-      targa?: string;
-      veicolo?: string;
-      prodotti: { name: string; quantity?: string; details: string }[];
-      supplierId?: string;
-      supplierName?: string;
-      supplierPhone?: string;
-    };
-
-    let ordini: OrdineSalvato[] = [];
-    try {
-      const raw = localStorage.getItem("goldencar_orders");
-      const parsed = raw ? JSON.parse(raw) : [];
-      ordini = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      ordini = [];
-    }
-
-    const existing = ordini.find((ordine) => ordine.jobNumber === lavoro.jobNumber);
     const nuoviProdotti = daOrdinare.map((product) => ({
       name: product.name.trim(),
       quantity: product.quantity || "1",
       details: product.details.trim(),
     }));
 
-    if (existing) {
-      const merged = [...(existing.prodotti || [])];
+    try {
+      const { data: existing, error: findError } = await supabase
+        .from("orders")
+        .select("id, prodotti")
+        .eq("job_id", lavoro.jobId)
+        .maybeSingle();
+
+      if (findError) throw findError;
+
+      const precedenti = existing && Array.isArray(existing.prodotti) ? existing.prodotti : [];
+      const merged = [...precedenti];
+
       for (const product of nuoviProdotti) {
         const index = merged.findIndex(
-          (item) => item.name.toLowerCase() === product.name.toLowerCase()
+          (item: any) => String(item?.name || "").toLowerCase() === product.name.toLowerCase()
         );
         if (index >= 0) merged[index] = product;
         else merged.push(product);
       }
-      existing.prodotti = merged;
-      existing.cliente = lavoro.nomeCliente;
-      existing.telefono = lavoro.telefono;
-      existing.targa = lavoro.targa;
-      existing.veicolo = lavoro.veicolo;
-    } else {
-      const nextNumber =
-        ordini.reduce((max, ordine) => {
-          const n = Number(String(ordine.numero || "").replace(/\D/g, ""));
-          return Number.isFinite(n) ? Math.max(max, n) : max;
-        }, 0) + 1;
 
-      ordini.unshift({
-        id: `ordine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        numero: String(nextNumber).padStart(3, "0"),
-        createdAt: new Date().toISOString(),
-        jobNumber: lavoro.jobNumber,
+      const payload = {
+        job_id: lavoro.jobId,
+        vehicle_id: lavoro.vehicleId,
         cliente: lavoro.nomeCliente,
         telefono: lavoro.telefono,
         targa: lavoro.targa,
         veicolo: lavoro.veicolo,
-        prodotti: nuoviProdotti,
-      });
-    }
+        prodotti: merged,
+      };
 
-    localStorage.setItem("goldencar_orders", JSON.stringify(ordini));
+      if (existing?.id) {
+        const { error } = await supabase.from("orders").update(payload).eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const newId = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+        const { error } = await supabase.from("orders").insert({ id: newId, ...payload });
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error("Errore salvataggio ordine Supabase:", error);
+      alert("Ordine non salvato.");
+    }
   };
 
   const generateAndOpenPdf = async (lavoro: JobDraft) => {
@@ -1282,7 +1262,8 @@ export default function SchedaLavoroPage() {
     const details = {
       nomeCliente: next.nomeCliente, indirizzo: next.indirizzo, telefono: next.telefono, codiceFiscale: next.codiceFiscale,
       veicolo: next.veicolo, targa: next.targa, types: next.types, products: next.products, media: next.media,
-      tagliando: next.tagliando, freni: next.freni, pneumatici: next.pneumatici, pdfUrl: next.pdfUrl || "",
+      tagliando: next.tagliando, freni: next.freni, pneumatici: next.pneumatici,
+      pdfUrl: next.pdfUrl || "", pdfR2Key: next.pdfR2Key || "",
     };
     const parsedPayment = next.paymentAmount.trim() ? Number(next.paymentAmount.replace(",", ".")) : null;
 
@@ -1298,7 +1279,8 @@ export default function SchedaLavoroPage() {
 
     if (error) { console.error("Errore salvataggio scheda Supabase:", error); alert(`Impossibile salvare la scheda: ${error.message}`); return; }
 
-    salvaOrdineProdotti(next); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+    await salvaOrdineProdotti(next);
+    sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
     setDraft(next); setSaved(true);
     if (conclude) await generateAndOpenPdf(next);
   };
