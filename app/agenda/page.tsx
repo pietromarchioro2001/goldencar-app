@@ -16,7 +16,9 @@ export default function Agenda() {
   const [month, setMonth] = useState(today.getMonth());
   const [year, setYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  type Appointment = { id: string; date: string; time: string; description: string };
   const [showModal, setShowModal] = useState(false);
+  const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
   const [selectedHour, setSelectedHour] = useState(8);
   const [selectedMinute, setSelectedMinute] = useState(0);
 
@@ -41,9 +43,9 @@ export default function Agenda() {
     return { cells: grid };
   }, [month, year]);
 
-  type Appointment = { id: string; date: string; time: string; description: string };
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const dateKey = (y: number, m: number, d: number) =>
     y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
@@ -73,6 +75,36 @@ export default function Agenda() {
     setAppointments((data || []) as Appointment[]);
   }
 
+  function openNewAppointment(day: number, hour: number) {
+    setEditingAppointment(null);
+    setSelectedDay(day);
+    setSelectedHour(hour);
+    setSelectedMinute(0);
+    setDescription("");
+    setShowModal(true);
+  }
+
+  function openEditAppointment(app: Appointment) {
+    const [hour, minute] = app.time.slice(0, 5).split(":").map(Number);
+    const [appYear, appMonth, appDay] = app.date.split("-").map(Number);
+
+    setEditingAppointment(app);
+    setYear(appYear);
+    setMonth(appMonth - 1);
+    setSelectedDay(appDay);
+    setSelectedHour(hour);
+    setSelectedMinute(minute);
+    setDescription(app.description);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    if (saving || deleting) return;
+    setShowModal(false);
+    setEditingAppointment(null);
+    setDescription("");
+  }
+
   async function saveAppointment() {
     if (selectedDay === null || !description.trim()) {
       alert("Inserisci la descrizione dell'appuntamento.");
@@ -80,32 +112,94 @@ export default function Agenda() {
     }
 
     setSaving(true);
-    const { data, error } = await supabase
+
+    const date = dateKey(year, month, selectedDay);
+    const time =
+      String(selectedHour).padStart(2, "0") +
+      ":" +
+      String(selectedMinute).padStart(2, "0") +
+      ":00";
+
+    if (editingAppointment) {
+      const { data, error } = await supabase
+        .from("appointments")
+        .update({ date, time, description: description.trim() })
+        .eq("id", editingAppointment.id)
+        .select("id, date, time, description")
+        .single();
+
+      if (error) {
+        console.error("Errore modifica appuntamento:", error);
+        alert("Impossibile modificare l'appuntamento.");
+        setSaving(false);
+        return;
+      }
+
+      setAppointments((current) =>
+        current
+          .map((appointment) =>
+            appointment.id === editingAppointment.id ? (data as Appointment) : appointment
+          )
+          .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+      );
+    } else {
+      const { data, error } = await supabase
+        .from("appointments")
+        .insert({
+          id: crypto.randomUUID(),
+          date,
+          time,
+          description: description.trim(),
+        })
+        .select("id, date, time, description")
+        .single();
+
+      if (error) {
+        console.error("Errore salvataggio appuntamento:", error);
+        alert("Impossibile salvare l'appuntamento.");
+        setSaving(false);
+        return;
+      }
+
+      setAppointments((current) =>
+        [...current, data as Appointment].sort(
+          (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+        )
+      );
+    }
+
+    setDescription("");
+    setShowModal(false);
+    setEditingAppointment(null);
+    setSaving(false);
+  }
+
+  async function deleteAppointment() {
+    if (!editingAppointment) return;
+
+    if (!window.confirm("Eliminare definitivamente questo appuntamento?")) return;
+
+    setDeleting(true);
+
+    const { error } = await supabase
       .from("appointments")
-      .insert({
-        id: crypto.randomUUID(),
-        date: dateKey(year, month, selectedDay),
-        time: String(selectedHour).padStart(2, "0") + ":" + String(selectedMinute).padStart(2, "0") + ":00",
-        description: description.trim(),
-      })
-      .select("id, date, time, description")
-      .single();
+      .delete()
+      .eq("id", editingAppointment.id);
 
     if (error) {
-      console.error("Errore salvataggio appuntamento:", error);
-      alert("Impossibile salvare l'appuntamento.");
-      setSaving(false);
+      console.error("Errore eliminazione appuntamento:", error);
+      alert("Impossibile eliminare l'appuntamento.");
+      setDeleting(false);
       return;
     }
 
     setAppointments((current) =>
-      [...current, data as Appointment].sort(
-        (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
-      )
+      current.filter((appointment) => appointment.id !== editingAppointment.id)
     );
-    setDescription("");
     setShowModal(false);
-    setSaving(false);
+    setEditingAppointment(null);
+    setDescription("");
+    setDeleting(false);
   }
 
   function previousMonth() {
@@ -323,40 +417,35 @@ export default function Agenda() {
               );
 
               return (
-                <button
+                <div
                   key={hour}
-                  onClick={() => {
-                    setSelectedHour(hour);
-                    setSelectedMinute(0);
-                    setDescription("");
-                    setShowModal(true);
-                  }}
                   style={{
                     width: "100%",
-                    height: 64,
-                    border: "none",
-                    borderBottom:
-                      hour !== 23 ? "1px solid #E5E7EB" : "none",
+                    minHeight: 64,
+                    borderBottom: hour !== 23 ? "1px solid #E5E7EB" : "none",
                     background: "#FFFFFF",
                     display: "flex",
-                    padding: 0,
-                    cursor: "pointer",
                   }}
                 >
-                  <div
+                  <button
+                    onClick={() => openNewAppointment(selectedDay, hour)}
                     style={{
                       width: 72,
+                      minHeight: 64,
+                      border: "none",
+                      background: "#FFFFFF",
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "flex-start",
-                      paddingTop: 10,
+                      padding: "10px 0 0",
                       fontSize: 13,
                       fontWeight: 700,
                       color: "#64748B",
+                      cursor: "pointer",
                     }}
                   >
                     {String(hour).padStart(2, "0")}:00
-                  </div>
+                  </button>
 
                   <div
                     style={{
@@ -366,20 +455,22 @@ export default function Agenda() {
                     }}
                   >
                     {apps.map((app) => (
-                      <div
+                      <button
                         key={app.id}
+                        onClick={() => openEditAppointment(app)}
                         style={{
-                          position: "absolute",
-                          left: 8,
-                          right: 8,
-                          top: 6,
-                          bottom: 6,
+                          width: "100%",
+                          minHeight: 52,
+                          border: "none",
                           borderRadius: 14,
                           background: "#D4AF37",
                           padding: "8px 12px",
                           display: "flex",
                           flexDirection: "column",
                           justifyContent: "center",
+                          alignItems: "flex-start",
+                          textAlign: "left",
+                          cursor: "pointer",
                         }}
                       >
                         <span
@@ -400,10 +491,10 @@ export default function Agenda() {
                         >
                           {app.description}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -421,7 +512,7 @@ export default function Agenda() {
             justifyContent: "center",
             zIndex: 1000,
           }}
-          onClick={() => setShowModal(false)}
+          onClick={closeModal}
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -452,8 +543,37 @@ export default function Agenda() {
                 color: "#111827",
               }}
             >
-              NUOVO APPUNTAMENTO
+              {editingAppointment ? "MODIFICA APPUNTAMENTO" : "NUOVO APPUNTAMENTO"}
             </h2>
+            {editingAppointment && (
+              <button
+                onClick={() => void deleteAppointment()}
+                disabled={deleting || saving}
+                aria-label="Elimina appuntamento"
+                title="Elimina appuntamento"
+                style={{
+                  width: 42,
+                  height: 42,
+                  flexShrink: 0,
+                  border: "none",
+                  borderRadius: 13,
+                  background: "#FEE2E2",
+                  color: "#B91C1C",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: deleting || saving ? "default" : "pointer",
+                }}
+              >
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14H6L5 6" />
+                  <path d="M10 11v6" />
+                  <path d="M14 11v6" />
+                  <path d="M9 6V4h6v2" />
+                </svg>
+              </button>
+            )}
 
             <p
               style={{
