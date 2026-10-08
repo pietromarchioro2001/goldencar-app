@@ -11,7 +11,8 @@ type Lavoro = {
   targa?: string;
   telefono?: string;
   paymentAmount?: string;
-  paymentStatus?: "DA_PAGARE" | "PAGATO";
+  paymentPaidAmount?: string;
+  paymentStatus?: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   types?: string[];
   works?: string[] | string;
   status?: "IN_LAVORAZIONE" | "CONCLUSO";
@@ -53,7 +54,8 @@ type PagamentoManuale = {
   targa?: string;
   descrizione: string;
   importo: string;
-  stato: "DA_PAGARE" | "PAGATO";
+  paidAmount: string;
+  stato: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   createdAt: string;
 };
 type PagamentoDettaglio = {
@@ -63,8 +65,10 @@ type PagamentoDettaglio = {
   telefono?: string;
   descrizione: string;
   importo: number;
-  stato: "DA_PAGARE" | "PAGATO";
+  stato: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   jobNumber?: number | string;
+  totale?: number;
+  pagato?: number;
   manuale?: boolean;
 };
 type ClienteRicerca = {
@@ -161,41 +165,35 @@ function aggregaSolleciti(lavori: Lavoro[], manuali: PagamentoManuale[]): Sollec
   const add = (item: { clientKey: string; nomeCliente: string; telefono?: string; amount: number }) => {
     if (item.amount <= 0) return;
     const current = map.get(item.clientKey);
-    if (current) {
-      current.importo = String(parseImporto(current.importo) + item.amount);
-    } else {
-      map.set(item.clientKey, {
-        clientKey: item.clientKey,
-        nomeCliente: item.nomeCliente,
-        telefono: item.telefono || "",
-        importo: String(item.amount),
-      });
-    }
+    if (current) current.importo = String(parseImporto(current.importo) + item.amount);
+    else map.set(item.clientKey, {
+      clientKey: item.clientKey,
+      nomeCliente: item.nomeCliente,
+      telefono: item.telefono || "",
+      importo: String(item.amount),
+    });
   };
+
   for (const lavoro of lavori) {
-    if (lavoro.paymentStatus !== "DA_PAGARE") continue;
-    const amount = parseImporto(lavoro.paymentAmount);
-    if (amount <= 0) continue;
+    if (lavoro.paymentStatus === "PAGATO") continue;
+    const totale = parseImporto(lavoro.paymentAmount);
+    const pagato = parseImporto(lavoro.paymentPaidAmount);
+    const residuo = Math.max(0, totale - pagato);
+    if (residuo <= 0) continue;
     const nome = lavoro.nomeCliente || "Cliente";
-    add({
-      clientKey: makeClientKey(nome, lavoro.telefono),
-      nomeCliente: nome,
-      telefono: lavoro.telefono,
-      amount,
-    });
+    add({ clientKey: makeClientKey(nome, lavoro.telefono), nomeCliente: nome, telefono: lavoro.telefono, amount: residuo });
   }
+
   for (const pagamento of manuali) {
-    if (pagamento.stato !== "DA_PAGARE") continue;
-    add({
-      clientKey: pagamento.clientKey,
-      nomeCliente: pagamento.nomeCliente,
-      telefono: pagamento.telefono,
-      amount: parseImporto(pagamento.importo),
-    });
+    if (pagamento.stato === "PAGATO") continue;
+    const totale = parseImporto(pagamento.importo);
+    const pagato = parseImporto(pagamento.paidAmount);
+    const residuo = Math.max(0, totale - pagato);
+    if (residuo <= 0) continue;
+    add({ clientKey: pagamento.clientKey, nomeCliente: pagamento.nomeCliente, telefono: pagamento.telefono, amount: residuo });
   }
-  return Array.from(map.values()).sort((a, b) =>
-    (a.nomeCliente || "").localeCompare(b.nomeCliente || "", "it")
-  );
+
+  return Array.from(map.values()).sort((a,b) => (a.nomeCliente || "").localeCompare(b.nomeCliente || "", "it"));
 }
 export default function Home() {
   const router = useRouter();
@@ -213,6 +211,14 @@ export default function Home() {
   const [nuovoClienteTelefono, setNuovoClienteTelefono] = useState("");
   const [nuovoPagamentoDescrizione, setNuovoPagamentoDescrizione] = useState("");
   const [nuovoPagamentoImporto, setNuovoPagamentoImporto] = useState("");
+  const [pagamentoInCorso, setPagamentoInCorso] = useState<{
+    clientKey: string;
+    paymentId: string;
+    descrizione: string;
+    residuo: number;
+    manuale: boolean;
+  } | null>(null);
+  const [importoPagamento, setImportoPagamento] = useState("");
   const [ordini, setOrdini] = useState<Ordine[]>([]);
   const [modal, setModal] = useState<ModalType>(null);
   const [listening, setListening] = useState(false);
@@ -407,7 +413,7 @@ export default function Home() {
     ========================= */
     const { data: jobRows, error: jobsError } = await supabase
       .from("jobs")
-      .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_status, dettagli")
+      .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli")
       .order("created_at", { ascending: false });
 
     if (jobsError) {
@@ -485,11 +491,12 @@ export default function Home() {
           targa: String(vehicle?.targa ?? ""),
           telefono: String(client?.telefono ?? ""),
           paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
+          paymentPaidAmount: row.payment_paid_amount != null ? String(row.payment_paid_amount) : "0",
           paymentStatus:
             row.payment_status === "PAGATO"
               ? "PAGATO"
               : row.payment_status === "PARZIALE"
-                ? "DA_PAGARE"
+                ? "PARZIALE"
                 : "DA_PAGARE",
           types: Array.isArray(dettagli.types)
             ? dettagli.types
@@ -513,7 +520,7 @@ export default function Home() {
     ========================= */
     const { data: paymentRows, error: paymentsError } = await supabase
       .from("payments")
-      .select("id, client_id, vehicle_id, description, amount, status, created_at")
+      .select("id, client_id, vehicle_id, description, amount, paid_amount, status, created_at")
       .eq("status", "DA_PAGARE")
       .order("created_at", { ascending: false });
 
@@ -534,7 +541,8 @@ export default function Home() {
         const client=clientsById.get(String(row.client_id));
         const vehicle=vehiclesById.get(String(row.vehicle_id));
         const nomeCliente=[client?.nome,client?.cognome].filter(Boolean).join(" ").trim() || "Cliente";
-        return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),stato:"DA_PAGARE",createdAt:String(row.created_at??"")};
+        const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
+        return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
       });
       setPagamentiManuali(manuali);
       setSolleciti(aggregaSolleciti(lavori, manuali));
@@ -715,73 +723,171 @@ export default function Home() {
       "noopener,noreferrer"
     );
   };
-  const aggiornaStatiPagamento = async (clientKey: string, paymentId?: string, pagaTutto = false) => {
+  const aggiornaStatiPagamento = async (
+    clientKey: string,
+    paymentId?: string,
+    pagaTutto = false,
+    importoDaPagare?: number
+  ) => {
     const targetJobs = lavori.filter((l) => {
       const key = makeClientKey(l.nomeCliente || "Cliente", l.telefono);
-      return key === clientKey && l.paymentStatus === "DA_PAGARE" && (pagaTutto || String(l.jobNumber) === String(paymentId));
+      return key === clientKey && l.paymentStatus !== "PAGATO" &&
+        (pagaTutto || String(l.jobNumber) === String(paymentId));
     });
-    const targetManuali = pagamentiManuali.filter((p) => p.clientKey === clientKey && p.stato === "DA_PAGARE" && (pagaTutto || p.id === paymentId));
+    const targetManuali = pagamentiManuali.filter((p) =>
+      p.clientKey === clientKey && p.stato !== "PAGATO" &&
+      (pagaTutto || p.id === paymentId)
+    );
+
     try {
-      if (targetJobs.length) {
-        const { error } = await supabase.from("jobs").update({payment_status:"PAGATO"}).in("id", targetJobs.map(l=>String(l.jobNumber)));
-        if (error) throw error;
+      if (pagaTutto) {
+        for (const lavoro of targetJobs) {
+          const { error } = await supabase.from("jobs").update({
+            payment_status: "PAGATO",
+            payment_paid_amount: parseImporto(lavoro.paymentAmount),
+          }).eq("id", String(lavoro.jobNumber));
+          if (error) throw error;
+        }
+        for (const pagamento of targetManuali) {
+          const { error } = await supabase.from("payments").update({
+            status: "PAGATO",
+            paid_amount: parseImporto(pagamento.importo),
+            paid_at: new Date().toISOString(),
+          }).eq("id", pagamento.id);
+          if (error) throw error;
+        }
+      } else {
+        const amount = Math.max(0, Number(importoDaPagare || 0));
+        if (amount <= 0) throw new Error("Inserisci un importo valido.");
+
+        if (targetJobs.length) {
+          const lavoro = targetJobs[0];
+          const totale = parseImporto(lavoro.paymentAmount);
+          const giaPagato = parseImporto(lavoro.paymentPaidAmount);
+          const residuo = Math.max(0, totale - giaPagato);
+          if (amount > residuo + 0.001) throw new Error("L'importo supera il residuo da pagare.");
+          const nuovoPagato = Math.min(totale, giaPagato + amount);
+          const { error } = await supabase.from("jobs").update({
+            payment_paid_amount: nuovoPagato,
+            payment_status: nuovoPagato >= totale - 0.001 ? "PAGATO" : "PARZIALE",
+          }).eq("id", String(lavoro.jobNumber));
+          if (error) throw error;
+        } else if (targetManuali.length) {
+          const pagamento = targetManuali[0];
+          const totale = parseImporto(pagamento.importo);
+          const giaPagato = parseImporto(pagamento.paidAmount);
+          const residuo = Math.max(0, totale - giaPagato);
+          if (amount > residuo + 0.001) throw new Error("L'importo supera il residuo da pagare.");
+          const nuovoPagato = Math.min(totale, giaPagato + amount);
+          const { error } = await supabase.from("payments").update({
+            paid_amount: nuovoPagato,
+            status: nuovoPagato >= totale - 0.001 ? "PAGATO" : "PARZIALE",
+            paid_at: nuovoPagato >= totale - 0.001 ? new Date().toISOString() : null,
+          }).eq("id", pagamento.id);
+          if (error) throw error;
+        }
       }
-      if (targetManuali.length) {
-        const { error } = await supabase.from("payments").update({status:"PAGATO",paid_at:new Date().toISOString()}).in("id", targetManuali.map(p=>p.id));
-        if (error) throw error;
-      }
+
       await caricaDati();
+      setPagamentoInCorso(null);
+      setImportoPagamento("");
       setDettaglioSollecito(null);
-    } catch(error) {
-      console.error("Errore aggiornamento pagamento:",error);
+    } catch (error) {
+      console.error("Errore aggiornamento pagamento:", error);
       alert(error instanceof Error ? error.message : "Errore durante l'aggiornamento del pagamento.");
     }
   };
-
   const pagaTuttoCliente = (sollecito: Sollecito) => {
-    aggiornaStatiPagamento(sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono), undefined, true);
+    aggiornaStatiPagamento(
+      sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono),
+      undefined,
+      true
+    );
+  };
+
+  const apriPagamentoParziale = (pagamento: PagamentoDettaglio) => {
+    setImportoPagamento("");
+    setPagamentoInCorso({
+      clientKey: pagamento.clientKey,
+      paymentId: pagamento.id,
+      descrizione: pagamento.descrizione,
+      residuo: pagamento.importo,
+      manuale: Boolean(pagamento.manuale),
+    });
+  };
+
+  const confermaPagamentoParziale = () => {
+    if (!pagamentoInCorso) return;
+    const amount = parseImporto(importoPagamento);
+    if (amount <= 0) {
+      alert("Inserisci un importo valido.");
+      return;
+    }
+    if (amount > pagamentoInCorso.residuo + 0.001) {
+      alert("L'importo supera il residuo da pagare.");
+      return;
+    }
+    void aggiornaStatiPagamento(
+      pagamentoInCorso.clientKey,
+      pagamentoInCorso.paymentId,
+      false,
+      amount
+    );
   };
   const pagamentiCliente = (sollecito: Sollecito): PagamentoDettaglio[] => {
     const key = sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono);
     const result: PagamentoDettaglio[] = [];
+
     for (const lavoro of lavori) {
       const nome = lavoro.nomeCliente || "Cliente";
-      if (makeClientKey(nome, lavoro.telefono) !== key || lavoro.paymentStatus !== "DA_PAGARE") continue;
-      const amount = parseImporto(lavoro.paymentAmount);
-      if (amount <= 0) continue;
+      if (makeClientKey(nome, lavoro.telefono) !== key || lavoro.paymentStatus === "PAGATO") continue;
+      const totale = parseImporto(lavoro.paymentAmount);
+      const pagato = parseImporto(lavoro.paymentPaidAmount);
+      const residuo = Math.max(0, totale - pagato);
+      if (residuo <= 0) continue;
+
       result.push({
         id: String(lavoro.jobNumber),
         clientKey: key,
         nomeCliente: nome,
         telefono: lavoro.telefono,
-        descrizione: `Scheda ${lavoro.jobNumber}${
-          (() => {
-            const worksText = Array.isArray(lavoro.works)
-              ? lavoro.works.filter(Boolean).join(" · ").trim()
-              : String(lavoro.works || "").trim();
-            return worksText ? ` · ${worksText}` : "";
-          })()
-        }`,
-        importo: amount,
-        stato: "DA_PAGARE",
+        descrizione: `Scheda ${lavoro.jobNumber}${(() => {
+          const worksText = Array.isArray(lavoro.works)
+            ? lavoro.works.filter(Boolean).join(" · ").trim()
+            : String(lavoro.works || "").trim();
+          return worksText ? ` · ${worksText}` : "";
+        })()}`,
+        importo: residuo,
+        totale,
+        pagato,
+        stato: lavoro.paymentStatus === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
         jobNumber: lavoro.jobNumber,
       });
     }
+
     for (const pagamento of pagamentiManuali) {
-      if (pagamento.clientKey !== key || pagamento.stato !== "DA_PAGARE") continue;
+      if (pagamento.clientKey !== key || pagamento.stato === "PAGATO") continue;
+      const totale = parseImporto(pagamento.importo);
+      const pagato = parseImporto(pagamento.paidAmount);
+      const residuo = Math.max(0, totale - pagato);
+      if (residuo <= 0) continue;
+
       result.push({
         id: pagamento.id,
         clientKey: key,
         nomeCliente: pagamento.nomeCliente,
         telefono: pagamento.telefono,
         descrizione: pagamento.descrizione,
-        importo: parseImporto(pagamento.importo),
-        stato: "DA_PAGARE",
+        importo: residuo,
+        totale,
+        pagato,
+        stato: pagamento.stato,
         manuale: true,
       });
     }
     return result;
   };
+
   const clientiDisponibili = useMemo<ClienteRicerca[]>(() => {
     const map = new Map<string, ClienteRicerca>();
 
@@ -850,7 +956,7 @@ export default function Home() {
         if(error) throw error;
         clientId=String(created.id);
       }
-      const {error:paymentError}=await supabase.from("payments").insert({id:crypto.randomUUID(),client_id:clientId,description:descrizione,amount:importo,status:"DA_PAGARE"});
+      const {error:paymentError}=await supabase.from("payments").insert({id:crypto.randomUUID(),client_id:clientId,description:descrizione,amount:importo,paid_amount:0,status:"DA_PAGARE"});
       if(paymentError) throw paymentError;
       setNuovoPagamentoAperto(false); setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
@@ -1302,9 +1408,9 @@ export default function Home() {
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  aggiornaStatiPagamento(pagamento.clientKey, pagamento.id);
+                  apriPagamentoParziale(pagamento);
                 }}
-                aria-label="Segna pagamento come pagato"
+                aria-label="Registra un pagamento"
                 style={{
                   width: 28,
                   height: 28,
@@ -1342,6 +1448,42 @@ export default function Home() {
             <span>TOTALE DA PAGARE</span>
             <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum, item) => sum + item.importo, 0))}</span>
           </div>
+        </Modal>
+      )}
+      {pagamentoInCorso && (
+        <Modal
+          title="REGISTRA PAGAMENTO"
+          onClose={() => {
+            setPagamentoInCorso(null);
+            setImportoPagamento("");
+          }}
+        >
+          <div style={{ background: "#FFFFFF", borderRadius: 16, padding: 14 }}>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
+              {pagamentoInCorso.descrizione}
+            </div>
+            <div style={{ fontSize: 12, color: "#64748B", marginTop: 5 }}>
+              Residuo da pagare: {formatEuro(pagamentoInCorso.residuo)}
+            </div>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 4, marginBottom: 6 }}>
+            IMPORTO PAGATO
+          </div>
+          <input
+            value={importoPagamento}
+            onChange={(e) => setImportoPagamento(e.target.value)}
+            inputMode="decimal"
+            autoFocus
+            placeholder={formatEuro(pagamentoInCorso.residuo)}
+            style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 17, background: "#FFFFFF" }}
+          />
+          <button
+            type="button"
+            onClick={confermaPagamentoParziale}
+            style={{ width: "100%", height: 50, border: 0, borderRadius: 16, background: "#D4AF37", color: "#111827", fontWeight: 900, marginTop: 12 }}
+          >
+            CONFERMA
+          </button>
         </Modal>
       )}
       {nuovoPagamentoAperto && (
