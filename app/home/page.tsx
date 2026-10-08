@@ -213,6 +213,10 @@ export default function Home() {
   const [fornitori, setFornitori] = useState<{id:string;nome:string;whatsapp:string}[]>([]);
   const [veicoliOrdini, setVeicoliOrdini] = useState<any[]>([]);
   const [ordineListening, setOrdineListening] = useState(false);
+  const [rubricaFornitoreAperta, setRubricaFornitoreAperta] = useState(false);
+  const [fornitoreEditId, setFornitoreEditId] = useState("");
+  const [fornitoreEditNome, setFornitoreEditNome] = useState("");
+  const [fornitoreEditWhatsapp, setFornitoreEditWhatsapp] = useState("");
   const [checkInVideoRef = useRef<HTMLVideoElement>(null);
   const checkInStreamRef = useRef<MediaStream | null>(null);
 
@@ -1048,6 +1052,27 @@ export default function Home() {
     if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
     await caricaDati();
   };
+  const salvaFornitoreHome = async () => {
+    const nome = fornitoreEditNome.trim();
+    const whatsapp = fornitoreEditWhatsapp.replace(/\D/g, "");
+    if (!nome || !whatsapp) { alert("Inserisci nome e numero WhatsApp."); return; }
+    try {
+      if (fornitoreEditId) {
+        const { error } = await supabase.from("suppliers").update({ nome, whatsapp }).eq("id", fornitoreEditId);
+        if (error) throw error;
+      } else {
+        const id = `fornitore-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        const { error } = await supabase.from("suppliers").insert({ id, nome, whatsapp });
+        if (error) throw error;
+      }
+      setRubricaFornitoreAperta(false);
+      setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp("");
+      await caricaDati();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Errore nel salvataggio del fornitore.");
+    }
+  };
+
   const aggiornaOrdineHome = async () => {
     if (!ordineAperto?.id) return;
     const supplier = fornitori.find(s=>s.id===ordineFornitoreId);
@@ -1282,10 +1307,28 @@ export default function Home() {
           <button type="button" onClick={()=>void salvaNuovoOrdineHome()} style={primaryButtonStyle}>SALVA</button>
         </Modal>
       )}
+      {rubricaFornitoreAperta && (
+        <Modal title="RUBRICA FORNITORI" onClose={()=>setRubricaFornitoreAperta(false)}>
+          {fornitori.map(f=>(
+            <button key={f.id} type="button" onClick={()=>{setFornitoreEditId(f.id);setFornitoreEditNome(f.nome);setFornitoreEditWhatsapp(f.whatsapp);}}
+              style={{width:"100%",textAlign:"left",border:0,borderRadius:14,padding:12,marginBottom:7,background:fornitoreEditId===f.id?"#FFF4C2":"#FFFFFF"}}>
+              <div style={{fontWeight:900,color:"#041E49"}}>{f.nome}</div>
+              <div style={{fontSize:12,color:"#64748B",marginTop:3}}>{f.whatsapp}</div>
+            </button>
+          ))}
+          <label style={labelStyle}>NOME FORNITORE</label>
+          <input value={fornitoreEditNome} onChange={e=>setFornitoreEditNome(e.target.value)} style={inputStyle} placeholder="Nome"/>
+          <label style={labelStyle}>WHATSAPP</label>
+          <input value={fornitoreEditWhatsapp} onChange={e=>setFornitoreEditWhatsapp(e.target.value)} style={inputStyle} placeholder="Numero WhatsApp" inputMode="tel"/>
+          <button type="button" onClick={()=>{setFornitoreEditId("");setFornitoreEditNome("");setFornitoreEditWhatsapp("");}} style={secondaryButtonStyle}>NUOVO FORNITORE</button>
+          <button type="button" onClick={()=>void salvaFornitoreHome()} style={primaryButtonStyle}>SALVA</button>
+        </Modal>
+      )}
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordine.cliente || "Cliente"} · {ordine.veicolo || ""}</div>
           <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordine.numero || ""}</div>
+          <button type="button" onClick={()=>{setFornitoreEditId(ordineAperto.supplierId || "");const f=fornitori.find(x=>x.id===ordineAperto.supplierId);setFornitoreEditNome(f?.nome||"");setFornitoreEditWhatsapp(f?.whatsapp||"");setRubricaFornitoreAperta(true);}} style={secondaryButtonStyle}>RUBRICA FORNITORI</button>
           <label style={labelStyle}>PRODOTTO</label>
           <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90}}/>
           <label style={labelStyle}>FORNITORE</label>
