@@ -2750,122 +2750,41 @@ export default function Veicolo() {
 
 
       {mediaAperto && (
-
-
-
         <div
-
-
-
           role="dialog"
-
-
-
           aria-modal="true"
-
-
-
           style={{
-
-
-
             position: "fixed",
-
-
-
             inset: 0,
-
-
-
             zIndex: 100,
-
-
-
             background: "rgba(15,23,42,.55)",
-
-
-
             display: "flex",
-
-
-
             alignItems: "center",
-
-
-
             justifyContent: "center",
-
-
-
             padding: 14,
-
-
-
           }}
-
-
-
         >
-
-
-
           <div
-
-
-
             style={{
-
-
-
               width: "100%",
-
-
-
               maxWidth: 620,
-
-
-
               maxHeight: "92vh",
-
-
-
               overflow: "auto",
-
-
-
               background: "#F8FAFC",
-
-
-
               borderRadius: 26,
-
-
-
               boxShadow: "0 20px 60px rgba(15,23,42,.25)",
-
-
-
               padding: 18,
-
-
-
             }}
-
-
-
           >
-
-
-
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#111827" }}>MEDIA</div>
                 <div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>
                   Foto, video e documenti del veicolo
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <input
                   id="goldencar-vehicle-media-input"
                   type="file"
@@ -2882,96 +2801,51 @@ export default function Veicolo() {
                   htmlFor="goldencar-vehicle-media-input"
                   title="Aggiungi foto, video o documento"
                   style={{
-                    width: 40, height: 40, borderRadius: 12, background: "#D4AF37",
-                    color: "#111827", display: "flex", alignItems: "center",
-                    justifyContent: "center", fontSize: 25, fontWeight: 500, cursor: "pointer",
+                    width: 40,
+                    height: 40,
+                    borderRadius: 12,
+                    background: "#D4AF37",
+                    color: "#111827",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 25,
+                    fontWeight: 500,
+                    cursor: "pointer",
                   }}
                 >
                   +
                 </label>
-
                 <button
                   type="button"
                   onClick={chiudiMedia}
-
-
-
-                aria-label="Chiudi media"
-
-
-
-                style={{
-
-
-
-                  width: 40, height: 40, border: "none", borderRadius: 12,
-
-
-
-                  background: "#E5E7EB", color: "#374151", fontSize: 22, cursor: "pointer",
-
-
-
-                }}
-
-
-
-              >
-
-
-
-                ×
-
-
-
-              </button>
-
-
-
+                  aria-label="Chiudi media"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    border: "none",
+                    borderRadius: 12,
+                    background: "#E5E7EB",
+                    color: "#374151",
+                    fontSize: 22,
+                    cursor: "pointer",
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
-
-
             {mediaCaricamento ? (
-
-
-
               <div style={{ background: "#FFFFFF", borderRadius: 18, padding: 36, textAlign: "center", color: "#64748B", fontWeight: 700 }}>
-
-
-
                 Caricamento media...
-
-
-
               </div>
-
-
-
             ) : mediaItems.length === 0 ? (
-
-
-
               <div style={{ background: "#FFFFFF", borderRadius: 18, padding: 36, textAlign: "center", color: "#64748B", fontWeight: 600 }}>
-
-
-
-                Nessuna foto o documento collegato a questo veicolo.
-
-
-
+                Nessuna foto, video o documento collegato a questo veicolo.
               </div>
-
-
-
             ) : (
-
-
-
               <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-
-
-
                 {mediaGroups.map(([dateKey, group]) => (
                   <section key={dateKey}>
                     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
@@ -2982,54 +2856,25 @@ export default function Veicolo() {
                         {group.items.length} {group.items.length === 1 ? "elemento" : "elementi"}
                       </div>
                     </div>
+
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 9 }}>
-
-
-
                       {group.items.map((item) => (
-
-
-
                         <button
-
-
-
                           key={item.id}
-
-
-
                           type="button"
-
-
-
                           onClick={() => apriMediaInNuovaFinestra(item)}
-
-
-
+                          title={item.name}
                           style={{
-
-
-
-                            border: "none", padding: 0, background: "#FFFFFF", borderRadius: 15,
-
-
-
-                            overflow: "hidden", minWidth: 0, cursor: "pointer",
-
-
-
+                            border: "none",
+                            padding: 0,
+                            background: "#FFFFFF",
+                            borderRadius: 15,
+                            overflow: "hidden",
+                            minWidth: 0,
+                            cursor: "pointer",
                             boxShadow: "0 3px 10px rgba(0,0,0,.07)",
-
-
-
                           }}
-
-
-
                         >
-
-
-
                           {item.url && isImageMedia(item) ? (
                             <img
                               src={item.url}
@@ -3045,97 +2890,44 @@ export default function Veicolo() {
                               style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover", background: "#E2E8F0" }}
                             />
                           ) : (
-                            <div style={{
-
-
-
-                              aspectRatio: "1 / 1", display: "flex", flexDirection: "column",
-
-
-
-                              alignItems: "center", justifyContent: "center", padding: 8,
-
-
-
-                              color: "#475569", background: "#EEF1F5",
-
-
-
-                            }}>
-
-
-
+                            <div
+                              style={{
+                                aspectRatio: "1 / 1",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: 8,
+                                color: "#475569",
+                                background: "#EEF1F5",
+                              }}
+                            >
                               <div style={{ fontSize: 28 }}>▤</div>
-
-
-
-                              <div style={{
-
-
-
-                                marginTop: 7, fontSize: 10, fontWeight: 800,
-
-
-
-                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%",
-
-
-
-                              }}>
-
-
-
-                                {estensioneMedia(item)}</div>
-
-
-
+                              <div
+                                style={{
+                                  marginTop: 7,
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  width: "100%",
+                                }}
+                              >
+                                {estensioneMedia(item)}
+                              </div>
                             </div>
-
-
-
                           )}
-
-
-
                         </button>
-
-
-
                       ))}
-
-
-
                     </div>
-
-
-
                   </section>
-
-
-
                 ))}
-
-
-
               </div>
-
-
-
             )}
-
-
-
           </div>
-
-
-
         </div>
-
-
-
       )}
-
-
 
       {mediaVisualizzato && (
 
