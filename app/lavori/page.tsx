@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { pdf } from "@react-pdf/renderer";
 import { supabase } from "@/lib/supabase";
 import SchedaLavoroPDF, { type SchedaLavoroPDFData } from "@/app/pdf/SchedaLavoroPDF";
@@ -75,6 +76,7 @@ function toPdfData(lavoro: Lavoro): SchedaLavoroPDFData {
 }
 
 export default function LavoriPage() {
+  const router = useRouter();
   const [lavori, setLavori] = useState<Lavoro[]>([]);
   const [ricerca, setRicerca] = useState("");
   const [pdfLoading, setPdfLoading] = useState<number | null>(null);
