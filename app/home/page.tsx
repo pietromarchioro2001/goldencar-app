@@ -483,9 +483,9 @@ export default function Home() {
             ? dettagli.works
             : String(row.lavori ?? ""),
           status:
-            String(row.stato ?? "").toUpperCase() === "CONCLUSO"
-              ? "CONCLUSO"
-              : "IN_LAVORAZIONE",
+            ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase())
+              ? "IN_LAVORAZIONE"
+              : "CONCLUSO",
           pdfUrl: String(dettagli.pdfUrl ?? ""),
         };
       });
@@ -497,7 +497,8 @@ export default function Home() {
     ========================= */
     const { data: paymentRows, error: paymentsError } = await supabase
       .from("payments")
-      .select("id, client_id, vehicle_id, nome_cliente, description, amount, paid_amount, status, created_at")
+      .select("id, client_id, vehicle_id, job_id, nome_cliente, description, amount, paid_amount, status, created_at")
+      .is("job_id", null)
       .in("status", ["DA_PAGARE", "PARZIALE"])
       .order("created_at", { ascending: false });
 
