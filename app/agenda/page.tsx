@@ -12,8 +12,7 @@ const MONTHS = [
 const WEEK = ["LUN","MAR","MER","GIO","VEN","SAB","DOM"];
 
 export default function Agenda() {
-  const today = new Date();
-  const [month, setMonth] = useState(today.getMonth());
+  const [month, setMonth] = useState(new Date().getMonth());
   const [year, setYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
