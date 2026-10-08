@@ -632,15 +632,9 @@ export default function Home() {
     ========================= */
     const midnight = new Date();
     midnight.setHours(0, 0, 0, 0);
-    await supabase
-      .from("orders")
-      .delete()
-      .eq("stato", "INVIATO")
-      .lt("inviato_at", midnight.toISOString());
-
     const { data: orderRows, error: ordersError } = await supabase
       .from("orders")
-      .select("id, numero, cliente, veicolo, prodotti, vehicle_id, supplier_id, stato, inviato_at")
+      .select("id, numero, cliente, veicolo, prodotti, vehicle_id, supplier_id, stato")
       .order("created_at", { ascending: false });
 
     if (ordersError) {
@@ -1068,7 +1062,7 @@ export default function Home() {
     const numero = supplier.whatsapp.replace(/\D/g,"");
     const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const { error } = await supabase.from("orders").update({stato:"INVIATO",inviato_at:new Date().toISOString()}).eq("id",ordine.id);
+    const { error } = await supabase.from("orders").update({stato:"INVIATO"}).eq("id",ordine.id);
     if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
     await caricaDati();
   };
