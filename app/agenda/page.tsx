@@ -50,30 +50,66 @@ export default function Agenda() {
   const dateKey = (y: number, m: number, d: number) =>
     y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
 
+  function appointmentDateTime(
+    y: number,
+    m: number,
+    d: number,
+    hour: number,
+    minute: number
+  ) {
+    return new Date(y, m, d, hour, minute, 0).toISOString();
+  }
+
+  function mapAppointment(row: any): Appointment {
+    const dateTime = new Date(String(row.data_ora));
+    return {
+      id: String(row.id ?? ""),
+      date: dateKey(dateTime.getFullYear(), dateTime.getMonth(), dateTime.getDate()),
+      time:
+        String(dateTime.getHours()).padStart(2, "0") +
+        ":" +
+        String(dateTime.getMinutes()).padStart(2, "0"),
+      description: String(row.descrizione ?? row.titolo ?? ""),
+    };
+  }
+
   useEffect(() => {
     void loadAppointments();
   }, []);
 
   async function loadAppointments() {
     const current = new Date();
-    const cutoff = new Date(current.getFullYear(), current.getMonth(), current.getDate() - 7);
-    const cutoffKey = dateKey(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate());
+    const cutoff = new Date(
+      current.getFullYear(),
+      current.getMonth(),
+      current.getDate() - 7,
+      0,
+      0,
+      0
+    );
 
-    const cleanup = await supabase.from("appointments").delete().lt("date", cutoffKey);
-    if (cleanup.error) console.error("Errore pulizia appuntamenti:", cleanup.error);
+    const cleanup = await supabase
+      .from("appointments")
+      .delete()
+      .lt("data_ora", cutoff.toISOString());
+
+    if (cleanup.error) {
+      console.error("Errore pulizia appuntamenti:", cleanup.error);
+    }
 
     const { data, error } = await supabase
       .from("appointments")
-      .select("id, date, time, description")
-      .order("date", { ascending: true })
-      .order("time", { ascending: true });
+      .select("id, vehicle_id, titolo, descrizione, data_ora")
+      .order("data_ora", { ascending: true });
 
     if (error) {
       console.error("Errore caricamento appuntamenti:", error);
       return;
     }
-    setAppointments((data || []) as Appointment[]);
+
+    setAppointments((data ?? []).map(mapAppointment));
   }
+
 
   function openNewAppointment(day: number, hour: number) {
     setEditingAppointment(null);
@@ -113,19 +149,24 @@ export default function Agenda() {
 
     setSaving(true);
 
-    const date = dateKey(year, month, selectedDay);
-    const time =
-      String(selectedHour).padStart(2, "0") +
-      ":" +
-      String(selectedMinute).padStart(2, "0") +
-      ":00";
+    const dataOra = appointmentDateTime(
+      year,
+      month,
+      selectedDay,
+      selectedHour,
+      selectedMinute
+    );
 
     if (editingAppointment) {
       const { data, error } = await supabase
         .from("appointments")
-        .update({ date, time, description: description.trim() })
+        .update({
+          titolo: description.trim(),
+          descrizione: description.trim(),
+          data_ora: dataOra,
+        })
         .eq("id", editingAppointment.id)
-        .select("id, date, time, description")
+        .select("id, vehicle_id, titolo, descrizione, data_ora")
         .single();
 
       if (error) {
@@ -135,23 +176,30 @@ export default function Agenda() {
         return;
       }
 
+      const updatedAppointment = mapAppointment(data);
+
       setAppointments((current) =>
         current
           .map((appointment) =>
-            appointment.id === editingAppointment.id ? (data as Appointment) : appointment
+            appointment.id === editingAppointment.id
+              ? updatedAppointment
+              : appointment
           )
-          .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+          .sort(
+            (a, b) =>
+              a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+          )
       );
     } else {
       const { data, error } = await supabase
         .from("appointments")
         .insert({
           id: crypto.randomUUID(),
-          date,
-          time,
-          description: description.trim(),
+          titolo: description.trim(),
+          descrizione: description.trim(),
+          data_ora: dataOra,
         })
-        .select("id, date, time, description")
+        .select("id, vehicle_id, titolo, descrizione, data_ora")
         .single();
 
       if (error) {
@@ -162,8 +210,9 @@ export default function Agenda() {
       }
 
       setAppointments((current) =>
-        [...current, data as Appointment].sort(
-          (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+        [...current, mapAppointment(data)].sort(
+          (a, b) =>
+            a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
         )
       );
     }
