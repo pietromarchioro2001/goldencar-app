@@ -696,8 +696,7 @@ export default function NuovoProfiloPage() {
       .from("clients")
       .upsert(
         [{
-          nome: cliente1DaSalvare.nome.trim(),
-          cognome: cliente1DaSalvare.cognome.trim(),
+          nome: [cliente1DaSalvare.nome.trim(), cliente1DaSalvare.cognome.trim()].filter(Boolean).join(" "),
           indirizzo: cliente1DaSalvare.indirizzo.trim(),
           telefono: cliente1DaSalvare.telefono.trim(),
           data_nascita: cliente1DaSalvare.nascita || null,
@@ -728,8 +727,7 @@ export default function NuovoProfiloPage() {
         .from("clients")
         .upsert(
           [{
-            nome: cliente2DaSalvare.nome.trim(),
-            cognome: cliente2DaSalvare.cognome.trim(),
+            nome: [cliente2DaSalvare.nome.trim(), cliente2DaSalvare.cognome.trim()].filter(Boolean).join(" "),
             indirizzo: cliente2DaSalvare.indirizzo.trim(),
             telefono: cliente2DaSalvare.telefono.trim(),
             data_nascita: cliente2DaSalvare.nascita || null,
