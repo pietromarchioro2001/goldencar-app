@@ -66,10 +66,7 @@ export default function PWARegister() {
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
     window.addEventListener("appinstalled", handleInstalled);
-    window.addEventListener("pointerdown", handleFirstInteraction, {
-      capture: true,
-      once: true,
-    });
+    window.addEventListener("pointerdown", handleFirstInteraction, true);
 
     return () => {
       window.removeEventListener("load", register);
