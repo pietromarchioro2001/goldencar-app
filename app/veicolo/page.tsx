@@ -2844,42 +2844,41 @@ export default function Veicolo() {
 
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-
-
-
               <div>
-
-
-
                 <div style={{ fontSize: 22, fontWeight: 900, color: "#111827" }}>MEDIA</div>
-
-
-
                 <div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>
-
-
-
-                  Foto e documenti del veicolo
-
-
-
+                  Foto, video e documenti del veicolo
                 </div>
-
-
-
               </div>
 
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  id="goldencar-vehicle-media-input"
+                  type="file"
+                  multiple
+                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                  style={{ display: "none" }}
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    event.currentTarget.value = "";
+                    if (files.length) void aggiungiMediaVeicolo(files);
+                  }}
+                />
+                <label
+                  htmlFor="goldencar-vehicle-media-input"
+                  title="Aggiungi foto, video o documento"
+                  style={{
+                    width: 40, height: 40, borderRadius: 12, background: "#D4AF37",
+                    color: "#111827", display: "flex", alignItems: "center",
+                    justifyContent: "center", fontSize: 25, fontWeight: 500, cursor: "pointer",
+                  }}
+                >
+                  +
+                </label>
 
-
-              <button
-
-
-
-                type="button"
-
-
-
-                onClick={chiudiMedia}
+                <button
+                  type="button"
+                  onClick={chiudiMedia}
 
 
 
@@ -2959,58 +2958,16 @@ export default function Veicolo() {
 
 
 
-                {mediaGroups.map(([jobNumber, group]) => (
-
-
-
-                  <section key={jobNumber}>
-
-
-
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 5 }}>
-
-
-
-                      <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
-
-
-
-                        SCHEDA #{group.jobNumber}
-
-
-
+                {mediaGroups.map(([dateKey, group]) => (
+                  <section key={dateKey}>
+                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                      <div style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>
+                        {group.date ? formatMediaDate(group.date) : "Data non disponibile"}
                       </div>
-
-
-
                       <div style={{ fontSize: 12, color: "#64748B" }}>
-
-
-
-                        {formatMediaDate(group.jobDate)}
-
-
-
+                        {group.items.length} {group.items.length === 1 ? "elemento" : "elementi"}
                       </div>
-
-
-
                     </div>
-
-
-
-                    <div style={{ fontSize: 12, color: "#64748B", marginBottom: 8 }}>
-
-
-
-                      {group.jobType}
-
-
-
-                    </div>
-
-
-
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 9 }}>
 
 
@@ -3031,7 +2988,7 @@ export default function Veicolo() {
 
 
 
-                          onClick={() => setMediaVisualizzato(item)}
+                          onClick={() => apriMediaInNuovaFinestra(item)}
 
 
 
@@ -3060,33 +3017,20 @@ export default function Veicolo() {
 
 
                           {item.url && isImageMedia(item) ? (
-
-
-
                             <img
-
-
-
                               src={item.url}
-
-
-
                               alt={item.name}
-
-
-
                               style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover" }}
-
-
-
                             />
-
-
-
+                          ) : item.url && isVideoMedia(item) ? (
+                            <video
+                              src={item.url}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover", background: "#E2E8F0" }}
+                            />
                           ) : (
-
-
-
                             <div style={{
 
 
@@ -3127,11 +3071,7 @@ export default function Veicolo() {
 
 
 
-                                {item.name}
-
-
-
-                              </div>
+                                {estensioneMedia(item)}</div>
 
 
 
