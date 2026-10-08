@@ -533,6 +533,7 @@ export default function SchedaLavoroPage() {
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [orderedProductKeys, setOrderedProductKeys] = useState<Set<string>>(new Set());
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -543,6 +544,31 @@ export default function SchedaLavoroPage() {
   // (Strict Mode). Senza questo guard, una scheda esistente viene prima caricata
   // e subito dopo sovrascritta da una nuova scheda vuota.
   const initializedRef = useRef(false);
+  const productOrderKey = (name: string) => name.trim().toLowerCase();
+
+  const loadOrderedProductKeys = async (jobId: string) => {
+    if (!jobId) return new Set<string>();
+    const { data, error } = await supabase
+      .from("orders")
+      .select("prodotti")
+      .eq("job_id", jobId);
+
+    if (error) {
+      console.error("Errore verifica ordini della scheda:", error);
+      return new Set<string>();
+    }
+
+    const keys = new Set<string>();
+    for (const row of data ?? []) {
+      const products = Array.isArray(row.prodotti) ? row.prodotti : [];
+      for (const product of products) {
+        const name = String(product?.name ?? "").trim();
+        if (name) keys.add(productOrderKey(name));
+      }
+    }
+    return keys;
+  };
+
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -556,6 +582,7 @@ export default function SchedaLavoroPage() {
           const { data, error } = await supabase.from("jobs").select("*").eq("id", existingJobId).maybeSingle();
           if (!error && data) {
             const normalized = rowToJobDraft(data);
+            setOrderedProductKeys(await loadOrderedProductKeys(normalized.jobId || ""));
             setDraft(normalized); setSaved(true);
             loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
               const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
@@ -1182,7 +1209,7 @@ export default function SchedaLavoroPage() {
     if (!draft) return;
 
     const daOrdinare = draft.products
-      .filter((product) => product.orderRequested && product.name.trim())
+      .filter((product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(productOrderKey(product.name)))
       .map((product) => ({
         name: product.name.trim(),
         quantity: product.quantity || "1",
@@ -2477,7 +2504,8 @@ export default function SchedaLavoroPage() {
                     addProduct={addProduct}
 
                     markUnsaved={() => setSaved(false)}
-                  onOrder={apriOrdineConProdotti}
+                    onOrder={apriOrdineConProdotti}
+                    orderedProductKeys={orderedProductKeys}
                 />
 
                 </section>
@@ -3477,6 +3505,7 @@ function ProductChecklist({
 
   markUnsaved,
   onOrder,
+  orderedProductKeys,
 
 }: {
 
@@ -3504,6 +3533,7 @@ function ProductChecklist({
 
   markUnsaved: () => void;
   onOrder: () => void;
+  orderedProductKeys: Set<string>;
 
 }) {
 
@@ -3623,6 +3653,7 @@ function ProductChecklist({
                 type="checkbox"
 
                 checked={selected}
+                disabled={ordered}
 
                 onChange={(e) => {
 
@@ -3731,6 +3762,7 @@ function ProductChecklist({
                 <input
 
                   value={product?.quantity ?? "1"}
+                  disabled={ordered}
 
                   onChange={(e) =>
 
@@ -3781,8 +3813,9 @@ function ProductChecklist({
                 <input
 
                   value={product?.details ?? ""}
+                  disabled={ordered}
 
-                  onChange={(e) =>
+                  onChange={(e)
 
                     updateProduct(
 
@@ -3824,16 +3857,17 @@ function ProductChecklist({
 
                 <button
                   type="button"
-                  onClick={() => toggleOrderRequested(index)}
-                  title={product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
-                  aria-label={product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
+                  onClick={() => { if (!ordered) toggleOrderRequested(index); }}
+                  disabled={ordered}
+                  title={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
+                  aria-label={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
                   style={{
                     width: 34,
                     height: 34,
-                    border: product?.orderRequested ? "1px solid #D4AF37" : "1px solid #E5E7EB",
+                    border: ordered ? "1px solid #CBD5E1" : product?.orderRequested ? "1px solid #D4AF37" : "1px solid #E5E7EB",
                     borderRadius: 10,
-                    background: product?.orderRequested ? "#FFF8DB" : "#FFFFFF",
-                    color: product?.orderRequested ? "#A16207" : "#64748B",
+                    background: ordered ? "#E2E8F0" : product?.orderRequested ? "#FFF8DB" : "#FFFFFF",
+                    color: ordered ? "#94A3B8" : product?.orderRequested ? "#A16207" : "#64748B",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -3882,7 +3916,7 @@ function ProductChecklist({
       </button>
 
       {draft.products.some(
-        (product) => product.orderRequested && product.name.trim()
+        (product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(productOrderKey(product.name))
       ) && (
         <button
           type="button"
