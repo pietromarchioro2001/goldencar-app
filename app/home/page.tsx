@@ -1063,6 +1063,7 @@ export default function Home() {
         if (!testo.trim()) return;
         sessionStorage.setItem("goldencar_agenda_descrizione", testo.trim());
         router.push("/agenda");
+      };
       recognition.onerror = () => {
         setListening(false);
       };
