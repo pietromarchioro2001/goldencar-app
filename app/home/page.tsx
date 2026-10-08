@@ -1540,10 +1540,6 @@ export default function Home() {
 
           {(nuovoFornitoreMode || fornitoreEditId || fornitoreEditNome || fornitoreEditWhatsapp) && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: "#64748B", marginBottom: 8 }}>
-                {fornitoreEditId ? "MODIFICA CONTATTO" : "NUOVO CONTATTO"}
-              </div>
-
               <label style={labelStyle}>NOME FORNITORE</label>
               <input
                 value={fornitoreEditNome}
