@@ -32,7 +32,6 @@ type ClienteData = {
 
 
 type ClienteSelezionato = 1 | 2;
-type FiltroRicerca = "TUTTO" | "TARGA" | "VEICOLO" | "CLIENTE" | "TELEFONO";
 
 type ProfiloVeicolo = {
   id: string;
@@ -321,8 +320,6 @@ export default function Veicolo() {
 
 
   const [ricerca, setRicerca] = useState("");
-  const [filtroRicerca, setFiltroRicerca] = useState<FiltroRicerca>("TUTTO");
-  const [filtriAperti, setFiltriAperti] = useState(false);
   const [veicoloSelezionato, setVeicoloSelezionato] = useState(false);
 
 
@@ -753,18 +750,15 @@ export default function Veicolo() {
       const cliente2 = item?.cliente2 ?? null;
       const veicolo = item?.veicolo ?? {};
 
-      const campi = {
-        TARGA: [veicolo.targa],
-        VEICOLO: [veicolo.veicolo, veicolo.motore],
-        CLIENTE: [
-          cliente1.nome, cliente1.cognome, cliente1.cf,
-          cliente2?.nome, cliente2?.cognome, cliente2?.cf,
-        ],
-        TELEFONO: [cliente1.telefono, cliente2?.telefono],
-      } as Record<FiltroRicerca, unknown[]>;
-
-      const valoriRicerca =
-        filtroRicerca === "TUTTO" ? Object.values(campi).flat() : campi[filtroRicerca];
+      const valoriRicerca = [
+        veicolo.targa,
+        veicolo.veicolo,
+        veicolo.motore,
+        cliente1.nome,
+        cliente1.cognome,
+        cliente2?.nome,
+        cliente2?.cognome,
+      ];
 
       return valoriRicerca
         .filter(Boolean)
@@ -1686,13 +1680,7 @@ export default function Veicolo() {
 
 
 
-            placeholder={
-              filtroRicerca === "TARGA" ? "Cerca per targa" :
-              filtroRicerca === "VEICOLO" ? "Cerca per veicolo o motore" :
-              filtroRicerca === "CLIENTE" ? "Cerca per cliente" :
-              filtroRicerca === "TELEFONO" ? "Cerca per telefono" :
-              "Targa, cliente o telefono"
-            }
+            placeholder="Targa, cliente o veicolo"
 
 
 
@@ -1736,50 +1724,6 @@ export default function Veicolo() {
 
 
 
-        </div>
-
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <button
-            type="button"
-            onClick={() => setFiltriAperti((value) => !value)}
-            aria-label="Filtra ricerca"
-            title="Filtra ricerca"
-            style={{
-              width: 44, height: 52, border: "none", borderRadius: 18,
-              background: filtroRicerca !== "TUTTO" ? "#EEF3F8" : "#FFFFFF",
-              boxShadow: "0 4px 12px rgba(0,0,0,.08)",
-              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
-            }}
-          >
-            <FilterIcon />
-          </button>
-
-          {filtriAperti && (
-            <div style={{
-              position: "absolute", top: 58, right: 0, width: 180,
-              background: "#FFFFFF", borderRadius: 16, padding: 6,
-              boxShadow: "0 12px 30px rgba(15,23,42,.16)",
-              border: "1px solid #E5E7EB", zIndex: 50,
-            }}>
-              {([
-                ["TUTTO", "Tutto"], ["TARGA", "Targa"], ["VEICOLO", "Veicolo"],
-                ["CLIENTE", "Cliente"], ["TELEFONO", "Telefono"],
-              ] as const).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => { setFiltroRicerca(value); setFiltriAperti(false); }}
-                  style={{
-                    width: "100%", border: "none", borderRadius: 10,
-                    background: filtroRicerca === value ? "#F8F5E8" : "#FFFFFF",
-                    color: filtroRicerca === value ? "#8A6A00" : "#374151",
-                    padding: "10px 11px", textAlign: "left", fontSize: 13,
-                    fontWeight: filtroRicerca === value ? 850 : 650, cursor: "pointer",
-                  }}
-                >{label}</button>
-              ))}
-            </div>
-          )}
         </div>
 
         <button
@@ -4225,12 +4169,6 @@ function ClientChoice({
 }
 
 
-
-const FilterIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M4 6H20M7 12H17M10 18H14" stroke="#041E49" strokeWidth="2" strokeLinecap="round"/>
-  </svg>
-);
 
 const SearchIcon = () => (
 
