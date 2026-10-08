@@ -845,8 +845,7 @@ export default function Veicolo() {
       const cliente2 = profiloEdit.cliente2;
 
       const { error: client1Error } = await supabase.from("clients").update({
-        nome: cliente1.nome.trim(),
-        cognome: cliente1.cognome.trim(),
+        nome: [cliente1.nome.trim(), cliente1.cognome.trim()].filter(Boolean).join(" "),
         indirizzo: cliente1.indirizzo.trim(),
         telefono: cliente1.telefono.trim(),
         data_nascita: cliente1.nascita.trim() || null,
@@ -857,8 +856,7 @@ export default function Veicolo() {
 
       if (cliente2 && profiloEdit.cliente2Id) {
         const { error: client2Error } = await supabase.from("clients").update({
-          nome: cliente2.nome.trim(),
-          cognome: cliente2.cognome.trim(),
+          nome: [cliente2.nome.trim(), cliente2.cognome.trim()].filter(Boolean).join(" "),
           indirizzo: cliente2.indirizzo.trim(),
           telefono: cliente2.telefono.trim(),
           data_nascita: cliente2.nascita.trim() || null,
