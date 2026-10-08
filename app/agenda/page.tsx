@@ -477,7 +477,12 @@ export default function Agenda() {
                   }}
                 >
                   <button
-                    onClick={() => openNewAppointment(selectedDay, hour)}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      openNewAppointment(selectedDay, hour);
+                    }}
                     style={{
                       width: 72,
                       minHeight: 64,
@@ -559,7 +564,7 @@ export default function Agenda() {
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "center",
-            zIndex: 1000,
+            zIndex: 2000,
           }}
           onClick={closeModal}
         >
