@@ -2118,6 +2118,7 @@ export default function Veicolo() {
                 />
               ) : formatDataCompleta(veicoloProfilo.immatricolazione)}
               iconColor="#2563EB"
+              valueFontSize={16}
             />
             <InfoCard
               icon={<LocationIcon />}
