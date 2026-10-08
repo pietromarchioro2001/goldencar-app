@@ -1327,7 +1327,7 @@ export default function Home() {
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
-          <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordine.numero || ""}</div>
+          <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordineAperto.numero || ""}</div>
           <button type="button" onClick={()=>{setFornitoreEditId(ordineAperto.supplierId || "");const f=fornitori.find(x=>x.id===ordineAperto.supplierId);setFornitoreEditNome(f?.nome||"");setFornitoreEditWhatsapp(f?.whatsapp||"");setRubricaFornitoreAperta(true);}} style={secondaryButtonStyle}>RUBRICA FORNITORI</button>
           <label style={labelStyle}>PRODOTTO</label>
           <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90}}/>
