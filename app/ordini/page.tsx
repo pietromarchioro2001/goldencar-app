@@ -482,6 +482,7 @@ export default function OrdiniPage() {
       veicolo,
       targa,
       prodotti,
+      stato: "DA_INVIARE",
     }).select("*").single();
 
     if (error) {
@@ -512,7 +513,7 @@ export default function OrdiniPage() {
     const messaggio = "Ciao, per la targa " + targa + " e il veicolo " + veicolo +
       " mi servirebbe: " + descrizione.trim();
 
-    window.open("https://wa.me/" + numero + "?text=" + encodeURIComponent(messaggio), "_blank", "noopener,noreferrer");
+    await supabase.from("orders").update({stato:"DA_INVIARE", inviato_at:null}).eq("id", ordine.id);
     resetNuovo();
   };
 
