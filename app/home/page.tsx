@@ -1338,6 +1338,15 @@ export default function Home() {
         <Modal
           title="ORDINI"
           onClose={() => setModal(null)}
+          topRight={
+            <button
+              type="button"
+              onClick={() => setRubricaFornitoreAperta(true)}
+              style={modalLinkStyle}
+            >
+              RUBRICA
+            </button>
+          }
         >
           {ordini.length === 0 ? (
             <EmptyState text="Nessun ordine presente." />
@@ -1456,22 +1465,110 @@ export default function Home() {
         </Modal>
       )}
       {rubricaFornitoreAperta && (
-        <Modal title="RUBRICA FORNITORI" onClose={()=>setRubricaFornitoreAperta(false)}>
-          {fornitori.map(f=>(
-            <button key={f.id} type="button" onClick={()=>{setFornitoreEditId(f.id);setFornitoreEditNome(f.nome);setFornitoreEditWhatsapp(f.whatsapp);}}
-              style={{width:"100%",textAlign:"left",border:0,borderRadius:14,padding:12,marginBottom:7,background:fornitoreEditId===f.id?"#FFF4C2":"#FFFFFF"}}>
-              <div style={{fontWeight:900,color:"#041E49"}}>{f.nome}</div>
-              <div style={{fontSize:12,color:"#64748B",marginTop:3}}>{f.whatsapp}</div>
-            </button>
-          ))}
-          <label style={labelStyle}>NOME FORNITORE</label>
-          <input value={fornitoreEditNome} onChange={e=>setFornitoreEditNome(e.target.value)} style={inputStyle} placeholder="Nome"/>
-          <label style={labelStyle}>WHATSAPP</label>
-          <input value={fornitoreEditWhatsapp} onChange={e=>setFornitoreEditWhatsapp(e.target.value)} style={inputStyle} placeholder="Numero WhatsApp" inputMode="tel"/>
-          <button type="button" onClick={()=>{setFornitoreEditId("");setFornitoreEditNome("");setFornitoreEditWhatsapp("");}} style={secondaryButtonStyle}>NUOVO FORNITORE</button>
-          <button type="button" onClick={()=>void salvaFornitoreHome()} style={primaryButtonStyle}>SALVA</button>
+        <Modal
+          title="RUBRICA FORNITORI"
+          onClose={() => {
+            setRubricaFornitoreAperta(false);
+            setFornitoreEditId("");
+            setFornitoreEditNome("");
+            setFornitoreEditWhatsapp("");
+          }}
+        >
+          {fornitori.length === 0 ? (
+            <EmptyState text="Nessun fornitore presente." />
+          ) : (
+            fornitori.map((fornitore) => (
+              <button
+                key={fornitore.id}
+                type="button"
+                onClick={() => {
+                  setFornitoreEditId(fornitore.id);
+                  setFornitoreEditNome(fornitore.nome);
+                  setFornitoreEditWhatsapp(fornitore.whatsapp);
+                }}
+                style={{
+                  width: "100%",
+                  border: 0,
+                  borderRadius: 16,
+                  background: fornitoreEditId === fornitore.id ? "#FFF4C2" : "#FFFFFF",
+                  padding: "13px 14px",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div style={{ fontSize: 15, fontWeight: 900, color: "#111827" }}>
+                  {fornitore.nome}
+                </div>
+                <div style={{ fontSize: 13, color: "#64748B", marginTop: 4 }}>
+                  {fornitore.whatsapp || "Nessun WhatsApp"}
+                </div>
+              </button>
+            ))
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setFornitoreEditId("");
+              setFornitoreEditNome("");
+              setFornitoreEditWhatsapp("");
+            }}
+            style={{
+              width: 52,
+              height: 52,
+              margin: "14px auto 4px",
+              border: "none",
+              borderRadius: 17,
+              background: "#D4AF37",
+              color: "#111827",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontSize: 30,
+              fontWeight: 400,
+            }}
+            aria-label="Aggiungi fornitore"
+          >
+            +
+          </button>
+
+          {(fornitoreEditId || fornitoreEditNome || fornitoreEditWhatsapp) && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: "#64748B", marginBottom: 8 }}>
+                {fornitoreEditId ? "MODIFICA CONTATTO" : "NUOVO CONTATTO"}
+              </div>
+
+              <label style={labelStyle}>NOME FORNITORE</label>
+              <input
+                value={fornitoreEditNome}
+                onChange={(e) => setFornitoreEditNome(e.target.value)}
+                placeholder="Nome fornitore"
+                style={inputStyle}
+              />
+
+              <label style={labelStyle}>WHATSAPP</label>
+              <input
+                value={fornitoreEditWhatsapp}
+                onChange={(e) => setFornitoreEditWhatsapp(e.target.value)}
+                placeholder="Numero WhatsApp"
+                inputMode="tel"
+                style={inputStyle}
+              />
+
+              <button
+                type="button"
+                onClick={() => void salvaFornitoreHome()}
+                style={primaryButtonStyle}
+              >
+                SALVA
+              </button>
+            </div>
+          )}
         </Modal>
       )}
+
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
