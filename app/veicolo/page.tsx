@@ -2130,7 +2130,7 @@ export default function Veicolo() {
               ) : (clienteVisualizzato.indirizzo || "—")}
               iconColor="#374151"
               href={modificaProfilo ? undefined : indirizzoMaps}
-              valueFontSize={16}
+              valueFontSize={14}
             />
             <InfoCard
               icon={<PhoneIcon />}
