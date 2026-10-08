@@ -370,7 +370,7 @@ export default function Home() {
         if (primaryRelation?.client_id) {
           const { data: client } = await supabase
             .from("clients")
-            .select("nome, cognome, indirizzo, telefono, codice_fiscale, data_nascita")
+            .select("nome, indirizzo, telefono, codice_fiscale, data_nascita")
             .eq("id", primaryRelation.client_id)
             .maybeSingle();
           cliente = client;
@@ -436,7 +436,7 @@ export default function Home() {
           vehicleIds.length
             ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
             : Promise.resolve({ data: [] as any[] }),
-          supabase.from("clients").select("id, nome, cognome, telefono"),
+          supabase.from("clients").select("id, nome, telefono"),
         ]);
 
       const vehiclesById = new Map(
