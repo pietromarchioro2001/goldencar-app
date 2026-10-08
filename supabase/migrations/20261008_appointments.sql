@@ -2,13 +2,14 @@ BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.appointments (
   id text PRIMARY KEY,
-  date date NOT NULL,
-  time time NOT NULL,
-  description text NOT NULL,
+  vehicle_id text NULL,
+  titolo text,
+  descrizione text NOT NULL,
+  data_ora timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS appointments_date_idx ON public.appointments(date);
+CREATE INDEX IF NOT EXISTS appointments_data_ora_idx ON public.appointments(data_ora);
 
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
