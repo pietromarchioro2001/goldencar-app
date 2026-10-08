@@ -73,6 +73,7 @@ type PagamentoDettaglio = {
 };
 type ClienteRicerca = {
   clientKey: string;
+  clientId?: string;
   nomeCliente: string;
   telefono: string;
   targa?: string;
@@ -426,6 +427,7 @@ export default function Home() {
             if (!nomeCliente) return null;
             return {
               clientKey: makeClientKey(nomeCliente, row?.telefono),
+              clientId: String(row?.id ?? ""),
               nomeCliente,
               telefono: String(row?.telefono ?? "").trim(),
             };
@@ -594,7 +596,7 @@ export default function Home() {
       setRevisioni(
         (revisionRows ?? []).map((row: any) => {
           const client = revisionPrimaryByVehicle.get(String(row.id));
-          const nomeCliente = [client?.nome, client?.cognome].filter(Boolean).join(" ").trim();
+          const nomeCliente = String(client?.nome ?? "").trim();
 
           return {
             id: `revisione-${row.id}`,
@@ -913,6 +915,7 @@ export default function Home() {
 
       map.set(key, {
         clientKey: key,
+        clientId: existing?.clientId,
         nomeCliente: nome,
         telefono,
         targa: String(existing?.targa || lavoro.targa || "").trim(),
@@ -951,21 +954,14 @@ export default function Home() {
     try {
       const { error } = await supabase.from("payments").insert({
         id: crypto.randomUUID(),
-        client_id: null,
+        client_id: clienteSelezionatoPagamento?.clientId || null,
         nome_cliente: nome,
         description: descrizione,
         amount: importo,
         paid_amount: 0,
         status: "DA_PAGARE",
       });
-      if (error) {
-        // For CRM clients the key is a display key, not necessarily the UUID: retry as a purely manual reminder.
-        const retry = await supabase.from("payments").insert({
-          id: crypto.randomUUID(), client_id: null, nome_cliente: nome,
-          description: descrizione, amount: importo, paid_amount: 0, status: "DA_PAGARE",
-        });
-        if (retry.error) throw retry.error;
-      }
+      if (error) throw error;
       setNuovoPagamentoAperto(false);
       setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
@@ -987,18 +983,27 @@ export default function Home() {
     const weekday = normalized.match(/\b(domenica|lunedì|lunedi|martedì|martedi|mercoledì|mercoledi|giovedì|giovedi|venerdì|venerdi|sabato)\b/);
     if (dm) date = new Date(year, months.indexOf(dm[2]), Number(dm[1]));
     else if (numeric) date = new Date(numeric[3] ? (Number(numeric[3])<100 ? 2000+Number(numeric[3]) : Number(numeric[3])) : year, Number(numeric[2])-1, Number(numeric[1]));
-    else if (weekday) {
-      const w = weekdays.indexOf(weekday[1].replace("lunedi","lunedì").replace("martedi","martedì").replace("mercoledi","mercoledì").replace("giovedi","giovedì").replace("venerdi","venerdì"));
-      const today = new Date(); const delta = (w - today.getDay() + 7) % 7 || 7;
-      date = new Date(today.getFullYear(), today.getMonth(), today.getDate()+delta);
-    }
     const tm = normalized.match(/\b(?:alle|ore)\s+(\d{1,2})(?:[\.:](\d{1,2}))?\b/);
+    if (!tm) return null;
+    if (weekday && !dm && !numeric) {
+      const w = weekdays.indexOf(weekday[1].replace("lunedi","lunedì").replace("martedi","martedì").replace("mercoledi","mercoledì").replace("giovedi","giovedì").replace("venerdi","venerdì"));
+      const today = new Date();
+      const hh0 = Number(tm[1]);
+      const min0 = Number(tm[2] || 0);
+      const isToday = w === today.getDay();
+      const timePassed = hh0 < today.getHours() || (hh0 === today.getHours() && min0 <= today.getMinutes());
+      const delta = (w - today.getDay() + 7) % 7 || (timePassed ? 7 : 0);
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + delta);
+    }
     if (!tm) return null;
     const hh = Math.min(23, Number(tm[1])); const min = Math.min(59, Number(tm[2] || 0));
     const afterTime = normalized.slice((tm.index ?? 0) + tm[0].length);
     const pm = afterTime.match(/\bper\s+(.+)$/);
     const description = pm?.[1]?.trim() || afterTime.trim().replace(/^[,;.-]+/,"");
     if (!description) return null;
+    if (Number.isNaN(date.getTime())) return null;
+    if (dm && (date.getMonth() !== months.indexOf(dm[2]) || date.getDate() !== Number(dm[1]))) return null;
+    if (numeric && (date.getMonth() !== Number(numeric[2]) - 1 || date.getDate() !== Number(numeric[1]))) return null;
     return { date: `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`, time: `${String(hh).padStart(2,"0")}:${String(min).padStart(2,"0")}`, description };
   };
   const aggiungiAppuntamentoVocale = () => {
@@ -1067,7 +1072,7 @@ export default function Home() {
         if (error) throw error;
       }
       setRubricaFornitoreAperta(false);
-      setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp("");
+      setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp(""); setNuovoFornitoreMode(false);
       await caricaDati();
     } catch (error) {
       alert(error instanceof Error ? error.message : "Errore nel salvataggio del fornitore.");
@@ -1342,7 +1347,7 @@ export default function Home() {
           topRight={
             <button
               type="button"
-              onClick={() => setRubricaFornitoreAperta(true)}
+              onClick={() => { setNuovoFornitoreMode(false); setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp(""); setRubricaFornitoreAperta(true); }}
               style={modalLinkStyle}
             >
               RUBRICA
@@ -1725,7 +1730,7 @@ function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick, onSend }: { ordine: Ordine; onClick?:()=>void; onSend?:()=>void }) {
-  return <div onClick={onClick} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div><button type="button" onClick={(e)=>{e.stopPropagation(); onSend?.();}} style={{border:0,borderRadius:10,padding:"8px 10px",background:"#D4AF37",fontWeight:900,fontSize:11}}>INVIA</button></div>;
+  return <div onClick={onClick} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div>{ordine.stato !== "INVIATO" && <button type="button" onClick={(e)=>{e.stopPropagation(); onSend?.();}} style={{border:0,borderRadius:10,padding:"8px 10px",background:"#D4AF37",fontWeight:900,fontSize:11}}>INVIA</button>}</div>;
 }
 
 /* =====================================================
