@@ -71,9 +71,8 @@ type MediaAttachment = {
 
 
   createdAt: string;
-
-
-
+  source?: "job" | "vehicle";
+  r2Key?: string;
 };
 
 
@@ -1127,126 +1126,61 @@ export default function Veicolo() {
 
 
 
-  const apriMedia = async () => {
-
-
-
-    setMediaAperto(true);
-
-
-
+  const aggiungiMediaVeicolo = async (files: File[]) => {
+    if (!profiloVeicolo?.id || files.length === 0) return;
     setMediaCaricamento(true);
-
-
-
-    setMediaVisualizzato(null);
-
-
-
     try {
-
-
-
-      const items = lavori.flatMap((lavoro) =>
-
-
-
-        (lavoro.media || []).map((media) => ({
-
-
-
-          ...media,
-
-
-
-          jobNumber: lavoro.jobNumber,
-
-
-
-          jobDate: lavoro.createdAt,
-
-
-
-          jobType: lavoro.types?.join(" · ") || lavoro.works?.trim() || "Lavoro",
-
-
-
-        }))
-
-
-
-      );
-
-
-
-      const loaded = await Promise.all(
-
-
-
-        items.map(async (item) => {
-
-
-
-          const blob = await loadMediaBlob(item.id);
-
-
-
-          return {
-
-
-
-            ...item,
-
-
-
-            url: blob ? URL.createObjectURL(blob) : undefined,
-
-
-
-          };
-
-
-
-        })
-
-
-
-      );
-
-
-
-      setMediaItems(loaded);
-
-
-
+      for (const file of files) {
+        if (file.size > 50 * 1024 * 1024) throw new Error('Il file supera il limite di 50 MB.');
+        const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]+/g, '_');
+        const id = crypto.randomUUID();
+        const key = 'veicoli/' + profiloVeicolo.id + '/media/' + Date.now() + '-' + id + '-' + safeName;
+        const response = await fetch('/api/r2/file', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, contentType: file.type || 'application/octet-stream' }) });
+        const data = await response.json();
+        if (!response.ok || !data?.ok || !data?.uploadUrl) throw new Error(data?.error || 'Impossibile preparare il caricamento.');
+        const upload = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
+        if (!upload.ok) throw new Error('Caricamento di ' + file.name + ' fallito.');
+        const { error } = await supabase.from('vehicle_media').insert({ id, vehicle_id: profiloVeicolo.id, name: file.name, mime_type: file.type || 'application/octet-stream', size: file.size, r2_key: key });
+        if (error) {
+          await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) }).catch(() => undefined);
+          throw error;
+        }
+      }
+      await apriMedia();
     } catch (error) {
-
-
-
-      console.error("Errore caricamento media veicolo:", error);
-
-
-
-      setMediaItems([]);
-
-
-
+      console.error('Errore caricamento media veicolo:', error);
+      alert(error instanceof Error ? error.message : 'Non è stato possibile aggiungere i file.');
     } finally {
-
-
-
       setMediaCaricamento(false);
-
-
-
     }
-
-
-
   };
 
-
-
+  const apriMedia = async () => {
+    setMediaAperto(true);
+    setMediaCaricamento(true);
+    setMediaVisualizzato(null);
+    try {
+      const { data: vehicleMedia, error: vehicleError } = await supabase.from('vehicle_media').select('id, name, mime_type, size, r2_key, created_at').eq('vehicle_id', profiloVeicolo?.id || '').order('created_at', { ascending: false });
+      if (vehicleError) throw vehicleError;
+      const vehicleItems = await Promise.all((vehicleMedia ?? []).map(async (item: any) => {
+        let url: string | undefined;
+        try {
+          const response = await fetch('/api/r2/file?key=' + encodeURIComponent(String(item.r2_key)));
+          const data = await response.json();
+          if (response.ok && data?.downloadUrl) url = data.downloadUrl;
+        } catch {}
+        return { id: String(item.id), name: String(item.name || 'File'), type: String(item.mime_type || 'application/octet-stream'), size: Number(item.size || 0), createdAt: String(item.created_at || ''), source: 'vehicle' as const, r2Key: String(item.r2_key || ''), jobNumber: 0, jobDate: String(item.created_at || ''), jobType: 'Documenti veicolo', url };
+      }));
+      const jobItems = lavori.flatMap((lavoro) => (lavoro.media || []).map((media) => ({ ...media, source: 'job' as const, jobNumber: lavoro.jobNumber, jobDate: lavoro.createdAt, jobType: lavoro.types?.join(' · ') || lavoro.works?.trim() || 'Lavoro' })));
+      const loadedJobs = await Promise.all(jobItems.map(async (item) => { const blob = await loadMediaBlob(item.id); return { ...item, url: blob ? URL.createObjectURL(blob) : undefined }; }));
+      setMediaItems([...vehicleItems, ...loadedJobs]);
+    } catch (error) {
+      console.error('Errore caricamento media veicolo:', error);
+      setMediaItems([]);
+    } finally {
+      setMediaCaricamento(false);
+    }
+  };
   const eliminaMedia = async (
 
 
