@@ -401,7 +401,7 @@ export default function Agenda() {
                           {app.description}
                         </span>
                       </div>
-                    )}
+                    ))}
                   </div>
                 </button>
               );
