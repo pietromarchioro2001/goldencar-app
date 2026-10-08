@@ -70,6 +70,7 @@ type PagamentoDettaglio = {
   totale?: number;
   pagato?: number;
   manuale?: boolean;
+  data?: string;
 };
 type ClienteRicerca = {
   clientKey: string;
@@ -885,6 +886,7 @@ export default function Home() {
         pagato,
         stato: lavoro.paymentStatus === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
         jobNumber: lavoro.jobNumber,
+        data: lavoro.createdAt,
       });
     }
 
@@ -1007,8 +1009,8 @@ export default function Home() {
       const delta = (w - today.getDay() + 7) % 7 || (timePassed ? 7 : 0);
       date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + delta);
     }
-    if (!tm) return null;
-    const hh = Math.min(23, Number(tm[1])); const min = Math.min(59, Number(tm[2] || 0));
+    const hh = Number(tm[1]); const min = Number(tm[2] || 0);
+    if (hh < 0 || hh > 23 || min < 0 || min > 59) return null;
     const afterTime = normalized.slice((tm.index ?? 0) + tm[0].length);
     const pm = afterTime.match(/\bper\s+(.+)$/);
     const description = pm?.[1]?.trim() || afterTime.trim().replace(/^[,;.-]+/,"");
@@ -1412,6 +1414,9 @@ export default function Home() {
                 />
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:14,fontWeight:900,color:"#111827"}}>{pagamento.descrizione}</div>
+                  {pagamento.data && <div style={{fontSize:12,color:"#64748B",marginTop:3}}>
+                    {new Date(pagamento.data).toLocaleDateString("it-IT")}
+                  </div>}
                   <div style={{fontSize:16,fontWeight:900,color:"#EA580C",marginTop:3}}>{formatEuro(pagamento.importo)}</div>
                 </div>
               </div>
