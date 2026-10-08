@@ -59,7 +59,9 @@ function validateKey(key: string) {
     throw new Error("Chiave R2 mancante.");
   }
 
-  if (!normalized.startsWith("veicoli/")) {
+  const allowedPrefixes = ["veicoli/", "annunci/"];
+
+  if (!allowedPrefixes.some((prefix) => normalized.startsWith(prefix))) {
     throw new Error("Percorso R2 non consentito.");
   }
 
