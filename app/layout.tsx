@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Goldencar Officina",
   description: "Gestionale officina Goldencar",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
