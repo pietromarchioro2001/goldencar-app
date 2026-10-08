@@ -1336,7 +1336,7 @@ export default function Home() {
             {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
           <button type="button" onClick={()=>void aggiornaOrdineHome()} style={secondaryButtonStyle}>SALVA MODIFICHE</button>
-          {ordine.stato !== "INVIATO" && <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={primaryButtonStyle}>INVIA WHATSAPP</button>}
+          {ordineAperto.stato !== "INVIATO" && <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={primaryButtonStyle}>INVIA WHATSAPP</button>}
         </Modal>
       )}
     </>
