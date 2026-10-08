@@ -820,7 +820,7 @@ export default function Home() {
         if(error) throw error;
         clientId=String(created.id);
       }
-      const {error:paymentError}=await supabase.from("payments").insert({client_id:clientId,description:descrizione,amount:importo,status:"DA_PAGARE"});
+      const {error:paymentError}=await supabase.from("payments").insert({id:crypto.randomUUID(),client_id:clientId,description:descrizione,amount:importo,status:"DA_PAGARE"});
       if(paymentError) throw paymentError;
       setNuovoPagamentoAperto(false); setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
