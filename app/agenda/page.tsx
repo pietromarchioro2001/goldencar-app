@@ -367,6 +367,7 @@ export default function Agenda() {
                   >
                     {apps.map((app) => (
                       <div
+                        key={app.id}
                         style={{
                           position: "absolute",
                           left: 8,
