@@ -84,6 +84,8 @@ type Ordine = {
   veicolo?: string;
   descrizione?: string;
   stato?: string;
+  vehicleId?: string;
+  supplierId?: string;
 };
 type VeicoloSalvato = {
   id?: string;
@@ -189,18 +191,11 @@ export default function Home() {
   const [nuovoPagamentoAperto, setNuovoPagamentoAperto] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteSelezionatoPagamento, setClienteSelezionatoPagamento] = useState<ClienteRicerca | null>(null);
+  const [inserimentoNomeLibero, setInserimentoNomeLibero] = useState(false);
   const [nuovoClienteNome, setNuovoClienteNome] = useState("");
   const [nuovoClienteTelefono, setNuovoClienteTelefono] = useState("");
   const [nuovoPagamentoDescrizione, setNuovoPagamentoDescrizione] = useState("");
   const [nuovoPagamentoImporto, setNuovoPagamentoImporto] = useState("");
-  const [pagamentoInCorso, setPagamentoInCorso] = useState<{
-    clientKey: string;
-    paymentId: string;
-    descrizione: string;
-    residuo: number;
-    manuale: boolean;
-  } | null>(null);
-  const [importoPagamento, setImportoPagamento] = useState("");
   const [ordini, setOrdini] = useState<Ordine[]>([]);
   const [modal, setModal] = useState<ModalType>(null);
   const [listening, setListening] = useState(false);
@@ -817,10 +812,8 @@ export default function Home() {
   };
 
   const pagaTuttoCliente = (sollecito: Sollecito) => {
-    aggiornaStatiPagamento(
-      sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono),
-      undefined,
-      true
+    void aggiornaStatiPagamento(
+      sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono)
     );
   };
 
@@ -930,12 +923,13 @@ export default function Home() {
     const q = clienteQuery.trim().toLowerCase();
     if (!q) return clientiDisponibili.slice(0, 8);
     return clientiDisponibili.filter((cliente) =>
-      [cliente.nomeCliente, cliente.telefono, cliente.targa || ""].some(value => value.toLowerCase().includes(q))
+      [cliente.nomeCliente].some(value => value.toLowerCase().includes(q))
     ).slice(0, 8);
   }, [clienteQuery, clientiDisponibili]);
   const apriNuovoPagamento = () => {
     setClienteQuery("");
     setClienteSelezionatoPagamento(null);
+    setInserimentoNomeLibero(false);
     setNuovoClienteNome("");
     setNuovoClienteTelefono("");
     setNuovoPagamentoDescrizione("");
@@ -952,7 +946,7 @@ export default function Home() {
     try {
       const { error } = await supabase.from("payments").insert({
         id: crypto.randomUUID(),
-        client_id: clienteSelezionatoPagamento ? clienteSelezionatoPagamento.clientKey.split("|")[0] || null : null,
+        client_id: null,
         nome_cliente: nome,
         description: descrizione,
         amount: importo,
