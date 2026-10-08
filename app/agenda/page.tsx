@@ -203,8 +203,17 @@ export default function Agenda() {
         .single();
 
       if (error) {
-        console.error("Errore salvataggio appuntamento:", error);
-        alert("Impossibile salvare l'appuntamento.");
+        console.error("Errore salvataggio appuntamento:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          status: (error as any).status,
+          statusCode: (error as any).statusCode,
+        });
+        alert(
+          `Impossibile salvare l'appuntamento.\\n\\n${error.message || "Errore Supabase"}`
+        );
         setSaving(false);
         return;
       }
