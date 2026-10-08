@@ -521,7 +521,7 @@ export default function Home() {
     const { data: paymentRows, error: paymentsError } = await supabase
       .from("payments")
       .select("id, client_id, vehicle_id, description, amount, paid_amount, status, created_at")
-      .eq("status", "DA_PAGARE")
+      .in("status", ["DA_PAGARE", "PARZIALE"])
       .order("created_at", { ascending: false });
 
     if (paymentsError) {
