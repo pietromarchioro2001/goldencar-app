@@ -522,7 +522,7 @@ export default function Home() {
         return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),stato:"DA_PAGARE",createdAt:String(row.created_at??"")};
       });
       setPagamentiManuali(manuali);
-      setSolleciti(aggregaSolleciti(lavoriCaricati, manuali));
+      setSolleciti(aggregaSolleciti(lavori, manuali));
     }
 
     /* =========================
