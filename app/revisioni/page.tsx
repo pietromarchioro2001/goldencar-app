@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import BottomBar from "@/components/BottomBar";
+import { supabase } from "@/lib/supabase";
 
 type Revisione = {
   id?: string;
@@ -99,23 +100,61 @@ export default function RevisioniPage() {
   const [revisioneDaAggiornare, setRevisioneDaAggiornare] = useState<Revisione | null>(null);
   const [nuovaData, setNuovaData] = useState("");
 
-  const caricaRevisioni = () => {
-    try {
-      const raw = localStorage.getItem("goldencar_revisions");
-      const parsed = raw ? JSON.parse(raw) : [];
-      const items = Array.isArray(parsed) ? normalizeRevisioni(parsed) : [];
-      setRevisioni(items);
-      if (items.length && JSON.stringify(items) !== JSON.stringify(parsed)) {
-        localStorage.setItem("goldencar_revisions", JSON.stringify(items));
-      }
-    } catch {
+  const caricaRevisioni = async () => {
+    const { data: vehicles, error: vehiclesError } = await supabase
+      .from("vehicles")
+      .select("id, veicolo, targa, revisione")
+      .not("revisione", "is", null);
+
+    if (vehiclesError) {
+      console.error("Errore caricamento revisioni:", vehiclesError);
       setRevisioni([]);
+      return;
     }
+
+    const rows = vehicles ?? [];
+    const vehicleIds = rows.map((row: any) => String(row.id));
+
+    const [{ data: relations }, { data: clients }] = await Promise.all([
+      vehicleIds.length
+        ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
+        : Promise.resolve({ data: [] as any[] }),
+      supabase.from("clients").select("id, nome, cognome, telefono"),
+    ]);
+
+    const clientsById = new Map((clients ?? []).map((client: any) => [String(client.id), client]));
+    const primaryByVehicle = new Map<string, any>();
+    for (const relation of relations ?? []) {
+      const vehicleId = String(relation.vehicle_id);
+      if (relation.ruolo === "PRINCIPALE" || !primaryByVehicle.has(vehicleId)) {
+        primaryByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
+      }
+    }
+
+    const items: Revisione[] = rows.map((vehicle: any) => {
+      const client = primaryByVehicle.get(String(vehicle.id));
+      const nomeCliente = [client?.nome, client?.cognome].filter(Boolean).join(" ");
+      return {
+        id: `revisione-${vehicle.id}`,
+        vehicleId: String(vehicle.id),
+        nomeCliente,
+        cliente: nomeCliente,
+        telefono: String(client?.telefono ?? ""),
+        veicolo: String(vehicle.veicolo ?? ""),
+        targa: String(vehicle.targa ?? ""),
+        revisione: String(vehicle.revisione ?? ""),
+        scadenza: String(vehicle.revisione ?? ""),
+      };
+    });
+
+    setRevisioni(normalizeRevisioni(items));
   };
 
   useEffect(() => {
-    caricaRevisioni();
-    const refresh = () => caricaRevisioni();
+    void caricaRevisioni();
+    const refresh = () => {
+      void caricaRevisioni();
+    };
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
@@ -149,21 +188,29 @@ export default function RevisioniPage() {
       });
   }, [revisioni, ricerca]);
 
-  const aggiornaData = () => {
+  const aggiornaData = async () => {
     if (!revisioneDaAggiornare || !nuovaData) return;
+    if (!revisioneDaAggiornare.vehicleId) {
+      alert("Veicolo non collegato al database.");
+      return;
+    }
 
-    const updated = revisioni.map((item) =>
+    const { error } = await supabase
+      .from("vehicles")
+      .update({ revisione: nuovaData })
+      .eq("id", revisioneDaAggiornare.vehicleId);
+
+    if (error) {
+      console.error("Errore aggiornamento revisione:", error);
+      alert("Non è stato possibile aggiornare la revisione: " + error.message);
+      return;
+    }
+
+    setRevisioni((current) => current.map((item) =>
       item.id === revisioneDaAggiornare.id
-        ? {
-            ...item,
-            scadenza: nuovaData,
-            revisione: nuovaData,
-          }
+        ? { ...item, scadenza: nuovaData, revisione: nuovaData }
         : item
-    );
-
-    setRevisioni(updated);
-    localStorage.setItem("goldencar_revisions", JSON.stringify(updated));
+    ));
     setRevisioneDaAggiornare(null);
     setNuovaData("");
   };
