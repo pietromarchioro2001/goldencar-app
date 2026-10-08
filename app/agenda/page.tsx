@@ -502,10 +502,20 @@ export default function Agenda() {
                   </button>
 
                   <div
+                    onClick={
+                      apps.length === 0
+                        ? (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openNewAppointment(selectedDay, hour);
+                          }
+                        : undefined
+                    }
                     style={{
                       flex: 1,
                       borderLeft: "1px solid #E5E7EB",
                       position: "relative",
+                      cursor: apps.length === 0 ? "pointer" : "default",
                     }}
                   >
                     {apps.map((app) => (
