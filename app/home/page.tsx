@@ -1046,7 +1046,7 @@ export default function Home() {
     const supplier = fornitori.find(s => s.id === ordine.supplierId);
     if (!supplier?.whatsapp) { alert("Il fornitore non ha un numero WhatsApp."); return; }
     const numero = supplier.whatsapp.replace(/\D/g,"");
-    const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
+    const testo = `Ciao, ordine ${ordineAperto.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
     const { error } = await supabase.from("orders").update({stato:"INVIATO",inviato_at:new Date().toISOString()}).eq("id",ordine.id);
     if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
@@ -1326,7 +1326,7 @@ export default function Home() {
       )}
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
-          <div style={{fontWeight:900,color:"#041E49"}}>{ordine.cliente || "Cliente"} · {ordine.veicolo || ""}</div>
+          <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
           <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordine.numero || ""}</div>
           <button type="button" onClick={()=>{setFornitoreEditId(ordineAperto.supplierId || "");const f=fornitori.find(x=>x.id===ordineAperto.supplierId);setFornitoreEditNome(f?.nome||"");setFornitoreEditWhatsapp(f?.whatsapp||"");setRubricaFornitoreAperta(true);}} style={secondaryButtonStyle}>RUBRICA FORNITORI</button>
           <label style={labelStyle}>PRODOTTO</label>
