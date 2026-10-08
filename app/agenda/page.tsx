@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import BottomBar from "@/components/BottomBar";
 
 const MONTHS = [
@@ -11,8 +12,9 @@ const MONTHS = [
 const WEEK = ["LUN","MAR","MER","GIO","VEN","SAB","DOM"];
 
 export default function Agenda() {
-  const [month, setMonth] = useState(8); // Settembre
-  const [year, setYear] = useState(2026);
+  const today = new Date();
+  const [month, setMonth] = useState(today.getMonth());
+  const [year, setYear] = useState(today.getFullYear());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedHour, setSelectedHour] = useState(8);
@@ -40,11 +42,72 @@ export default function Agenda() {
     return { cells: grid };
   }, [month, year]);
 
-  const appointments = [
-    { day: 4, hour: 8, client: "Sara Verdi", vehicle: "Fiat 500", plate: "XY321ZT" },
-    { day: 4, hour: 11, client: "Paolo Neri", vehicle: "BMW X1", plate: "KL987MN" },
-    { day: 12, hour: 15, client: "Giulia Fontana", vehicle: "Panda", plate: "TR852PL" },
-  ];
+  type Appointment = { id: string; date: string; time: string; description: string };
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const dateKey = (y: number, m: number, d: number) =>
+    y + "-" + String(m + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+
+  useEffect(() => {
+    void loadAppointments();
+  }, []);
+
+  async function loadAppointments() {
+    const current = new Date();
+    const cutoff = new Date(current.getFullYear(), current.getMonth(), current.getDate() - 7);
+    const cutoffKey = dateKey(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate());
+
+    const cleanup = await supabase.from("appointments").delete().lt("date", cutoffKey);
+    if (cleanup.error) console.error("Errore pulizia appuntamenti:", cleanup.error);
+
+    const { data, error } = await supabase
+      .from("appointments")
+      .select("id, date, time, description")
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
+
+    if (error) {
+      console.error("Errore caricamento appuntamenti:", error);
+      return;
+    }
+    setAppointments((data || []) as Appointment[]);
+  }
+
+  async function saveAppointment() {
+    if (selectedDay === null || !description.trim()) {
+      alert("Inserisci la descrizione dell'appuntamento.");
+      return;
+    }
+
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("appointments")
+      .insert({
+        id: crypto.randomUUID(),
+        date: dateKey(year, month, selectedDay),
+        time: String(selectedHour).padStart(2, "0") + ":" + String(selectedMinute).padStart(2, "0") + ":00",
+        description: description.trim(),
+      })
+      .select("id, date, time, description")
+      .single();
+
+    if (error) {
+      console.error("Errore salvataggio appuntamento:", error);
+      alert("Impossibile salvare l'appuntamento.");
+      setSaving(false);
+      return;
+    }
+
+    setAppointments((current) =>
+      [...current, data as Appointment].sort(
+        (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+      )
+    );
+    setDescription("");
+    setShowModal(false);
+    setSaving(false);
+  }
 
   function previousMonth() {
     setSelectedDay(null);
@@ -254,8 +317,10 @@ export default function Agenda() {
             }}
           >
             {Array.from({ length: 24 }).map((_, hour) => {
-              const app = appointments.find(
-                (a) => a.day === selectedDay && a.hour === hour
+              const apps = appointments.filter(
+                (a) =>
+                  a.date === dateKey(year, month, selectedDay) &&
+                  Number(a.time.slice(0, 2)) === hour
               );
 
               return (
@@ -301,7 +366,7 @@ export default function Agenda() {
                       position: "relative",
                     }}
                   >
-                    {app && (
+                    {apps.map((app) => (
                       <div
                         style={{
                           position: "absolute",
@@ -324,7 +389,7 @@ export default function Agenda() {
                             color: "#111827",
                           }}
                         >
-                          {app.client}
+                          {app.time.slice(0, 5)}
                         </span>
 
                         <span
@@ -333,7 +398,7 @@ export default function Agenda() {
                             color: "#1F2937",
                           }}
                         >
-                          {app.vehicle} • {app.plate}
+                          {app.description}
                         </span>
                       </div>
                     )}
@@ -512,10 +577,8 @@ export default function Agenda() {
 
             {/* SALVA */}
             <button
-              onClick={() => {
-                // qui poi inseriremo Supabase
-                setShowModal(false);
-              }}
+              onClick={() => void saveAppointment()}
+              disabled={saving}
               style={{
                 marginTop: 24,
                 width: "100%",
