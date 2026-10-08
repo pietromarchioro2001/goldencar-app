@@ -120,7 +120,7 @@ export default function RevisioniPage() {
       vehicleIds.length
         ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
         : Promise.resolve({ data: [] as any[] }),
-      supabase.from("clients").select("id, nome, cognome, telefono"),
+      supabase.from("clients").select("id, nome, telefono"),
     ]);
 
     const clientsById = new Map((clients ?? []).map((client: any) => [String(client.id), client]));
