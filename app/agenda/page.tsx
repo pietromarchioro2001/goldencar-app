@@ -608,45 +608,54 @@ export default function Agenda() {
               }}
             />
 
-            <h2
+            <div
               style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 900,
-                color: "#111827",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
               }}
             >
-              {editingAppointment ? "MODIFICA APPUNTAMENTO" : "NUOVO APPUNTAMENTO"}
-            </h2>
-            {editingAppointment && (
-              <button
-                onClick={() => void deleteAppointment()}
-                disabled={deleting || saving}
-                aria-label="Elimina appuntamento"
-                title="Elimina appuntamento"
+              <h2
                 style={{
-                  width: 42,
-                  height: 42,
-                  flexShrink: 0,
-                  border: "none",
-                  borderRadius: 13,
-                  background: "#FEE2E2",
-                  color: "#B91C1C",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: deleting || saving ? "default" : "pointer",
+                  margin: 0,
+                  fontSize: 22,
+                  fontWeight: 900,
+                  color: "#111827",
                 }}
               >
-                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6" />
-                  <path d="M14 11v6" />
-                  <path d="M9 6V4h6v2" />
-                </svg>
-              </button>
-            )}
+                {editingAppointment ? "MODIFICA APPUNTAMENTO" : "NUOVO APPUNTAMENTO"}
+              </h2>
+              {editingAppointment && (
+                <button
+                  onClick={() => void deleteAppointment()}
+                  disabled={deleting || saving}
+                  aria-label="Elimina appuntamento"
+                  title="Elimina appuntamento"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    flexShrink: 0,
+                    border: "none",
+                    borderRadius: 10,
+                    background: "#FEE2E2",
+                    color: "#B91C1C",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: deleting || saving ? "default" : "pointer",
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14H6L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4h6v2" />
+                  </svg>
+                </button>
+              )}
+            </div>
 
             <p
               style={{
