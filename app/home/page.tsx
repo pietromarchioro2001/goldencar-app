@@ -328,9 +328,20 @@ export default function Home() {
 
       if (vehicleError) throw new Error(vehicleError.message);
 
-      stopCheckInCamera();
-
       if (vehicle) {
+        const { error: checkInUpdateError } = await supabase
+          .from("vehicles")
+          .update({
+            stato: "APERTO",
+            ultima_apertura: new Date().toISOString(),
+          })
+          .eq("id", vehicle.id);
+
+        if (checkInUpdateError) {
+          throw new Error(checkInUpdateError.message);
+        }
+
+        stopCheckInCamera();
         const { data: relations } = await supabase
           .from("vehicle_clients")
           .select("client_id, ruolo")
