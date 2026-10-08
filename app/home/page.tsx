@@ -380,7 +380,7 @@ export default function Home() {
           "goldencar_nuova_scheda",
           JSON.stringify({
             vehicleId: String(vehicle.id),
-            nomeCliente: [cliente?.nome, cliente?.cognome].filter(Boolean).join(" "),
+            nomeCliente: String(cliente?.nome ?? "").trim(),
             indirizzo: cliente?.indirizzo || "",
             telefono: cliente?.telefono || "",
             codiceFiscale: cliente?.codice_fiscale || "",
@@ -448,7 +448,7 @@ export default function Home() {
       setClientiAnagrafica(
         (clientRows ?? [])
           .map((row: any) => {
-            const nomeCliente = [row?.nome, row?.cognome].filter(Boolean).join(" ").trim();
+            const nomeCliente = String(row?.nome ?? "").trim();
             if (!nomeCliente) return null;
             return {
               clientKey: makeClientKey(nomeCliente, row?.telefono),
@@ -474,10 +474,7 @@ export default function Home() {
       const lavoriCaricati: Lavoro[] = (jobRows ?? []).map((row: any) => {
         const vehicle = vehiclesById.get(String(row.vehicle_id));
         const client = primaryClientByVehicle.get(String(row.vehicle_id));
-        const nomeCliente = [client?.nome, client?.cognome]
-          .filter(Boolean)
-          .join(" ")
-          .trim();
+        const nomeCliente = String(client?.nome ?? "").trim();
 
         const dettagli = row.dettagli && typeof row.dettagli === "object"
           ? row.dettagli
@@ -536,7 +533,7 @@ export default function Home() {
       const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
       const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
       const [{ data: paymentClients }, { data: paymentVehicles }] = await Promise.all([
-        clientIds.length ? supabase.from("clients").select("id, nome, cognome, telefono").in("id", clientIds) : Promise.resolve({data: [] as any[]}),
+        clientIds.length ? supabase.from("clients").select("id, nome, telefono").in("id", clientIds) : Promise.resolve({data: [] as any[]}),
         vehicleIds.length ? supabase.from("vehicles").select("id, targa").in("id", vehicleIds) : Promise.resolve({data: [] as any[]}),
       ]);
       const clientsById = new Map((paymentClients ?? []).map((row:any)=>[String(row.id),row]));
@@ -544,7 +541,7 @@ export default function Home() {
       const manuali: PagamentoManuale[] = (paymentRows ?? []).map((row:any)=>{
         const client=clientsById.get(String(row.client_id));
         const vehicle=vehiclesById.get(String(row.vehicle_id));
-        const nomeCliente=[client?.nome,client?.cognome].filter(Boolean).join(" ").trim() || "Cliente";
+        const nomeCliente=String(client?.nome ?? "").trim() || "Cliente";
         const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
         return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
       });
@@ -602,7 +599,7 @@ export default function Home() {
         revisionVehicleIds.length
           ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", revisionVehicleIds)
           : Promise.resolve({ data: [] as any[] }),
-        supabase.from("clients").select("id, nome, cognome, telefono"),
+        supabase.from("clients").select("id, nome, telefono"),
       ]);
 
       const revisionClientsById = new Map(
@@ -1013,15 +1010,15 @@ export default function Home() {
       const nomeParte=parts.shift()||nome;
       const cognome=parts.join(" ");
       const normalizedPhone=telefono.replace(/\D/g,"");
-      const {data: clients,error: lookupError}=await supabase.from("clients").select("id,nome,cognome,telefono").ilike("nome",nomeParte).limit(50);
+      const {data: clients,error: lookupError}=await supabase.from("clients").select("id,nome,telefono").ilike("nome",nomeParte).limit(50);
       if(lookupError) throw lookupError;
       const existing=(clients??[]).find((client:any)=>{
-        const full=[client.nome,client.cognome].filter(Boolean).join(" ").trim().toLowerCase();
+        const full=String(client.nome ?? "").trim().toLowerCase();
         return full===nome.toLowerCase() || (normalizedPhone && String(client.telefono??"").replace(/\D/g,"")===normalizedPhone);
       });
       let clientId=existing?.id ? String(existing.id) : "";
       if(!clientId){
-        const {data:created,error}=await supabase.from("clients").insert({nome:nomeParte,cognome,telefono:telefono||null}).select("id").single();
+        const {data:created,error}=await supabase.from("clients").insert({nome:nome,telefono:telefono||null}).select("id").single();
         if(error) throw error;
         clientId=String(created.id);
       }
