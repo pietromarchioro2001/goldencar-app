@@ -16,10 +16,17 @@ type Revisione = {
   telefono?: string;
 };
 
+function parseDateOnly(value: string) {
+  const match = String(value || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function formatDate(value: string) {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  const date = parseDateOnly(value);
+  if (!date) return value;
   return new Intl.DateTimeFormat("it-IT", {
     day: "2-digit",
     month: "2-digit",
@@ -29,12 +36,7 @@ function formatDate(value: string) {
 
 function toDateInput(value: string) {
   if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
+  return String(value).slice(0, 10);
 }
 
 function getRevisionDate(revisione: Revisione) {
@@ -54,10 +56,10 @@ function daysFromToday(value: string) {
   if (!value) return null;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
+  const date = parseDateOnly(value);
+  if (!date) return null;
   date.setHours(0, 0, 0, 0);
-  return Math.ceil((date.getTime() - today.getTime()) / 86400000);
+  return Math.round((date.getTime() - today.getTime()) / 86400000);
 }
 
 function calendarIcon(color = "#D4AF37") {
@@ -116,12 +118,22 @@ export default function RevisioniPage() {
     const rows = vehicles ?? [];
     const vehicleIds = rows.map((row: any) => String(row.id));
 
-    const [{ data: relations }, { data: clients }] = await Promise.all([
+    const [{ data: relations, error: relationsError }, { data: clients, error: clientsError }] = await Promise.all([
       vehicleIds.length
-        ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
-        : Promise.resolve({ data: [] as any[] }),
+        ? supabase
+            .from("vehicle_clients")
+            .select("vehicle_id, client_id, ruolo")
+            .in("vehicle_id", vehicleIds)
+        : Promise.resolve({ data: [] as any[], error: null }),
       supabase.from("clients").select("id, nome, telefono"),
     ]);
+
+    if (relationsError) {
+      console.error("Errore caricamento collegamenti revisioni:", relationsError);
+    }
+    if (clientsError) {
+      console.error("Errore caricamento clienti revisioni:", clientsError);
+    }
 
     const clientsById = new Map((clients ?? []).map((client: any) => [String(client.id), client]));
     const primaryByVehicle = new Map<string, any>();
@@ -133,8 +145,11 @@ export default function RevisioniPage() {
     }
 
     const items: Revisione[] = rows.map((vehicle: any) => {
-      const client = primaryByVehicle.get(String(vehicle.id));
-      const nomeCliente = [client?.nome, client?.cognome].filter(Boolean).join(" ");
+      const relationClient = primaryByVehicle.get(String(vehicle.id));
+      const client =
+        relationClient ||
+        clientsById.get(String(vehicle.client_id ?? ""));
+      const nomeCliente = String(client?.nome ?? "").trim();
       return {
         id: `revisione-${vehicle.id}`,
         vehicleId: String(vehicle.id),
@@ -217,7 +232,12 @@ export default function RevisioniPage() {
   };
 
   const ricorda = (revisione: Revisione) => {
-    const telefono = String(revisione.telefono || "").replace(/\D/g, "");
+    const telefonoRaw = String(revisione.telefono || "").trim();
+    let telefono = telefonoRaw.replace(/\D/g, "");
+    if (telefono.startsWith("00")) telefono = telefono.slice(2);
+    if (!telefono.startsWith("39") && /^3\d{8,9}$/.test(telefono)) {
+      telefono = "39" + telefono;
+    }
     if (!telefono) {
       alert("Questo cliente non ha un numero di telefono.");
       return;
@@ -229,10 +249,15 @@ export default function RevisioniPage() {
     const data = getRevisionDate(revisione);
     const giorni = daysFromToday(data);
 
+    if (!data) {
+      alert("Questo veicolo non ha una data di revisione valida.");
+      return;
+    }
+
     const testo =
       giorni !== null && giorni < 0
-        ? `Ciao ${nome}, ti ricordiamo che la revisione di ${veicolo}${targa} è scaduta il ${formatDate(data)}. Contattaci per fissare un appuntamento.`
-        : `Ciao ${nome}, ti ricordiamo che la revisione di ${veicolo}${targa} è prevista per il ${formatDate(data)}. Contattaci per fissare un appuntamento.`;
+        ? "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " è scaduta il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento."
+        : "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " scadrà il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento.";
 
     window.open(
       `https://wa.me/${telefono}?text=${encodeURIComponent(testo)}`,
