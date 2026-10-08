@@ -536,7 +536,7 @@ export default function Home() {
           const dateTime = new Date(String(row.data_ora ?? ""));
           return {
             id: String(row.id ?? ""),
-            date: Number.isNaN(dateTime.getTime()) ? "" : dateTime.toISOString().slice(0, 10),
+            date: Number.isNaN(dateTime.getTime()) ? "" : `${dateTime.getFullYear()}-${String(dateTime.getMonth()+1).padStart(2,"0")}-${String(dateTime.getDate()).padStart(2,"0")}`,
             time: Number.isNaN(dateTime.getTime())
               ? ""
               : dateTime.toLocaleTimeString("it-IT", {
