@@ -21,7 +21,6 @@ export default function Agenda() {
   const [selectedMinute, setSelectedMinute] = useState(0);
 
   const [description, setDescription] = useState("");
-  const today = new Date();
 
   const currentDay =
     today.getFullYear() === year && today.getMonth() === month
