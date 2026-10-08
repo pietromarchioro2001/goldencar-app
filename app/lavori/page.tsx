@@ -206,7 +206,7 @@ export default function LavoriPage() {
         </div> : <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {lavoriFiltrati.map((lavoro) => {
             const tipo = lavoro.types?.filter(Boolean).join(" · ") || "Intervento";
-            return <div key={`${lavoro.jobNumber}-${lavoro.createdAt}`} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box" }}>
+            return <div key={`${lavoro.jobNumber}-${lavoro.createdAt}`} onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobNumber)); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
               <button type="button" onClick={() => apriPdf(lavoro)} disabled={pdfLoading === lavoro.jobNumber} aria-label={`Apri PDF scheda ${formatJobNumber(lavoro.jobNumber)}`} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}><PaperclipIcon /></button>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
