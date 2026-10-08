@@ -558,29 +558,21 @@ export default function Home() {
     ========================= */
     const { data: appointmentRows, error: appointmentsError } = await supabase
       .from("appointments")
-      .select("id, vehicle_id, titolo, descrizione, data_ora")
-      .order("data_ora", { ascending: true });
+      .select("id, date, time, description")
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
 
     if (appointmentsError) {
       console.error("Errore caricamento appuntamenti Home:", appointmentsError);
       setAppuntamenti([]);
     } else {
       setAppuntamenti(
-        (appointmentRows ?? []).map((row: any) => {
-          const dateTime = new Date(String(row.data_ora ?? ""));
-          return {
-            id: String(row.id ?? ""),
-            date: Number.isNaN(dateTime.getTime()) ? "" : dateTime.toISOString().slice(0, 10),
-            time: Number.isNaN(dateTime.getTime())
-              ? ""
-              : dateTime.toLocaleTimeString("it-IT", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }),
-            description: String(row.descrizione ?? row.titolo ?? ""),
-          };
-        })
+        (appointmentRows ?? []).map((row: any) => ({
+          id: String(row.id ?? ""),
+          date: String(row.date ?? ""),
+          time: String(row.time ?? "").slice(0, 5),
+          description: String(row.description ?? ""),
+        }))
       );
     }
 
