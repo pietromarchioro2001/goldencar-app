@@ -493,12 +493,40 @@ export default function Home() {
       });
 
       setLavori(lavoriCaricati);
-      const manuali = leggiArray<PagamentoManuale>("goldencar_pagamenti_manuali");
+    }
+    /* =       PAGAMENTI / SOLLECITI
+    ========================= */
+    const { data: paymentRows, error: paymentsError } = await supabase
+      .from("payments")
+      .select("id, client_id, vehicle_id, description, amount, status, created_at")
+      .eq("status", "DA_PAGARE")
+      .order("created_at", { ascending: false });
+
+    if (paymentsError) {
+      console.error("Errore caricamento pagamenti Home:", paymentsError);
+      setPagamentiManuali([]);
+      setSolleciti(aggregaSolleciti(lavoriCaricati, []));
+    } else {
+      const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
+      const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
+      const [{ data: paymentClients }, { data: paymentVehicles }] = await Promise.all([
+        clientIds.length ? supabase.from("clients").select("id, nome, cognome, telefono").in("id", clientIds) : Promise.resolve({data: [] as any[]}),
+        vehicleIds.length ? supabase.from("vehicles").select("id, targa").in("id", vehicleIds) : Promise.resolve({data: [] as any[]}),
+      ]);
+      const clientsById = new Map((paymentClients ?? []).map((row:any)=>[String(row.id),row]));
+      const vehiclesById = new Map((paymentVehicles ?? []).map((row:any)=>[String(row.id),row]));
+      const manuali: PagamentoManuale[] = (paymentRows ?? []).map((row:any)=>{
+        const client=clientsById.get(String(row.client_id));
+        const vehicle=vehiclesById.get(String(row.vehicle_id));
+        const nomeCliente=[client?.nome,client?.cognome].filter(Boolean).join(" ").trim() || "Cliente";
+        return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),stato:"DA_PAGARE",createdAt:String(row.created_at??"")};
+      });
       setPagamentiManuali(manuali);
       setSolleciti(aggregaSolleciti(lavoriCaricati, manuali));
     }
+
     /* =========================
-       AGENDA
+
     ========================= */
     setAppuntamenti(
       leggiArray<Appuntamento>("goldencar_appointments")
@@ -672,35 +700,29 @@ export default function Home() {
       "noopener,noreferrer"
     );
   };
-  const aggiornaStatiPagamento = (clientKey: string, paymentId?: string, pagaTutto = false) => {
-    const updatedJobs = lavori.map((lavoro) => {
-      const nome = lavoro.nomeCliente || "Cliente";
-      const key = makeClientKey(nome, lavoro.telefono);
-      if (key !== clientKey || lavoro.paymentStatus !== "DA_PAGARE") return lavoro;
-      if (!pagaTutto && String(lavoro.jobNumber) !== String(paymentId)) return lavoro;
-      return { ...lavoro, paymentStatus: "PAGATO" as const };
+  const aggiornaStatiPagamento = async (clientKey: string, paymentId?: string, pagaTutto = false) => {
+    const targetJobs = lavori.filter((l) => {
+      const key = makeClientKey(l.nomeCliente || "Cliente", l.telefono);
+      return key === clientKey && l.paymentStatus === "DA_PAGARE" && (pagaTutto || String(l.jobNumber) === String(paymentId));
     });
-    for (const lavoro of updatedJobs) {
-      const originale = lavori.find((x) => x.jobNumber === lavoro.jobNumber);
-      if (originale !== lavoro) {
-        localStorage.setItem(`goldencar_job_${lavoro.jobNumber}`, JSON.stringify(lavoro));
+    const targetManuali = pagamentiManuali.filter((p) => p.clientKey === clientKey && p.stato === "DA_PAGARE" && (pagaTutto || p.id === paymentId));
+    try {
+      if (targetJobs.length) {
+        const { error } = await supabase.from("jobs").update({payment_status:"PAGATO"}).in("id", targetJobs.map(l=>String(l.jobNumber)));
+        if (error) throw error;
       }
+      if (targetManuali.length) {
+        const { error } = await supabase.from("payments").update({status:"PAGATO",paid_at:new Date().toISOString()}).in("id", targetManuali.map(p=>p.id));
+        if (error) throw error;
+      }
+      await caricaDati();
+      setDettaglioSollecito(null);
+    } catch(error) {
+      console.error("Errore aggiornamento pagamento:",error);
+      alert(error instanceof Error ? error.message : "Errore durante l'aggiornamento del pagamento.");
     }
-    const updatedManuali = pagamentiManuali.map((pagamento) => {
-      if (pagamento.clientKey !== clientKey || pagamento.stato !== "DA_PAGARE") return pagamento;
-      if (!pagaTutto && pagamento.id !== paymentId) return pagamento;
-      return { ...pagamento, stato: "PAGATO" as const };
-    });
-    localStorage.setItem("goldencar_pagamenti_manuali", JSON.stringify(updatedManuali));
-    setPagamentiManuali(updatedManuali);
-    setLavori(updatedJobs);
-    setSolleciti(aggregaSolleciti(updatedJobs, updatedManuali));
-    setDettaglioSollecito((current) => {
-      if (!current) return null;
-      const remaining = aggregaSolleciti(updatedJobs, updatedManuali).find(x => x.clientKey === current.clientKey);
-      return remaining || null;
-    });
   };
+
   const pagaTuttoCliente = (sollecito: Sollecito) => {
     aggiornaStatiPagamento(sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono), undefined, true);
   };
@@ -746,28 +768,17 @@ export default function Home() {
     return result;
   };
   const clientiDisponibili = useMemo<ClienteRicerca[]>(() => {
-    if (typeof window === "undefined") return [];
     const map = new Map<string, ClienteRicerca>();
-    const add = (nome: unknown, telefono?: unknown, targa?: unknown) => {
-      const n = String(nome || "").trim();
-      const tel = String(telefono || "").trim();
-      if (!n) return;
-      const key = makeClientKey(n, tel);
-      if (!map.has(key)) map.set(key, { clientKey: key, nomeCliente: n, telefono: tel, targa: String(targa || "").trim() });
-    };
-    for (const lavoro of lavori) add(lavoro.nomeCliente, lavoro.telefono, lavoro.targa);
-    for (const storageKey of ["goldencar_vehicles", "goldencar_clients", "goldencar_clienti"]) {
-      try {
-        const raw = localStorage.getItem(storageKey);
-        const arr = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(arr)) continue;
-        for (const item of arr) {
-          add(item.nomeCliente || item.nome || item.cliente || [item.nome, item.cognome].filter(Boolean).join(" "), item.telefono || item.phone, item.targa || item.plate);
-        }
-      } catch {}
+    for (const lavoro of lavori) {
+      const nome = String(lavoro.nomeCliente || "").trim();
+      if (!nome) continue;
+      const telefono = String(lavoro.telefono || "").trim();
+      const key = makeClientKey(nome, telefono);
+      if (!map.has(key)) map.set(key,{clientKey:key,nomeCliente:nome,telefono,targa:String(lavoro.targa||"").trim()});
     }
-    return Array.from(map.values()).sort((a, b) => a.nomeCliente.localeCompare(b.nomeCliente, "it"));
+    return Array.from(map.values()).sort((a,b)=>a.nomeCliente.localeCompare(b.nomeCliente,"it"));
   }, [lavori]);
+
   const clientiFiltrati = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
     if (!q) return clientiDisponibili.slice(0, 8);
@@ -784,58 +795,42 @@ export default function Home() {
     setNuovoPagamentoImporto("");
     setNuovoPagamentoAperto(true);
   };
-  const salvaNuovoPagamento = () => {
-    const nome = (clienteSelezionatoPagamento?.nomeCliente || nuovoClienteNome).trim();
-    const telefono = (clienteSelezionatoPagamento?.telefono || nuovoClienteTelefono).trim();
-    const importo = parseImporto(nuovoPagamentoImporto);
-    const descrizione = nuovoPagamentoDescrizione.trim();
-    if (!nome) {
-      alert("Inserisci o seleziona un cliente.");
-      return;
+  const salvaNuovoPagamento = async () => {
+    const nome=(clienteSelezionatoPagamento?.nomeCliente||nuovoClienteNome).trim();
+    const telefono=(clienteSelezionatoPagamento?.telefono||nuovoClienteTelefono).trim();
+    const importo=parseImporto(nuovoPagamentoImporto);
+    const descrizione=nuovoPagamentoDescrizione.trim();
+    if(!nome){alert("Inserisci o seleziona un cliente.");return;}
+    if(importo<=0){alert("Inserisci un importo valido.");return;}
+    if(!descrizione){alert("Inserisci la descrizione del piccolo lavoro.");return;}
+    try {
+      const parts=nome.split(/\s+/).filter(Boolean);
+      const nomeParte=parts.shift()||nome;
+      const cognome=parts.join(" ");
+      const normalizedPhone=telefono.replace(/\D/g,"");
+      const {data: clients,error: lookupError}=await supabase.from("clients").select("id,nome,cognome,telefono").ilike("nome",nomeParte).limit(50);
+      if(lookupError) throw lookupError;
+      const existing=(clients??[]).find((client:any)=>{
+        const full=[client.nome,client.cognome].filter(Boolean).join(" ").trim().toLowerCase();
+        return full===nome.toLowerCase() || (normalizedPhone && String(client.telefono??"").replace(/\D/g,"")===normalizedPhone);
+      });
+      let clientId=existing?.id ? String(existing.id) : "";
+      if(!clientId){
+        const {data:created,error}=await supabase.from("clients").insert({nome:nomeParte,cognome,telefono:telefono||null}).select("id").single();
+        if(error) throw error;
+        clientId=String(created.id);
+      }
+      const {error:paymentError}=await supabase.from("payments").insert({client_id:clientId,description:descrizione,amount:importo,status:"DA_PAGARE"});
+      if(paymentError) throw paymentError;
+      setNuovoPagamentoAperto(false); setClienteSelezionatoPagamento(null); setClienteQuery("");
+      setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
+      await caricaDati();
+    } catch(error) {
+      console.error("Errore salvataggio nuovo pagamento:",error);
+      alert(error instanceof Error ? error.message : "Errore durante il salvataggio del pagamento.");
     }
-    if (importo <= 0) {
-      alert("Inserisci un importo valido.");
-      return;
-    }
-    if (!descrizione) {
-      alert("Inserisci la descrizione del piccolo lavoro.");
-      return;
-    }
-    const clientKey = clienteSelezionatoPagamento?.clientKey || makeClientKey(nome, telefono);
-    // Se il cliente non esiste, registriamo almeno il profilo cliente locale.
-    // Quando la rubrica definitiva verrà collegata a Supabase, questo blocco sarà sostituito dal salvataggio nel database.
-    if (!clienteSelezionatoPagamento) {
-      try {
-        const raw = localStorage.getItem("goldencar_clients");
-        const clienti = raw ? JSON.parse(raw) : [];
-        const elenco = Array.isArray(clienti) ? clienti : [];
-        if (!elenco.some((c: any) => makeClientKey(c.nomeCliente || c.nome || "", c.telefono || c.phone) === clientKey)) {
-          elenco.push({
-            id: crypto.randomUUID(),
-            nomeCliente: nome,
-            telefono,
-            createdAt: new Date().toISOString(),
-          });
-          localStorage.setItem("goldencar_clients", JSON.stringify(elenco));
-        }
-      } catch {}
-    }
-    const nuovo: PagamentoManuale = {
-      id: crypto.randomUUID(),
-      clientKey,
-      nomeCliente: nome,
-      telefono,
-      descrizione,
-      importo: String(importo),
-      stato: "DA_PAGARE",
-      createdAt: new Date().toISOString(),
-    };
-    const aggiornati = [...pagamentiManuali, nuovo];
-    localStorage.setItem("goldencar_pagamenti_manuali", JSON.stringify(aggiornati));
-    setPagamentiManuali(aggiornati);
-    setSolleciti(aggregaSolleciti(lavori, aggiornati));
-    setNuovoPagamentoAperto(false);
   };
+
   const aggiungiAppuntamentoVocale =
     () => {
       const Recognition = (
