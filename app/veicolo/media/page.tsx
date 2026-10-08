@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function VehicleMediaViewer() {
+function VehicleMediaViewerContent() {
   const params = useSearchParams();
   const key = params.get("key") || "";
   const name = params.get("name") || "File";
@@ -163,5 +163,24 @@ export default function VehicleMediaViewer() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function VehicleMediaViewer() {
+  return (
+    <Suspense fallback={
+      <main style={{
+        minHeight: "100vh",
+        background: "#111827",
+        color: "#FFFFFF",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}>
+        Caricamento...
+      </main>
+    }>
+      <VehicleMediaViewerContent />
+    </Suspense>
   );
 }
