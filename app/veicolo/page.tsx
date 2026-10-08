@@ -1182,105 +1182,36 @@ export default function Veicolo() {
     }
   };
   const eliminaMedia = async (
-
-
-
     item: MediaAttachment & { jobNumber: number; jobDate: string; jobType: string; url?: string }
-
-
-
   ) => {
-
-
-
-    const conferma = window.confirm(
-
-
-
-      `Eliminare "${item.name}"? Il file verrà rimosso anche dalla scheda #${item.jobNumber}.`
-
-
-
-    );
-
-
-
+    const conferma = window.confirm('Eliminare "' + item.name + '"?');
     if (!conferma) return;
-
-
-
     try {
-
-
-
-      const key = `goldencar_job_${item.jobNumber}`;
-
-
-
-      const raw = localStorage.getItem(key);
-
-
-
-      if (raw) {
-
-
-
-        const lavoro = JSON.parse(raw) as LavoroSalvato;
-
-
-
-        lavoro.media = (lavoro.media || []).filter((media) => media.id !== item.id);
-
-
-
-        localStorage.setItem(key, JSON.stringify(lavoro));
-
-
-
+      if (item.source === 'vehicle') {
+        if (item.r2Key) {
+          await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: item.r2Key }) });
+        }
+        const { error } = await supabase.from('vehicle_media').delete().eq('id', item.id);
+        if (error) throw error;
+      } else {
+        const key = 'goldencar_job_' + item.jobNumber;
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const lavoro = JSON.parse(raw) as LavoroSalvato;
+          lavoro.media = (lavoro.media || []).filter((media) => media.id !== item.id);
+          localStorage.setItem(key, JSON.stringify(lavoro));
+        }
+        await deleteMediaBlob(item.id);
       }
-
-
-
-      await deleteMediaBlob(item.id);
-
-
-
       if (item.url) URL.revokeObjectURL(item.url);
-
-
-
       setMediaItems((current) => current.filter((media) => media.id !== item.id));
-
-
-
       setMediaVisualizzato(null);
-
-
-
-      aggiornaLavori();
-
-
-
+      void aggiornaLavori();
     } catch (error) {
-
-
-
-      console.error("Errore eliminazione media:", error);
-
-
-
-      alert("Non è stato possibile eliminare il file.");
-
-
-
+      console.error('Errore eliminazione media:', error);
+      alert('Non è stato possibile eliminare il file.');
     }
-
-
-
   };
-
-
-
   const scaricaMedia = (item: MediaAttachment & { url?: string }) => {
 
 
@@ -1369,88 +1300,35 @@ export default function Veicolo() {
 
 
   const mediaGroups = Array.from(
-
-
-
     mediaItems.reduce((groups, item) => {
-
-
-
-      const existing = groups.get(item.jobNumber);
-
-
-
-      if (existing) {
-
-
-
-        existing.items.push(item);
-
-
-
-      } else {
-
-
-
-        groups.set(item.jobNumber, {
-
-
-
-          jobNumber: item.jobNumber,
-
-
-
-          jobDate: item.jobDate,
-
-
-
-          jobType: item.jobType,
-
-
-
-          items: [item],
-
-
-
-        });
-
-
-
-      }
-
-
-
+      const dateKey = item.createdAt && !Number.isNaN(new Date(item.createdAt).getTime())
+        ? new Date(item.createdAt).toISOString().slice(0, 10)
+        : "senza-data";
+      const existing = groups.get(dateKey);
+      if (existing) existing.items.push(item);
+      else groups.set(dateKey, { dateKey, date: item.createdAt, items: [item] });
       return groups;
+    }, new Map<string, { dateKey: string; date: string; items: typeof mediaItems }>())
+  ).sort((a, b) => {
+    if (a[0] === "senza-data") return 1;
+    if (b[0] === "senza-data") return -1;
+    return b[0].localeCompare(a[0]);
+  });
 
+  const estensioneMedia = (item: MediaAttachment) => {
+    const parts = item.name.split(".");
+    return parts.length > 1 ? parts.pop()?.toUpperCase() || "FILE" : "FILE";
+  };
 
+  const isVideoMedia = (item: MediaAttachment) => item.type.startsWith("video/");
 
-    }, new Map<number, {
-
-
-
-      jobNumber: number;
-
-
-
-      jobDate: string;
-
-
-
-      jobType: string;
-
-
-
-      items: typeof mediaItems;
-
-
-
-    }>())
-
-
-
-  ).sort((a, b) => b[1].jobNumber - a[1].jobNumber);
-
-
+  const apriMediaInNuovaFinestra = (item: MediaAttachment & { url?: string }) => {
+    if (!item.url) {
+      alert("File non disponibile.");
+      return;
+    }
+    window.open(item.url, "_blank", "noopener,noreferrer");
+  };
 
   return (
 
