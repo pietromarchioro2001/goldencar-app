@@ -1322,7 +1322,14 @@ export default function Veicolo() {
 
   const isVideoMedia = (item: MediaAttachment) => item.type.startsWith("video/");
 
-  const apriMediaInNuovaFinestra = (item: MediaAttachment & { url?: string }) => {
+  const apriMediaInNuovaFinestra = (
+    item: MediaAttachment & {
+      jobNumber?: number;
+      jobDate?: string;
+      jobType?: string;
+      url?: string;
+    }
+  ) => {
     if (item.source === "vehicle" && item.r2Key) {
       const viewerUrl =
         "/veicolo/media?key=" +
@@ -1341,7 +1348,12 @@ export default function Veicolo() {
       return;
     }
 
-    setMediaVisualizzato(item);
+    setMediaVisualizzato({
+      ...item,
+      jobNumber: item.jobNumber ?? 0,
+      jobDate: item.jobDate ?? item.createdAt,
+      jobType: item.jobType ?? "Media veicolo",
+    });
   };
 
   return (
