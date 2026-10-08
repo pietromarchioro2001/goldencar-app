@@ -217,7 +217,7 @@ export default function Home() {
   const [fornitoreEditId, setFornitoreEditId] = useState("");
   const [fornitoreEditNome, setFornitoreEditNome] = useState("");
   const [fornitoreEditWhatsapp, setFornitoreEditWhatsapp] = useState("");
-  const [checkInVideoRef = useRef<HTMLVideoElement>(null);
+  const checkInVideoRef = useRef<HTMLVideoElement>(null);
   const checkInStreamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
