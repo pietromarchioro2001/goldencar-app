@@ -1323,11 +1323,25 @@ export default function Veicolo() {
   const isVideoMedia = (item: MediaAttachment) => item.type.startsWith("video/");
 
   const apriMediaInNuovaFinestra = (item: MediaAttachment & { url?: string }) => {
+    if (item.source === "vehicle" && item.r2Key) {
+      const viewerUrl =
+        "/veicolo/media?key=" +
+        encodeURIComponent(item.r2Key) +
+        "&name=" +
+        encodeURIComponent(item.name) +
+        "&type=" +
+        encodeURIComponent(item.type);
+
+      window.open(viewerUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     if (!item.url) {
       alert("File non disponibile.");
       return;
     }
-    window.open(item.url, "_blank", "noopener,noreferrer");
+
+    setMediaVisualizzato(item);
   };
 
   return (
