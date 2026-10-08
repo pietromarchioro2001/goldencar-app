@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 
 type Revisione = {
   id?: string;
+  vehicleId?: string;
   nomeCliente?: string;
   cliente?: string;
   veicolo?: string;
