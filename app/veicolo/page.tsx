@@ -32,6 +32,7 @@ type ClienteData = {
 
 
 type ClienteSelezionato = 1 | 2;
+type FiltroRicerca = "TUTTO" | "TARGA" | "VEICOLO" | "CLIENTE" | "TELEFONO";
 
 type ProfiloVeicolo = {
   id: string;
@@ -320,9 +321,8 @@ export default function Veicolo() {
 
 
   const [ricerca, setRicerca] = useState("");
-
-
-
+  const [filtroRicerca, setFiltroRicerca] = useState<FiltroRicerca>("TUTTO");
+  const [filtriAperti, setFiltriAperti] = useState(false);
   const [veicoloSelezionato, setVeicoloSelezionato] = useState(false);
 
 
@@ -462,17 +462,14 @@ export default function Veicolo() {
 
 
 
-  const telefonoHref = clienteVisualizzato.telefono
-
-
-
-    ? `tel:${clienteVisualizzato.telefono.replace(/\s+/g, "")}`
-
-
-
+  const whatsappHref = clienteVisualizzato.telefono
+    ? (() => {
+        let numero = clienteVisualizzato.telefono.replace(/\D/g, "");
+        if (numero.startsWith("00")) numero = numero.slice(2);
+        if (!numero.startsWith("39")) numero = "39" + numero.replace(/^0+/, "");
+        return numero.length >= 10 ? `https://wa.me/${numero}` : undefined;
+      })()
     : undefined;
-
-
 
   const aggiornaLavori = async () => {
     if (typeof window === "undefined") return;
@@ -756,27 +753,26 @@ export default function Veicolo() {
       const cliente2 = item?.cliente2 ?? null;
       const veicolo = item?.veicolo ?? {};
 
-      const valoriRicerca = [
-        veicolo.targa,
-        veicolo.veicolo,
-        veicolo.motore,
-        cliente1.nome,
-        cliente1.cognome,
-        cliente1.telefono,
-        cliente1.cf,
-        cliente2?.nome,
-        cliente2?.cognome,
-        cliente2?.telefono,
-        cliente2?.cf,
-      ]
-        .filter(Boolean)
-        .map((value) => String(value).toLowerCase());
+      const campi = {
+        TARGA: [veicolo.targa],
+        VEICOLO: [veicolo.veicolo, veicolo.motore],
+        CLIENTE: [
+          cliente1.nome, cliente1.cognome, cliente1.cf,
+          cliente2?.nome, cliente2?.cognome, cliente2?.cf,
+        ],
+        TELEFONO: [cliente1.telefono, cliente2?.telefono],
+      } as Record<FiltroRicerca, unknown[]>;
 
-      return valoriRicerca.some(
-        (value) =>
+      const valoriRicerca =
+        filtroRicerca === "TUTTO" ? Object.values(campi).flat() : campi[filtroRicerca];
+
+      return valoriRicerca
+        .filter(Boolean)
+        .map((value) => String(value).toLowerCase())
+        .some((value) =>
           value.includes(valore) ||
           valorNormalizzato(value).includes(queryNormalizzata)
-      );
+        );
     }) as ProfiloVeicolo[];
   };
 
@@ -1389,7 +1385,41 @@ export default function Veicolo() {
 
 
 
-  const formatMediaDate = (value: string) =>
+  const formatDataCompleta = (value: string) => {
+    if (!value) return "—";
+    const raw = String(value).trim();
+    let date: Date;
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [year, month, day] = raw.split("-").map(Number);
+      date = new Date(year, month - 1, day);
+    } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(raw)) {
+      const [day, month, year] = raw.split("/").map(Number);
+      date = new Date(year, month - 1, day);
+    } else {
+      date = new Date(raw);
+    }
+
+    if (Number.isNaN(date.getTime())) return raw;
+    return new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+    }).format(date);
+  };
+
+  const valoreDataInput = (value: string) => {
+    if (!value) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
+      const [day, month, year] = value.split("/");
+      return `${year}-${month}-${day}`;
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+
+  const formatMediaDate = (
 
 
 
@@ -1671,7 +1701,13 @@ export default function Veicolo() {
 
 
 
-            placeholder="Targa, cliente o telefono"
+            placeholder={
+              filtroRicerca === "TARGA" ? "Cerca per targa" :
+              filtroRicerca === "VEICOLO" ? "Cerca per veicolo o motore" :
+              filtroRicerca === "CLIENTE" ? "Cerca per cliente" :
+              filtroRicerca === "TELEFONO" ? "Cerca per telefono" :
+              "Targa, cliente o telefono"
+            }
 
 
 
@@ -1717,16 +1753,52 @@ export default function Veicolo() {
 
         </div>
 
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <button
+            type="button"
+            onClick={() => setFiltriAperti((value) => !value)}
+            aria-label="Filtra ricerca"
+            title="Filtra ricerca"
+            style={{
+              width: 44, height: 52, border: "none", borderRadius: 18,
+              background: filtroRicerca !== "TUTTO" ? "#EEF3F8" : "#FFFFFF",
+              boxShadow: "0 4px 12px rgba(0,0,0,.08)",
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+            }}
+          >
+            <FilterIcon />
+          </button>
 
+          {filtriAperti && (
+            <div style={{
+              position: "absolute", top: 58, right: 0, width: 180,
+              background: "#FFFFFF", borderRadius: 16, padding: 6,
+              boxShadow: "0 12px 30px rgba(15,23,42,.16)",
+              border: "1px solid #E5E7EB", zIndex: 50,
+            }}>
+              {([
+                ["TUTTO", "Tutto"], ["TARGA", "Targa"], ["VEICOLO", "Veicolo"],
+                ["CLIENTE", "Cliente"], ["TELEFONO", "Telefono"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => { setFiltroRicerca(value); setFiltriAperti(false); }}
+                  style={{
+                    width: "100%", border: "none", borderRadius: 10,
+                    background: filtroRicerca === value ? "#F8F5E8" : "#FFFFFF",
+                    color: filtroRicerca === value ? "#8A6A00" : "#374151",
+                    padding: "10px 11px", textAlign: "left", fontSize: 13,
+                    fontWeight: filtroRicerca === value ? 850 : 650, cursor: "pointer",
+                  }}
+                >{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button
-
-
-
           type="button"
-
-
-
           onClick={() => router.push("/veicolo/profilo")}
 
 
@@ -2089,24 +2161,33 @@ export default function Veicolo() {
               icon={<RevisionIcon />}
               label="Revisione"
               value={modificaProfilo && profiloEdit ? (
-                <input value={profiloEdit.veicolo.revisione} onChange={(e) => aggiornaVeicoloEdit("revisione", e.target.value)}
-                  placeholder="MM/AAAA" style={cardEditInputStyle} />
+                <input
+                  type="date"
+                  value={valoreDataInput(profiloEdit.veicolo.revisione)}
+                  onChange={(e) => aggiornaVeicoloEdit("revisione", e.target.value)}
+                  style={cardEditInputStyle}
+                />
               ) : (
                 dataRevisione ? (() => {
                   const data = new Date(dataRevisione);
                   if (Number.isNaN(data.getTime())) return dataRevisione;
-                  return new Intl.DateTimeFormat("it-IT", { month: "2-digit", year: "numeric" }).format(data);
+                  return formatDataCompleta(dataRevisione);
                 })() : "—"
               )}
               iconColor="#2563EB"
+              valueFontSize={16}
             />
             <InfoCard
               icon={<KeyIcon />}
               label="Immatric."
               value={modificaProfilo && profiloEdit ? (
-                <input value={profiloEdit.veicolo.immatricolazione} onChange={(e) => aggiornaVeicoloEdit("immatricolazione", e.target.value)}
-                  placeholder="Data immatricolazione" style={cardEditInputStyle} />
-              ) : (veicoloProfilo.immatricolazione || "—")}
+                <input
+                  type="date"
+                  value={valoreDataInput(profiloEdit.veicolo.immatricolazione)}
+                  onChange={(e) => aggiornaVeicoloEdit("immatricolazione", e.target.value)}
+                  style={cardEditInputStyle}
+                />
+              ) : formatDataCompleta(veicoloProfilo.immatricolazione)}
               iconColor="#2563EB"
             />
             <InfoCard
@@ -2119,6 +2200,7 @@ export default function Veicolo() {
               ) : (clienteVisualizzato.indirizzo || "—")}
               iconColor="#374151"
               href={modificaProfilo ? undefined : indirizzoMaps}
+              valueFontSize={16}
             />
             <InfoCard
               icon={<PhoneIcon />}
@@ -2129,7 +2211,8 @@ export default function Veicolo() {
                   placeholder="Telefono" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.telefono || "—")}
               iconColor="#16A34A"
-              href={modificaProfilo ? undefined : telefonoHref}
+              href={modificaProfilo ? undefined : whatsappHref}
+              valueFontSize={16}
             />
             <InfoCard
               icon={<PersonIcon />}
@@ -2140,6 +2223,7 @@ export default function Veicolo() {
                   placeholder="Data di nascita" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.nascita || "—")}
               iconColor="#7C3AED"
+              valueFontSize={16}
             />
             <InfoCard
               icon={<CardIcon />}
@@ -2150,7 +2234,7 @@ export default function Veicolo() {
                   placeholder="Codice fiscale" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.cf || "—")}
               iconColor="#64748B"
-              valueFontSize={12}
+              valueFontSize={13}
             />
           </div>
 
@@ -4156,6 +4240,12 @@ function ClientChoice({
 }
 
 
+
+const FilterIcon = () => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M4 6H20M7 12H17M10 18H14" stroke="#041E49" strokeWidth="2" strokeLinecap="round"/>
+  </svg>
+);
 
 const SearchIcon = () => (
 
