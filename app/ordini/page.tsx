@@ -513,7 +513,7 @@ export default function OrdiniPage() {
     const messaggio = "Ciao, per la targa " + targa + " e il veicolo " + veicolo +
       " mi servirebbe: " + descrizione.trim();
 
-    await supabase.from("orders").update({stato:"DA_INVIARE", inviato_at:null}).eq("id", ordine.id);
+
     resetNuovo();
   };
 
