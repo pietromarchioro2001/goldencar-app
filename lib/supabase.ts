@@ -14,4 +14,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/*
+ * Goldencar non usa Supabase Auth per l'accesso all'app.
+ * Disabilitiamo quindi la persistenza/ripresa automatica di sessioni Auth:
+ * una sessione JWT scaduta o non valida nel browser non deve sovrascrivere
+ * l'Authorization basata sulla chiave anon/publishable e causare 401.
+ */
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+});
