@@ -780,8 +780,9 @@ export default function Veicolo() {
     trovaProfili(query)[0] ?? null;
 
   useEffect(() => {
-    const salvata = sessionStorage.getItem("goldencar_veicolo_ricerca");
+    if (profiliArchivio.length === 0) return;
 
+    const salvata = sessionStorage.getItem("goldencar_veicolo_ricerca");
     if (!salvata) return;
 
     const trovato = trovaProfilo(salvata);
@@ -790,10 +791,11 @@ export default function Veicolo() {
       setRicerca(salvata);
       setProfiloVeicolo(trovato);
       setVeicoloSelezionato(true);
+      setClienteSelezionato(1);
     } else {
       sessionStorage.removeItem("goldencar_veicolo_ricerca");
     }
-  }, []);
+  }, [profiliArchivio]);
 
   const ricercaNormalizzata = ricerca.trim().toLowerCase();
 
@@ -913,6 +915,8 @@ export default function Veicolo() {
 
     setProfiloVeicolo(profilo);
     setVeicoloSelezionato(true);
+    setClienteSelezionato(1);
+    setMenuClientiAperto(false);
     setRicerca(targa);
     sessionStorage.setItem("goldencar_veicolo_ricerca", targa);
   };
