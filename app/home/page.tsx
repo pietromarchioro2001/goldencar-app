@@ -505,7 +505,7 @@ export default function Home() {
     if (paymentsError) {
       console.error("Errore caricamento pagamenti Home:", paymentsError);
       setPagamentiManuali([]);
-      setSolleciti(aggregaSolleciti(lavoriCaricati, []));
+      setSolleciti(aggregaSolleciti(lavori, []));
     } else {
       const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
       const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
