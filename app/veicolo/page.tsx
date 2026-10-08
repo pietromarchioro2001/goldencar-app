@@ -1423,35 +1423,16 @@ export default function Veicolo() {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   };
 
-  const formatMediaDate = (
-
-
-
-    value
-
-
-
-      ? new Intl.DateTimeFormat("it-IT", {
-
-
-
-          day: "2-digit",
-
-
-
-          month: "2-digit",
-
-
-
-          year: "numeric",
-
-
-
-        }).format(new Date(value))
-
-
-
-      : "Data non disponibile";
+  const formatMediaDate = (value: string) => {
+    if (!value) return "Data non disponibile";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "Data non disponibile";
+    return new Intl.DateTimeFormat("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(date);
+  };
 
 
 
