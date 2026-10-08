@@ -416,9 +416,12 @@ export default function Home() {
       .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli")
       .order("created_at", { ascending: false });
 
+    let lavoriPerSolleciti: Lavoro[] = lavori;
+
     if (jobsError) {
       console.error("Errore caricamento lavori Home:", jobsError);
       setLavori([]);
+      lavoriPerSolleciti = [];
     } else {
       const vehicleIds = (jobRows ?? [])
         .map((row: any) => row.vehicle_id)
@@ -515,6 +518,7 @@ export default function Home() {
       });
 
       setLavori(lavoriCaricati);
+      lavoriPerSolleciti = lavoriCaricati;
     }
     /* =       PAGAMENTI / SOLLECITI
     ========================= */
@@ -527,7 +531,7 @@ export default function Home() {
     if (paymentsError) {
       console.error("Errore caricamento pagamenti Home:", paymentsError);
       setPagamentiManuali([]);
-      setSolleciti(aggregaSolleciti(lavori, []));
+      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, []));
     } else {
       const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
       const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
@@ -545,21 +549,88 @@ export default function Home() {
         return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
       });
       setPagamentiManuali(manuali);
-      setSolleciti(aggregaSolleciti(lavori, manuali));
+      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, manuali));
     }
 
     /* =========================
-
+       AGENDA
+       La Home usa la stessa sorgente Supabase della pagina Agenda.
     ========================= */
-    setAppuntamenti(
-      leggiArray<Appuntamento>("goldencar_appointments")
-    );
+    const { data: appointmentRows, error: appointmentsError } = await supabase
+      .from("appointments")
+      .select("id, date, time, description")
+      .order("date", { ascending: true })
+      .order("time", { ascending: true });
+
+    if (appointmentsError) {
+      console.error("Errore caricamento appuntamenti Home:", appointmentsError);
+      setAppuntamenti([]);
+    } else {
+      setAppuntamenti(
+        (appointmentRows ?? []).map((row: any) => ({
+          id: String(row.id ?? ""),
+          date: String(row.date ?? ""),
+          time: String(row.time ?? "").slice(0, 5),
+          description: String(row.description ?? ""),
+        }))
+      );
+    }
+
     /* =========================
        REVISIONI
+       La Home usa la stessa sorgente Supabase della pagina Revisioni.
     ========================= */
-    setRevisioni(
-      leggiArray<Revisione>("goldencar_revisions")
-    );
+    const { data: revisionRows, error: revisionsError } = await supabase
+      .from("vehicles")
+      .select("id, veicolo, targa, revisione")
+      .not("revisione", "is", null);
+
+    if (revisionsError) {
+      console.error("Errore caricamento revisioni Home:", revisionsError);
+      setRevisioni([]);
+    } else {
+      const revisionVehicleIds = (revisionRows ?? []).map((row: any) => String(row.id));
+      const [{ data: revisionRelations }, { data: revisionClients }] = await Promise.all([
+        revisionVehicleIds.length
+          ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", revisionVehicleIds)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase.from("clients").select("id, nome, cognome, telefono"),
+      ]);
+
+      const revisionClientsById = new Map(
+        (revisionClients ?? []).map((row: any) => [String(row.id), row])
+      );
+      const revisionPrimaryByVehicle = new Map<string, any>();
+
+      for (const relation of revisionRelations ?? []) {
+        const vehicleId = String(relation.vehicle_id);
+        if (relation.ruolo === "PRINCIPALE" || !revisionPrimaryByVehicle.has(vehicleId)) {
+          revisionPrimaryByVehicle.set(
+            vehicleId,
+            revisionClientsById.get(String(relation.client_id))
+          );
+        }
+      }
+
+      setRevisioni(
+        (revisionRows ?? []).map((row: any) => {
+          const client = revisionPrimaryByVehicle.get(String(row.id));
+          const nomeCliente = [client?.nome, client?.cognome].filter(Boolean).join(" ").trim();
+
+          return {
+            id: `revisione-${row.id}`,
+            nomeCliente,
+            cliente: nomeCliente,
+            telefono: String(client?.telefono ?? ""),
+            veicolo: String(row.veicolo ?? ""),
+            targa: String(row.targa ?? ""),
+            revisione: String(row.revisione ?? ""),
+            scadenza: String(row.revisione ?? ""),
+          };
+        })
+      );
+    }
+
 /* =========================
        ORDINI
        Gli ordini sono gestiti da Supabase, quindi la Home
@@ -598,16 +669,6 @@ export default function Home() {
           };
         })
       );
-    }
-  };
-  const leggiArray = <T,>(key: string): T[] => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
     }
   };
   const lavoriAttivi = useMemo(
@@ -1000,25 +1061,8 @@ export default function Home() {
           event.results?.[0]?.[0]
             ?.transcript || "";
         if (!testo.trim()) return;
-        const nuovo: Appuntamento = {
-          id: crypto.randomUUID(),
-          date: "",
-          time: "",
-          description: testo.trim(),
-        };
-        const aggiornati = [
-          ...appuntamenti,
-          nuovo,
-        ];
-        localStorage.setItem(
-          "goldencar_appointments",
-          JSON.stringify(aggiornati)
-        );
-        setAppuntamenti(aggiornati);
-        alert(
-          `Appuntamento acquisito:\n"${testo.trim()}"\n\nIn seguito collegheremo qui l'interpretazione automatica di giorno e ora.`
-        );
-      };
+        sessionStorage.setItem("goldencar_agenda_descrizione", testo.trim());
+        router.push("/agenda");
       recognition.onerror = () => {
         setListening(false);
       };
