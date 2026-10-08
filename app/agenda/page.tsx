@@ -392,12 +392,20 @@ export default function Agenda() {
               const active = selectedDay === day;
               const isToday = currentDay === day;
 
+              const hasAppointments =
+                day !== null &&
+                appointments.some(
+                  (appointment) =>
+                    appointment.date === dateKey(year, month, day)
+                );
+
               return (
                 <button
                   key={i}
                   disabled={!day}
                   onClick={() => day && setSelectedDay(day)}
                   style={{
+                    position: "relative",
                     aspectRatio: "1",
                     border: "none",
                     borderRadius: 16,
@@ -416,6 +424,20 @@ export default function Agenda() {
                   }}
                 >
                   {day}
+                  {hasAppointments && (
+                    <span
+                      aria-label="Appuntamenti in programma"
+                      style={{
+                        position: "absolute",
+                        top: 7,
+                        right: 7,
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: "#22C55E",
+                      }}
+                    />
+                  )}
                 </button>
               );
             })}
