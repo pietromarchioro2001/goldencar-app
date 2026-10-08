@@ -61,11 +61,15 @@ export default function Agenda() {
   }
 
   function mapAppointment(row: any): Appointment {
+    const dateTime = new Date(String(row.data_ora));
     return {
       id: String(row.id ?? ""),
-      date: String(row.date ?? ""),
-      time: String(row.time ?? "").slice(0, 5),
-      description: String(row.description ?? ""),
+      date: dateKey(dateTime.getFullYear(), dateTime.getMonth(), dateTime.getDate()),
+      time:
+        String(dateTime.getHours()).padStart(2, "0") +
+        ":" +
+        String(dateTime.getMinutes()).padStart(2, "0"),
+      description: String(row.descrizione ?? row.titolo ?? ""),
     };
   }
 
@@ -87,7 +91,7 @@ export default function Agenda() {
     const cleanup = await supabase
       .from("appointments")
       .delete()
-      .lt("date", dateKey(cutoff.getFullYear(), cutoff.getMonth(), cutoff.getDate()));
+      .lt("data_ora", cutoff.toISOString());
 
     if (cleanup.error) {
       console.error("Errore pulizia appuntamenti:", cleanup.error);
@@ -95,9 +99,8 @@ export default function Agenda() {
 
     const { data, error } = await supabase
       .from("appointments")
-      .select("id, date, time, description")
-      .order("date", { ascending: true })
-      .order("time", { ascending: true });
+      .select("id, vehicle_id, titolo, descrizione, data_ora")
+      .order("data_ora", { ascending: true });
 
     if (error) {
       console.error("Errore caricamento appuntamenti:", error);
@@ -146,23 +149,24 @@ export default function Agenda() {
 
     setSaving(true);
 
-    const dataAppuntamento = dateKey(year, month, selectedDay);
-    const oraAppuntamento =
-      String(selectedHour).padStart(2, "0") +
-      ":" +
-      String(selectedMinute).padStart(2, "0") +
-      ":00";
+    const dataOra = appointmentDateTime(
+      year,
+      month,
+      selectedDay,
+      selectedHour,
+      selectedMinute
+    );
 
     if (editingAppointment) {
       const { data, error } = await supabase
         .from("appointments")
         .update({
-          date: dataAppuntamento,
-          time: oraAppuntamento,
-          description: description.trim(),
+          titolo: description.trim(),
+          descrizione: description.trim(),
+          data_ora: dataOra,
         })
         .eq("id", editingAppointment.id)
-        .select("id, date, time, description")
+        .select("id, vehicle_id, titolo, descrizione, data_ora")
         .single();
 
       if (error) {
@@ -191,9 +195,9 @@ export default function Agenda() {
         .from("appointments")
         .insert({
           id: crypto.randomUUID(),
-          date: dataAppuntamento,
-          time: oraAppuntamento,
-          description: description.trim(),
+          titolo: description.trim(),
+          descrizione: description.trim(),
+          data_ora: dataOra,
         })
         .select("id, vehicle_id, titolo, descrizione, data_ora")
         .single();
