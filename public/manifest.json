@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "Goldencar",
   "short_name": "Goldencar",
   "description": "Gestionale officina Goldencar",
@@ -8,10 +9,19 @@
   "background_color": "#F5F7FA",
   "theme_color": "#111827",
   "orientation": "portrait",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/logo.png",
-      "type": "image/png"
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
     }
   ]
 }
