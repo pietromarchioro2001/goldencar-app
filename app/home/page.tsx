@@ -91,24 +91,6 @@ type VeicoloSalvato = {
   cliente2?: { nome?: string; indirizzo?: string; telefono?: string; cf?: string; nascita?: string } | null;
   veicolo?: { veicolo?: string; motore?: string; targa?: string; immatricolazione?: string; revisione?: string };
 };
-const TEST_VEHICLE: VeicoloSalvato = {
-  id: "test-gt015bf",
-  cliente1: {
-    nome: "Mario Rossi",
-    indirizzo: "Via Roma 12, Fondo (TN)",
-    telefono: "3471234567",
-    cf: "RSSMRA80C14L378Z",
-    nascita: "1980-03-14",
-  },
-  cliente2: null,
-  veicolo: {
-    veicolo: "Volkswagen Golf",
-    motore: "1968",
-    targa: "GT015BF",
-    immatricolazione: "2020-05-12",
-    revisione: "2026-05-12",
-  },
-};
 function normalizePlate(value: string) {
   return value
     .toUpperCase()
@@ -225,30 +207,22 @@ export default function Home() {
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInBusy, setCheckInBusy] = useState(false);
   const [checkInError, setCheckInError] = useState("");
-  const checkInVideoRef = useRef<HTMLVideoElement>(null);
+  const [agendaVoiceOpen, setAgendaVoiceOpen] = useState(false);
+  const [agendaDraft, setAgendaDraft] = useState({ date: "", time: "", description: "" });
+  const [agendaVoiceText, setAgendaVoiceText] = useState("");
+  const [ordineAperto, setOrdineAperto] = useState<Ordine | null>(null);
+  const [nuovoOrdineAperto, setNuovoOrdineAperto] = useState(false);
+  const [ordineDescrizione, setOrdineDescrizione] = useState("");
+  const [ordineVeicoloId, setOrdineVeicoloId] = useState("");
+  const [ordineFornitoreId, setOrdineFornitoreId] = useState("");
+  const [fornitori, setFornitori] = useState<{id:string;nome:string;whatsapp:string}[]>([]);
+  const [veicoliOrdini, setVeicoliOrdini] = useState<any[]>([]);
+  const [ordineListening, setOrdineListening] = useState(false);
+  const [checkInVideoRef = useRef<HTMLVideoElement>(null);
   const checkInStreamRef = useRef<MediaStream | null>(null);
-  const ensureTestVehicle = () => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = localStorage.getItem("goldencar_vehicles");
-      const vehicles: VeicoloSalvato[] = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(vehicles)) return;
-      const exists = vehicles.some(
-        (vehicle) => normalizePlate(vehicle?.veicolo?.targa || "") === "GT015BF"
-      );
-      if (!exists) {
-        localStorage.setItem(
-          "goldencar_vehicles",
-          JSON.stringify([...vehicles, TEST_VEHICLE])
-        );
-      }
-    } catch {
-      localStorage.setItem("goldencar_vehicles", JSON.stringify([TEST_VEHICLE]));
-    }
-  };
+
   useEffect(() => {
-    ensureTestVehicle();
-    caricaDati();
+    void caricaDati();
     const refresh = () => caricaDati();
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
@@ -521,7 +495,7 @@ export default function Home() {
     ========================= */
     const { data: paymentRows, error: paymentsError } = await supabase
       .from("payments")
-      .select("id, client_id, vehicle_id, description, amount, paid_amount, status, created_at")
+      .select("id, client_id, vehicle_id, nome_cliente, description, amount, paid_amount, status, created_at")
       .in("status", ["DA_PAGARE", "PARZIALE"])
       .order("created_at", { ascending: false });
 
@@ -541,7 +515,7 @@ export default function Home() {
       const manuali: PagamentoManuale[] = (paymentRows ?? []).map((row:any)=>{
         const client=clientsById.get(String(row.client_id));
         const vehicle=vehiclesById.get(String(row.vehicle_id));
-        const nomeCliente=String(client?.nome ?? "").trim() || "Cliente";
+        const nomeCliente=String(client?.nome ?? row.nome_cliente ?? "").trim() || "Cliente";
         const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
         return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
       });
@@ -641,9 +615,17 @@ export default function Home() {
        Gli ordini sono gestiti da Supabase, quindi la Home
        deve leggere la stessa sorgente usata dalla pagina ORDINI.
     ========================= */
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    await supabase
+      .from("orders")
+      .delete()
+      .eq("stato", "INVIATO")
+      .lt("inviato_at", midnight.toISOString());
+
     const { data: orderRows, error: ordersError } = await supabase
       .from("orders")
-      .select("id, numero, cliente, veicolo, prodotti")
+      .select("id, numero, cliente, veicolo, prodotti, vehicle_id, supplier_id, stato, inviato_at")
       .order("created_at", { ascending: false });
 
     if (ordersError) {
@@ -670,11 +652,28 @@ export default function Home() {
             cliente: String(row.cliente ?? ""),
             veicolo: String(row.veicolo ?? ""),
             descrizione,
-            stato: "DA EVADERE",
+            stato: String(row.stato ?? "DA_INVIARE"),
+            vehicleId: row.vehicle_id ? String(row.vehicle_id) : undefined,
+            supplierId: row.supplier_id ? String(row.supplier_id) : undefined,
           };
         })
       );
     }
+    const [{ data: supplierRows }, { data: vehicleRows }] = await Promise.all([
+      supabase.from("suppliers").select("id, nome, whatsapp").order("nome", { ascending: true }),
+      supabase.from("vehicles").select("id, veicolo, targa, client_id").order("targa", { ascending: true }),
+    ]);
+    setFornitori((supplierRows ?? []).map((r:any)=>({id:String(r.id),nome:String(r.nome??""),whatsapp:String(r.whatsapp??"")})));
+    const vehicleIds=(vehicleRows??[]).map((r:any)=>String(r.id));
+    if(vehicleIds.length){
+      const {data:rels}=await supabase.from("vehicle_clients").select("vehicle_id,client_id,ruolo").in("vehicle_id",vehicleIds);
+      const clientIds=Array.from(new Set((rels??[]).map((r:any)=>String(r.client_id))));
+      const {data:cls}=clientIds.length?await supabase.from("clients").select("id,nome,telefono").in("id",clientIds):{data:[]};
+      const cm=new Map((cls??[]).map((r:any)=>[String(r.id),r]));
+      const rm=new Map<string,any>();
+      for(const rel of rels??[]){const k=String(rel.vehicle_id); if(rel.ruolo==="PRINCIPALE"||!rm.has(k)) rm.set(k,cm.get(String(rel.client_id)));}
+      setVeicoliOrdini((vehicleRows??[]).map((v:any)=>({id:String(v.id),veicolo:String(v.veicolo??""),targa:String(v.targa??""),cliente:String(rm.get(String(v.id))?.nome??"")})));
+    } else setVeicoliOrdini([]);
   };
   const lavoriAttivi = useMemo(
     () =>
@@ -697,7 +696,8 @@ export default function Home() {
         return false;
       }
       data.setHours(0, 0, 0, 0);
-      return data < oggi;
+      const diff = Math.round((data.getTime() - oggi.getTime()) / 86400000);
+      return diff <= 30;
     });
   }, [revisioni]);
   const appuntamentiOggi = useMemo(() => {
@@ -789,80 +789,33 @@ export default function Home() {
       "noopener,noreferrer"
     );
   };
-  const aggiornaStatiPagamento = async (
-    clientKey: string,
-    paymentId?: string,
-    pagaTutto = false,
-    importoDaPagare?: number
-  ) => {
-    const targetJobs = lavori.filter((l) => {
-      const key = makeClientKey(l.nomeCliente || "Cliente", l.telefono);
-      return key === clientKey && l.paymentStatus !== "PAGATO" &&
-        (pagaTutto || String(l.jobNumber) === String(paymentId));
-    });
-    const targetManuali = pagamentiManuali.filter((p) =>
-      p.clientKey === clientKey && p.stato !== "PAGATO" &&
-      (pagaTutto || p.id === paymentId)
+  const aggiornaStatiPagamento = async (clientKey: string) => {
+    const targetJobs = lavori.filter((l) =>
+      makeClientKey(l.nomeCliente || "Cliente", l.telefono) === clientKey &&
+      l.paymentStatus !== "PAGATO"
     );
-
+    const targetManuali = pagamentiManuali.filter((p) => p.clientKey === clientKey && p.stato !== "PAGATO");
+    const ok = window.confirm("Confermi che tutte le voci di questo cliente sono state pagate?");
+    if (!ok) return;
     try {
-      if (pagaTutto) {
-        for (const lavoro of targetJobs) {
-          const { error } = await supabase.from("jobs").update({
-            payment_status: "PAGATO",
-            payment_paid_amount: parseImporto(lavoro.paymentAmount),
-          }).eq("id", String(lavoro.jobNumber));
-          if (error) throw error;
-        }
-        for (const pagamento of targetManuali) {
-          const { error } = await supabase.from("payments").update({
-            status: "PAGATO",
-            paid_amount: parseImporto(pagamento.importo),
-            paid_at: new Date().toISOString(),
-          }).eq("id", pagamento.id);
-          if (error) throw error;
-        }
-      } else {
-        const amount = Math.max(0, Number(importoDaPagare || 0));
-        if (amount <= 0) throw new Error("Inserisci un importo valido.");
-
-        if (targetJobs.length) {
-          const lavoro = targetJobs[0];
-          const totale = parseImporto(lavoro.paymentAmount);
-          const giaPagato = parseImporto(lavoro.paymentPaidAmount);
-          const residuo = Math.max(0, totale - giaPagato);
-          if (amount > residuo + 0.001) throw new Error("L'importo supera il residuo da pagare.");
-          const nuovoPagato = Math.min(totale, giaPagato + amount);
-          const { error } = await supabase.from("jobs").update({
-            payment_paid_amount: nuovoPagato,
-            payment_status: nuovoPagato >= totale - 0.001 ? "PAGATO" : "PARZIALE",
-          }).eq("id", String(lavoro.jobNumber));
-          if (error) throw error;
-        } else if (targetManuali.length) {
-          const pagamento = targetManuali[0];
-          const totale = parseImporto(pagamento.importo);
-          const giaPagato = parseImporto(pagamento.paidAmount);
-          const residuo = Math.max(0, totale - giaPagato);
-          if (amount > residuo + 0.001) throw new Error("L'importo supera il residuo da pagare.");
-          const nuovoPagato = Math.min(totale, giaPagato + amount);
-          const { error } = await supabase.from("payments").update({
-            paid_amount: nuovoPagato,
-            status: nuovoPagato >= totale - 0.001 ? "PAGATO" : "PARZIALE",
-            paid_at: nuovoPagato >= totale - 0.001 ? new Date().toISOString() : null,
-          }).eq("id", pagamento.id);
-          if (error) throw error;
-        }
+      for (const lavoro of targetJobs) {
+        const { error } = await supabase.from("jobs").update({
+          payment_status: "PAGATO",
+          payment_paid_amount: parseImporto(lavoro.paymentAmount),
+        }).eq("id", String(lavoro.jobNumber));
+        if (error) throw error;
       }
-
+      for (const pagamento of targetManuali) {
+        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
+        if (error) throw error;
+      }
       await caricaDati();
-      setPagamentoInCorso(null);
-      setImportoPagamento("");
       setDettaglioSollecito(null);
     } catch (error) {
-      console.error("Errore aggiornamento pagamento:", error);
-      alert(error instanceof Error ? error.message : "Errore durante l'aggiornamento del pagamento.");
+      alert(error instanceof Error ? error.message : "Errore durante l'aggiornamento del sollecito.");
     }
   };
+
   const pagaTuttoCliente = (sollecito: Sollecito) => {
     aggiornaStatiPagamento(
       sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono),
@@ -871,35 +824,27 @@ export default function Home() {
     );
   };
 
-  const apriPagamentoParziale = (pagamento: PagamentoDettaglio) => {
-    setImportoPagamento("");
-    setPagamentoInCorso({
-      clientKey: pagamento.clientKey,
-      paymentId: pagamento.id,
-      descrizione: pagamento.descrizione,
-      residuo: pagamento.importo,
-      manuale: Boolean(pagamento.manuale),
-    });
+  const pagaSingolo = async (pagamento: PagamentoDettaglio) => {
+    const ok = window.confirm(`Confermi il pagamento di ${formatEuro(pagamento.importo)} per "${pagamento.descrizione}"?`);
+    if (!ok) return;
+    try {
+      if (pagamento.manuale) {
+        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("jobs").update({
+          payment_status: "PAGATO",
+          payment_paid_amount: parseImporto(pagamento.totale ?? pagamento.importo),
+        }).eq("id", String(pagamento.jobNumber));
+        if (error) throw error;
+      }
+      await caricaDati();
+      setDettaglioSollecito(null);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Errore durante la registrazione del pagamento.");
+    }
   };
 
-  const confermaPagamentoParziale = () => {
-    if (!pagamentoInCorso) return;
-    const amount = parseImporto(importoPagamento);
-    if (amount <= 0) {
-      alert("Inserisci un importo valido.");
-      return;
-    }
-    if (amount > pagamentoInCorso.residuo + 0.001) {
-      alert("L'importo supera il residuo da pagare.");
-      return;
-    }
-    void aggiornaStatiPagamento(
-      pagamentoInCorso.clientKey,
-      pagamentoInCorso.paymentId,
-      false,
-      amount
-    );
-  };
   const pagamentiCliente = (sollecito: Sollecito): PagamentoDettaglio[] => {
     const key = sollecito.clientKey || makeClientKey(sollecito.nomeCliente || "", sollecito.telefono);
     const result: PagamentoDettaglio[] = [];
@@ -998,86 +943,127 @@ export default function Home() {
     setNuovoPagamentoAperto(true);
   };
   const salvaNuovoPagamento = async () => {
-    const nome=(clienteSelezionatoPagamento?.nomeCliente||nuovoClienteNome).trim();
-    const telefono=(clienteSelezionatoPagamento?.telefono||nuovoClienteTelefono).trim();
-    const importo=parseImporto(nuovoPagamentoImporto);
-    const descrizione=nuovoPagamentoDescrizione.trim();
-    if(!nome){alert("Inserisci o seleziona un cliente.");return;}
-    if(importo<=0){alert("Inserisci un importo valido.");return;}
-    if(!descrizione){alert("Inserisci la descrizione del piccolo lavoro.");return;}
+    const nome = (clienteSelezionatoPagamento?.nomeCliente || nuovoClienteNome).trim();
+    const importo = parseImporto(nuovoPagamentoImporto);
+    const descrizione = nuovoPagamentoDescrizione.trim();
+    if (!nome) { alert("Inserisci il nome del cliente."); return; }
+    if (importo <= 0) { alert("Inserisci un importo valido."); return; }
+    if (!descrizione) { alert("Inserisci la descrizione."); return; }
     try {
-      const parts=nome.split(/\s+/).filter(Boolean);
-      const nomeParte=parts.shift()||nome;
-      const cognome=parts.join(" ");
-      const normalizedPhone=telefono.replace(/\D/g,"");
-      const {data: clients,error: lookupError}=await supabase.from("clients").select("id,nome,telefono").ilike("nome",nomeParte).limit(50);
-      if(lookupError) throw lookupError;
-      const existing=(clients??[]).find((client:any)=>{
-        const full=String(client.nome ?? "").trim().toLowerCase();
-        return full===nome.toLowerCase() || (normalizedPhone && String(client.telefono??"").replace(/\D/g,"")===normalizedPhone);
+      const { error } = await supabase.from("payments").insert({
+        id: crypto.randomUUID(),
+        client_id: clienteSelezionatoPagamento ? clienteSelezionatoPagamento.clientKey.split("|")[0] || null : null,
+        nome_cliente: nome,
+        description: descrizione,
+        amount: importo,
+        paid_amount: 0,
+        status: "DA_PAGARE",
       });
-      let clientId=existing?.id ? String(existing.id) : "";
-      if(!clientId){
-        const {data:created,error}=await supabase.from("clients").insert({nome:nome,telefono:telefono||null}).select("id").single();
-        if(error) throw error;
-        clientId=String(created.id);
+      if (error) {
+        // For CRM clients the key is a display key, not necessarily the UUID: retry as a purely manual reminder.
+        const retry = await supabase.from("payments").insert({
+          id: crypto.randomUUID(), client_id: null, nome_cliente: nome,
+          description: descrizione, amount: importo, paid_amount: 0, status: "DA_PAGARE",
+        });
+        if (retry.error) throw retry.error;
       }
-      const {error:paymentError}=await supabase.from("payments").insert({id:crypto.randomUUID(),client_id:clientId,description:descrizione,amount:importo,paid_amount:0,status:"DA_PAGARE"});
-      if(paymentError) throw paymentError;
-      setNuovoPagamentoAperto(false); setClienteSelezionatoPagamento(null); setClienteQuery("");
+      setNuovoPagamentoAperto(false);
+      setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
       await caricaDati();
-    } catch(error) {
-      console.error("Errore salvataggio nuovo pagamento:",error);
-      alert(error instanceof Error ? error.message : "Errore durante il salvataggio del pagamento.");
+    } catch (error) {
+      console.error("Errore salvataggio sollecito:", error);
+      alert(error instanceof Error ? error.message : "Errore durante il salvataggio del sollecito.");
     }
   };
 
-  const aggiungiAppuntamentoVocale =
-    () => {
-      const Recognition = (
-        window as Window & {
-          SpeechRecognition?: any;
-          webkitSpeechRecognition?: any;
-        }
-      ).SpeechRecognition ||
-      (
-        window as Window & {
-          SpeechRecognition?: any;
-          webkitSpeechRecognition?: any;
-        }
-      ).webkitSpeechRecognition;
-      if (!Recognition) {
-        alert(
-          "La dettatura vocale non è disponibile in questo browser."
-        );
-        return;
-      }
-      if (listening) return;
-      const recognition =
-        new Recognition();
-      recognition.lang = "it-IT";
-      recognition.interimResults = false;
-      recognition.continuous = false;
-      recognition.onresult = (
-        event: any
-      ) => {
-        const testo =
-          event.results?.[0]?.[0]
-            ?.transcript || "";
-        if (!testo.trim()) return;
-        sessionStorage.setItem("goldencar_agenda_descrizione", testo.trim());
-        router.push("/agenda");
-      };
-      recognition.onerror = () => {
-        setListening(false);
-      };
-      recognition.onend = () => {
-        setListening(false);
-      };
-      setListening(true);
-      recognition.start();
+  const parseAgendaVoice = (text: string) => {
+    const months = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+    const weekdays = ["domenica","lunedì","martedì","mercoledì","giovedì","venerdì","sabato"];
+    const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+    const year = new Date().getFullYear();
+    let date = new Date(year, new Date().getMonth(), new Date().getDate());
+    const dm = normalized.match(/\b(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\b/);
+    const numeric = normalized.match(/\b(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?\b/);
+    const weekday = normalized.match(/\b(domenica|lunedì|lunedi|martedì|martedi|mercoledì|mercoledi|giovedì|giovedi|venerdì|venerdi|sabato)\b/);
+    if (dm) date = new Date(year, months.indexOf(dm[2]), Number(dm[1]));
+    else if (numeric) date = new Date(numeric[3] ? (Number(numeric[3])<100 ? 2000+Number(numeric[3]) : Number(numeric[3])) : year, Number(numeric[2])-1, Number(numeric[1]));
+    else if (weekday) {
+      const w = weekdays.indexOf(weekday[1].replace("lunedi","lunedì").replace("martedi","martedì").replace("mercoledi","mercoledì").replace("giovedi","giovedì").replace("venerdi","venerdì"));
+      const today = new Date(); const delta = (w - today.getDay() + 7) % 7 || 7;
+      date = new Date(today.getFullYear(), today.getMonth(), today.getDate()+delta);
+    }
+    const tm = normalized.match(/\b(?:alle|ore)\s+(\d{1,2})(?:[\.:](\d{1,2}))?\b/);
+    if (!tm) return null;
+    const hh = Math.min(23, Number(tm[1])); const min = Math.min(59, Number(tm[2] || 0));
+    const afterTime = normalized.slice((tm.index ?? 0) + tm[0].length);
+    const pm = afterTime.match(/\bper\s+(.+)$/);
+    const description = pm?.[1]?.trim() || afterTime.trim().replace(/^[,;.-]+/,"");
+    if (!description) return null;
+    return { date: `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`, time: `${String(hh).padStart(2,"0")}:${String(min).padStart(2,"0")}`, description };
+  };
+  const aggiungiAppuntamentoVocale = () => {
+    const Recognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!Recognition) { alert("La dettatura vocale non è disponibile in questo browser."); return; }
+    if (listening) return;
+    const recognition = new Recognition();
+    recognition.lang = "it-IT"; recognition.interimResults = false; recognition.continuous = false;
+    recognition.onresult = (event:any) => {
+      const testo = String(event.results?.[0]?.[0]?.transcript || "").trim();
+      setListening(false);
+      if (!testo) return;
+      const parsed = parseAgendaVoice(testo);
+      if (!parsed) { alert("Non ho capito data, ora o descrizione. Esempio: giovedì 10 ottobre alle 14.30 per cambio gomme Luca Martini."); return; }
+      setAgendaVoiceText(testo); setAgendaDraft(parsed); setAgendaVoiceOpen(true);
     };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+    setListening(true); recognition.start();
+  };
+  const salvaAgendaVoice = async () => {
+    if (!agendaDraft.date || !agendaDraft.time || !agendaDraft.description) return;
+    const local = new Date(`${agendaDraft.date}T${agendaDraft.time}:00`);
+    const { error } = await supabase.from("appointments").insert({
+      id: crypto.randomUUID(), titolo: agendaDraft.description, descrizione: agendaDraft.description,
+      data_ora: local.toISOString(),
+    });
+    if (error) { alert("Non è stato possibile salvare l'appuntamento: " + error.message); return; }
+    setAgendaVoiceOpen(false); setAgendaVoiceText(""); await caricaDati();
+  };
+
+  const salvaNuovoOrdineHome = async () => {
+    const vehicle = veicoliOrdini.find(v => v.id === ordineVeicoloId);
+    const supplier = fornitori.find(s => s.id === ordineFornitoreId);
+    const desc = ordineDescrizione.trim();
+    if (!vehicle || !supplier || !desc) { alert("Seleziona veicolo, fornitore e inserisci cosa ordinare."); return; }
+    const { error } = await supabase.from("orders").insert({
+      id: crypto.randomUUID(), numero: String(Date.now()), vehicle_id: vehicle.id, supplier_id: supplier.id,
+      cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{name: desc, quantity:"1"}],
+      stato: "DA_INVIARE",
+    });
+    if (error) { alert("Errore salvataggio ordine: " + error.message); return; }
+    setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
+  };
+  const inviaOrdineHome = async (ordine: Ordine) => {
+    const supplier = fornitori.find(s => s.id === ordine.supplierId);
+    if (!supplier?.whatsapp) { alert("Il fornitore non ha un numero WhatsApp."); return; }
+    const numero = supplier.whatsapp.replace(/\D/g,"");
+    const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
+    const { error } = await supabase.from("orders").update({stato:"INVIATO",inviato_at:new Date().toISOString()}).eq("id",ordine.id);
+    if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
+    await caricaDati();
+  };
+  const aggiornaOrdineHome = async () => {
+    if (!ordineAperto?.id) return;
+    const supplier = fornitori.find(s=>s.id===ordineFornitoreId);
+    const desc = ordineDescrizione.trim();
+    if(!desc || !supplier){ alert("Inserisci descrizione e fornitore."); return; }
+    const {error}=await supabase.from("orders").update({prodotti:[{name:desc,quantity:"1"}],supplier_id:supplier.id}).eq("id",ordineAperto.id);
+    if(error){alert("Errore aggiornamento ordine: "+error.message);return;}
+    setOrdineAperto(null); await caricaDati();
+  };
+
   return (
     <>
       <main
@@ -1170,7 +1156,7 @@ export default function Home() {
             icon={<IconFatture />}
             onClick={() => {
               window.open(
-                "https://www.google.com/",
+                "https://metropolis.seac.it/login",
                 "_blank",
                 "noopener,noreferrer"
               );
@@ -1230,403 +1216,7 @@ export default function Home() {
           onClose={() =>
             setModal(null)
           }
-          topRight={
-            <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  "/lavori"
-                )
-              }
-              style={modalLinkStyle}
-            >
-              LISTA LAVORI
-            </button>
-          }
-        >
-          {lavoriAttivi.length === 0 ? (
-            <EmptyState text="Nessun lavoro in lavorazione." />
-          ) : (
-            lavoriAttivi.map(
-              (lavoro) => (
-                <LavoroRow
-                  key={lavoro.jobNumber}
-                  lavoro={lavoro}
-                  onClick={() =>
-                    apriLavoro(lavoro)
-                  }
-                />
-              )
-            )
-          )}
-        </Modal>
-      )}
-      {/* =========================
-          MODAL REVISIONI
-      ========================= */}
-      {modal === "revisioni" && (
-        <Modal
-          title="REVISIONI SCADUTE"
-          onClose={() =>
-            setModal(null)
-          }
-          topRight={
-            <button
-              type="button"
-              onClick={() =>
-                router.push(
-                  "/revisioni"
-                )
-              }
-              style={modalLinkStyle}
-            >
-              REVISIONI
-            </button>
-          }
-        >
-          {revisioniScadute.length ===
-          0 ? (
-            <EmptyState text="Nessuna revisione scaduta." />
-          ) : (
-            revisioniScadute.map(
-              (revisione, index) => (
-                <RevisionRow
-                  key={
-                    revisione.id ||
-                    index
-                  }
-                  revisione={revisione}
-                  onWhatsApp={() =>
-                    avvisaRevisione(
-                      revisione
-                    )
-                  }
-                />
-              )
-            )
-          )}
-        </Modal>
-      )}
-      {/* =========================
-          MODAL AGENDA
-      ========================= */}
-      {modal === "agenda" && (
-        <Modal
-          title="APPUNTAMENTI DI OGGI"
-          onClose={() =>
-            setModal(null)
-          }
-          topRight={
-            <button
-              type="button"
-              onClick={() =>
-                router.push("/agenda")
-              }
-              style={modalLinkStyle}
-            >
-              AGENDA
-            </button>
-          }
-        >
-          {appuntamentiOggi.length ===
-          0 ? (
-            <EmptyState text="Nessun appuntamento oggi." />
-          ) : (
-            appuntamentiOggi.map(
-              (
-                appuntamento,
-                index
-              ) => (
-                <AppointmentRow
-                  key={
-                    appuntamento.id ||
-                    index
-                  }
-                  appuntamento={
-                    appuntamento
-                  }
-                />
-              )
-            )
-          )}
-          <button
-            type="button"
-            onClick={
-              aggiungiAppuntamentoVocale
-            }
-            style={{
-              width: 52,
-              height: 52,
-              margin:
-                "14px auto 0",
-              border: "none",
-              borderRadius: 17,
-              background:
-                listening
-                  ? "#FEE2E2"
-                  : "#D4AF37",
-              color: "#111827",
-              display: "flex",
-              alignItems: "center",
-              justifyContent:
-                "center",
-              cursor: "pointer",
-            }}
-            aria-label="Aggiungi appuntamento vocalmente"
-          >
-            {listening ? (
-              <MicIcon active />
-            ) : (
-              <PlusIcon />
-            )}
-          </button>
-        </Modal>
-      )}
-      {/* =========================
-          MODAL SOLLECITI
-      ========================= */}
-      {modal === "solleciti" && (
-        <Modal
-          title="SOLLECITI"
-          onClose={() => setModal(null)}
-        >
-          {solleciti.length === 0 ? (
-            <EmptyState text="Nessun sollecito in corso." />
-          ) : (
-            solleciti.map((sollecito) => (
-              <SollecitoRow
-                key={sollecito.clientKey || sollecito.nomeCliente}
-                sollecito={sollecito}
-                onPayAll={() => pagaTuttoCliente(sollecito)}
-                onDetails={() => setDettaglioSollecito(sollecito)}
-                onWhatsApp={() => sollecita(sollecito)}
-              />
-            ))
-          )}
-          <button
-            type="button"
-            onClick={apriNuovoPagamento}
-            style={{
-              width: 52,
-              height: 52,
-              margin: "6px auto 0",
-              border: "none",
-              borderRadius: 17,
-              background: "#D4AF37",
-              color: "#111827",
-              fontSize: 28,
-              fontWeight: 500,
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(0,0,0,.10)",
-            }}
-          >
-            +
-          </button>
-        </Modal>
-      )}
-      {dettaglioSollecito && (
-        <Modal
-          title={dettaglioSollecito.nomeCliente || "PAGAMENTI"}
-          onClose={() => setDettaglioSollecito(null)}
-        >
-          {pagamentiCliente(dettaglioSollecito).map((pagamento) => (
-            <div
-              key={pagamento.id}
-              onClick={() => {
-                if (pagamento.manuale || pagamento.jobNumber == null) return;
-                const lavoro = lavori.find(
-                  (item) => item.jobNumber === pagamento.jobNumber
-                );
-                if (!lavoro) return;
-                setDettaglioSollecito(null);
-                apriLavoro(lavoro);
-              }}
-              style={{
-                background: "#FFFFFF",
-                borderRadius: 17,
-                padding: 13,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                cursor:
-                  pagamento.manuale || pagamento.jobNumber == null
-                    ? "default"
-                    : "pointer",
-              }}
-            >
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  apriPagamentoParziale(pagamento);
-                }}
-                aria-label="Registra un pagamento"
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  border: "2px solid #CBD5E1",
-                  background: "#FFFFFF",
-                  flexShrink: 0,
-                  cursor: "pointer",
-                }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: "#111827" }}>
-                  {pagamento.descrizione}
-                </div>
-                <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>
-                  {pagamento.manuale ? "Piccolo lavoro" : `Scheda #${pagamento.jobNumber}`}
-                </div>
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 900, color: "#111827", whiteSpace: "nowrap" }}>
-                {formatEuro(pagamento.importo)}
-              </div>
-            </div>
-          ))}
-          <div
-            style={{
-              marginTop: 4,
-              padding: "12px 4px 2px",
-              borderTop: "1px solid #E2E8F0",
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 16,
-              fontWeight: 900,
-            }}
-          >
-            <span>TOTALE DA PAGARE</span>
-            <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum, item) => sum + item.importo, 0))}</span>
-          </div>
-        </Modal>
-      )}
-      {pagamentoInCorso && (
-        <Modal
-          title="REGISTRA PAGAMENTO"
-          onClose={() => {
-            setPagamentoInCorso(null);
-            setImportoPagamento("");
-          }}
-        >
-          <div style={{ background: "#FFFFFF", borderRadius: 16, padding: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>
-              {pagamentoInCorso.descrizione}
-            </div>
-            <div style={{ fontSize: 12, color: "#64748B", marginTop: 5 }}>
-              Residuo da pagare: {formatEuro(pagamentoInCorso.residuo)}
-            </div>
-          </div>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 4, marginBottom: 6 }}>
-            IMPORTO PAGATO
-          </div>
-          <input
-            value={importoPagamento}
-            onChange={(e) => setImportoPagamento(e.target.value)}
-            inputMode="decimal"
-            autoFocus
-            placeholder={formatEuro(pagamentoInCorso.residuo)}
-            style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 17, background: "#FFFFFF" }}
-          />
-          <button
-            type="button"
-            onClick={confermaPagamentoParziale}
-            style={{ width: "100%", height: 50, border: 0, borderRadius: 16, background: "#D4AF37", color: "#111827", fontWeight: 900, marginTop: 12 }}
-          >
-            CONFERMA
-          </button>
-        </Modal>
-      )}
-      {nuovoPagamentoAperto && (
-        <Modal title="NUOVO PAGAMENTO" onClose={() => setNuovoPagamentoAperto(false)}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginBottom: 6 }}>CLIENTE</div>
-          {clienteSelezionatoPagamento ? (
-            <div
-              style={{ background: "#FFFFFF", borderRadius: 14, padding: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}
-            >
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 900 }}>{clienteSelezionatoPagamento.nomeCliente}</div>
-                <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{clienteSelezionatoPagamento.telefono || "Nessun telefono"}{clienteSelezionatoPagamento.targa ? ` · ${clienteSelezionatoPagamento.targa}` : ""}</div>
-              </div>
-              <button type="button" onClick={() => setClienteSelezionatoPagamento(null)} style={{ border: 0, background: "transparent", color: "#64748B", fontSize: 18 }}>×</button>
-            </div>
-          ) : (
-            <>
-              <input
-                value={clienteQuery}
-                onChange={(e) => setClienteQuery(e.target.value)}
-                placeholder="Nome, targa o telefono"
-                style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }}
-              />
-              {clienteQuery.trim() && clientiFiltrati.length > 0 && (
-                <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {clientiFiltrati.map((cliente) => (
-                    <button key={cliente.clientKey} type="button" onClick={() => { setClienteSelezionatoPagamento(cliente); setClienteQuery(""); }} style={{ border: 0, background: "#FFFFFF", borderRadius: 12, padding: 11, textAlign: "left", cursor: "pointer" }}>
-                      <div style={{ fontWeight: 800 }}>{cliente.nomeCliente}</div>
-                      <div style={{ fontSize: 12, color: "#64748B", marginTop: 2 }}>{cliente.telefono || ""}{cliente.targa ? ` · ${cliente.targa}` : ""}</div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {clienteQuery.trim() && clientiFiltrati.length === 0 && (
-                <div style={{ marginTop: 8, padding: 12, borderRadius: 14, background: "#FFFFFF", color: "#64748B", fontSize: 13 }}>
-                  Nessun cliente trovato. Compila qui sotto per creare il nuovo profilo.
-                </div>
-              )}
-            </>
-          )}
-          {!clienteSelezionatoPagamento && (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 12, marginBottom: 6 }}>NUOVO CLIENTE</div>
-              <input value={nuovoClienteNome} onChange={(e) => setNuovoClienteNome(e.target.value)} placeholder="Nome e cognome" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }} />
-              <input value={nuovoClienteTelefono} onChange={(e) => setNuovoClienteTelefono(e.target.value)} placeholder="Telefono" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF", marginTop: 8 }} />
-            </>
-          )}
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 14, marginBottom: 6 }}>DESCRIZIONE</div>
-          <input value={nuovoPagamentoDescrizione} onChange={(e) => setNuovoPagamentoDescrizione(e.target.value)} placeholder="Es. Cambio lampadina" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 15, background: "#FFFFFF" }} />
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#64748B", marginTop: 14, marginBottom: 6 }}>IMPORTO</div>
-          <input value={nuovoPagamentoImporto} onChange={(e) => setNuovoPagamentoImporto(e.target.value)} inputMode="decimal" placeholder="€ 0,00" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #E5E7EB", borderRadius: 14, padding: "13px 14px", fontSize: 16, background: "#FFFFFF" }} />
-          <button type="button" onClick={salvaNuovoPagamento} style={{ width: "100%", height: 50, border: 0, borderRadius: 16, background: "#D4AF37", color: "#111827", fontWeight: 900, marginTop: 16 }}>SALVA</button>
-        </Modal>
-      )}
-      {checkInOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 20000, background: "#000", display: "flex", justifyContent: "center" }}>
-          <div style={{ position: "relative", width: "100%", maxWidth: 430, height: "100%", overflow: "hidden", background: "#000" }}>
-            <video ref={checkInVideoRef} autoPlay muted playsInline style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.42)", pointerEvents: "none" }} />
-            <div style={{ position: "absolute", top: 18, left: 18, right: 18, display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 2 }}>
-              <div style={{ padding: "9px 12px", borderRadius: 14, background: "rgba(0,0,0,.62)", color: "#FFF", fontSize: 12, fontWeight: 900 }}>CHECK-IN · TARGA</div>
-              <button type="button" onClick={stopCheckInCamera} style={{ width: 42, height: 42, border: 0, borderRadius: 14, background: "rgba(255,255,255,.94)", color: "#111827", fontSize: 24, fontWeight: 700 }}>×</button>
-            </div>
-            <div style={{ position: "absolute", left: "8%", right: "8%", top: "50%", transform: "translateY(-50%)", height: 78, border: "3px solid #D4AF37", borderRadius: 16, boxShadow: "0 0 0 9999px rgba(0,0,0,.46)", zIndex: 2, pointerEvents: "none" }}>
-              <div style={{ position: "absolute", left: "50%", top: -38, transform: "translateX(-50%)", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,.65)", color: "#FFF", fontSize: 12, fontWeight: 800 }}>Inquadra qui la targa</div>
-            </div>
-            {checkInError && <div style={{ position: "absolute", left: 18, right: 18, bottom: 122, zIndex: 4, padding: "11px 13px", borderRadius: 14, background: "rgba(127,29,29,.92)", color: "#FFF", fontSize: 13, fontWeight: 800, textAlign: "center" }}>{checkInError}</div>}
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 28, zIndex: 4, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div style={{ color: "#FFF", fontSize: 12, fontWeight: 700, textAlign: "center" }}>Tieni la targa dentro il riquadro</div>
-              <button type="button" onClick={() => void captureCheckInPlate()} disabled={checkInBusy} aria-label="Scatta foto targa" style={{ width: 78, height: 78, borderRadius: "50%", border: "5px solid rgba(255,255,255,.78)", background: checkInBusy ? "#D1D5DB" : "#FFF", boxShadow: "0 8px 24px rgba(0,0,0,.35)", cursor: checkInBusy ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ width: 58, height: 58, borderRadius: "50%", background: "#D4AF37" }} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {modal === "ordini" && (
-        <Modal
-          title="ORDINI"
-          onClose={() =>
-            setModal(null)
-          }
-          topRight={
-            <button
-              type="button"
-              onClick={() =>
-                router.push("/ordini")
-              }
-              style={modalLinkStyle}
-            >
-              LISTA ORDINI
-            </button>
-          }
+          
         >
           {ordini.length === 0 ? (
             <EmptyState text="Nessun ordine presente." />
@@ -1634,23 +1224,21 @@ export default function Home() {
             ordini.map(
               (ordine, index) => (
                 <OrderRow
-                  key={
-                    ordine.id ||
-                    ordine.numero ||
-                    index
-                  }
+                  key={ordine.id || ordine.numero || index}
                   ordine={ordine}
+                  onClick={() => {
+                    setOrdineAperto(ordine);
+                    setOrdineDescrizione(ordine.descrizione || "");
+                    setOrdineFornitoreId(ordine.supplierId || "");
+                  }}
+                  onSend={() => void inviaOrdineHome(ordine)}
                 />
               )
             )
           )}
           <button
             type="button"
-            onClick={() => {
-              sessionStorage.removeItem("goldencar_nuovo_ordine");
-              sessionStorage.setItem("goldencar_nuovo_ordine", "1");
-              router.push("/ordini");
-            }}
+            onClick={() => { setOrdineAperto(null); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); setNuovoOrdineAperto(true); }}
             style={{
               width: 52,
               height: 52,
@@ -1670,9 +1258,57 @@ export default function Home() {
           </button>
         </Modal>
       )}
+      {agendaVoiceOpen && (
+        <Modal title="CONFERMA APPUNTAMENTO" onClose={() => setAgendaVoiceOpen(false)}>
+          <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>Dettato: {agendaVoiceText}</div>
+          <label style={labelStyle}>DATA</label>
+          <input type="date" value={agendaDraft.date} onChange={e=>setAgendaDraft({...agendaDraft,date:e.target.value})} style={inputStyle}/>
+          <label style={labelStyle}>ORA</label>
+          <input type="time" value={agendaDraft.time} onChange={e=>setAgendaDraft({...agendaDraft,time:e.target.value})} style={inputStyle}/>
+          <label style={labelStyle}>APPUNTAMENTO</label>
+          <textarea value={agendaDraft.description} onChange={e=>setAgendaDraft({...agendaDraft,description:e.target.value})} style={{...inputStyle,minHeight:90,resize:"vertical"}}/>
+          <button type="button" onClick={()=>void salvaAgendaVoice()} style={primaryButtonStyle}>SALVA APPUNTAMENTO</button>
+        </Modal>
+      )}
+      {nuovoOrdineAperto && (
+        <Modal title="NUOVO ORDINE" onClose={() => setNuovoOrdineAperto(false)}>
+          <label style={labelStyle}>VEICOLO</label>
+          <select value={ordineVeicoloId} onChange={e=>setOrdineVeicoloId(e.target.value)} style={inputStyle}>
+            <option value="">Seleziona veicolo</option>
+            {veicoliOrdini.map(v=><option key={v.id} value={v.id}>{v.targa} — {v.veicolo} — {v.cliente}</option>)}
+          </select>
+          <label style={labelStyle}>COSA ORDINARE</label>
+          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90,resize:"vertical"}} placeholder="Descrizione prodotto"/>
+          <button type="button" onClick={()=>{const R=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!R){alert("Dettatura non disponibile.");return;}const r=new R();r.lang="it-IT";r.onresult=(e:any)=>{setOrdineDescrizione(String(e.results?.[0]?.[0]?.transcript||""));setOrdineListening(false)};r.onend=()=>setOrdineListening(false);setOrdineListening(true);r.start();}} style={secondaryButtonStyle}>{ordineListening?"ASCOLTO…":"🎙️ DETTA"}</button>
+          <label style={labelStyle}>FORNITORE</label>
+          <select value={ordineFornitoreId} onChange={e=>setOrdineFornitoreId(e.target.value)} style={inputStyle}>
+            <option value="">Seleziona fornitore</option>
+            {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+          </select>
+          <button type="button" onClick={()=>void salvaNuovoOrdineHome()} style={primaryButtonStyle}>SALVA</button>
+        </Modal>
+      )}
+      {ordineAperto && (
+        <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
+          <div style={{fontWeight:900,color:"#041E49"}}>{ordine.cliente || "Cliente"} · {ordine.veicolo || ""}</div>
+          <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordine.numero || ""}</div>
+          <label style={labelStyle}>PRODOTTO</label>
+          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90}}/>
+          <label style={labelStyle}>FORNITORE</label>
+          <select value={ordineFornitoreId} onChange={e=>setOrdineFornitoreId(e.target.value)} style={inputStyle}>
+            {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
+          </select>
+          <button type="button" onClick={()=>void aggiornaOrdineHome()} style={secondaryButtonStyle}>SALVA MODIFICHE</button>
+          {ordine.stato !== "INVIATO" && <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={primaryButtonStyle}>INVIA WHATSAPP</button>}
+        </Modal>
+      )}
     </>
   );
 }
+const labelStyle: React.CSSProperties = { display:"block", fontSize:12, fontWeight:800, color:"#64748B", marginTop:12, marginBottom:6 };
+const inputStyle: React.CSSProperties = { width:"100%", boxSizing:"border-box", border:"1px solid #E5E7EB", borderRadius:14, padding:"13px 14px", fontSize:15, background:"#FFFFFF", color:"#111827" };
+const primaryButtonStyle: React.CSSProperties = { width:"100%", minHeight:50, border:0, borderRadius:16, background:"#D4AF37", color:"#111827", fontWeight:900, marginTop:14, cursor:"pointer" };
+const secondaryButtonStyle: React.CSSProperties = { width:"100%", minHeight:44, border:"1px solid #E2E8F0", borderRadius:14, background:"#FFFFFF", color:"#041E49", fontWeight:800, marginTop:8, cursor:"pointer" };
 const modalLinkStyle: React.CSSProperties = {
   border: "none",
   background: "transparent",
@@ -1806,8 +1442,8 @@ function MicIcon({ active = false }: { active?: boolean }) {
 function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
-function OrderRow({ ordine }: { ordine: Ordine }) {
-  return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div></div>;
+function OrderRow({ ordine, onClick, onSend }: { ordine: Ordine; onClick?:()=>void; onSend?:()=>void }) {
+  return <div onClick={onClick} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div><button type="button" onClick={(e)=>{e.stopPropagation(); onSend?.();}} style={{border:0,borderRadius:10,padding:"8px 10px",background:"#D4AF37",fontWeight:900,fontSize:11}}>INVIA</button></div>;
 }
 
 /* =====================================================
