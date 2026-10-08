@@ -217,6 +217,7 @@ export default function Home() {
   const [fornitoreEditId, setFornitoreEditId] = useState("");
   const [fornitoreEditNome, setFornitoreEditNome] = useState("");
   const [fornitoreEditWhatsapp, setFornitoreEditWhatsapp] = useState("");
+  const [nuovoFornitoreMode, setNuovoFornitoreMode] = useState(false);
   const checkInVideoRef = useRef<HTMLVideoElement>(null);
   const checkInStreamRef = useRef<MediaStream | null>(null);
 
@@ -1472,6 +1473,7 @@ export default function Home() {
             setFornitoreEditId("");
             setFornitoreEditNome("");
             setFornitoreEditWhatsapp("");
+            setNuovoFornitoreMode(false);
           }}
         >
           {fornitori.length === 0 ? (
@@ -1485,6 +1487,7 @@ export default function Home() {
                   setFornitoreEditId(fornitore.id);
                   setFornitoreEditNome(fornitore.nome);
                   setFornitoreEditWhatsapp(fornitore.whatsapp);
+                  setNuovoFornitoreMode(false);
                 }}
                 style={{
                   width: "100%",
@@ -1513,6 +1516,7 @@ export default function Home() {
               setFornitoreEditId("");
               setFornitoreEditNome("");
               setFornitoreEditWhatsapp("");
+              setNuovoFornitoreMode(true);
             }}
             style={{
               width: 52,
@@ -1534,7 +1538,7 @@ export default function Home() {
             +
           </button>
 
-          {(fornitoreEditId || fornitoreEditNome || fornitoreEditWhatsapp) && (
+          {(nuovoFornitoreMode || fornitoreEditId || fornitoreEditNome || fornitoreEditWhatsapp) && (
             <div style={{ marginTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 900, color: "#64748B", marginBottom: 8 }}>
                 {fornitoreEditId ? "MODIFICA CONTATTO" : "NUOVO CONTATTO"}
