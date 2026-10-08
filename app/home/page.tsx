@@ -204,6 +204,7 @@ export default function Home() {
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
   const [solleciti, setSolleciti] = useState<Sollecito[]>([]);
   const [pagamentiManuali, setPagamentiManuali] = useState<PagamentoManuale[]>([]);
+  const [clientiAnagrafica, setClientiAnagrafica] = useState<ClienteRicerca[]>([]);
   const [dettaglioSollecito, setDettaglioSollecito] = useState<Sollecito | null>(null);
   const [nuovoPagamentoAperto, setNuovoPagamentoAperto] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
@@ -435,6 +436,20 @@ export default function Home() {
       const clientsById = new Map(
         (clientRows ?? []).map((row: any) => [String(row.id), row])
       );
+      setClientiAnagrafica(
+        (clientRows ?? [])
+          .map((row: any) => {
+            const nomeCliente = [row?.nome, row?.cognome].filter(Boolean).join(" ").trim();
+            if (!nomeCliente) return null;
+            return {
+              clientKey: makeClientKey(nomeCliente, row?.telefono),
+              nomeCliente,
+              telefono: String(row?.telefono ?? "").trim(),
+            };
+          })
+          .filter(Boolean) as ClienteRicerca[]
+      );
+
       const primaryClientByVehicle = new Map<string, any>();
 
       for (const relation of relationRows ?? []) {
@@ -769,15 +784,30 @@ export default function Home() {
   };
   const clientiDisponibili = useMemo<ClienteRicerca[]>(() => {
     const map = new Map<string, ClienteRicerca>();
+
+    for (const cliente of clientiAnagrafica) {
+      map.set(cliente.clientKey, cliente);
+    }
+
     for (const lavoro of lavori) {
       const nome = String(lavoro.nomeCliente || "").trim();
       if (!nome) continue;
       const telefono = String(lavoro.telefono || "").trim();
       const key = makeClientKey(nome, telefono);
-      if (!map.has(key)) map.set(key,{clientKey:key,nomeCliente:nome,telefono,targa:String(lavoro.targa||"").trim()});
+      const existing = map.get(key);
+
+      map.set(key, {
+        clientKey: key,
+        nomeCliente: nome,
+        telefono,
+        targa: String(existing?.targa || lavoro.targa || "").trim(),
+      });
     }
-    return Array.from(map.values()).sort((a,b)=>a.nomeCliente.localeCompare(b.nomeCliente,"it"));
-  }, [lavori]);
+
+    return Array.from(map.values()).sort((a, b) =>
+      a.nomeCliente.localeCompare(b.nomeCliente, "it")
+    );
+  }, [clientiAnagrafica, lavori]);
 
   const clientiFiltrati = useMemo(() => {
     const q = clienteQuery.trim().toLowerCase();
