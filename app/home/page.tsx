@@ -1232,51 +1232,172 @@ export default function Home() {
       {modal === "lavori" && (
         <Modal
           title="LAVORI ATTIVI"
-          onClose={() =>
-            setModal(null)
+          onClose={() => setModal(null)}
+          topRight={
+            <button type="button" onClick={() => { setModal(null); router.push("/lavori"); }} style={modalLinkStyle}>
+              LISTA LAVORI
+            </button>
           }
-          
+        >
+          {lavoriAttivi.length === 0 ? (
+            <EmptyState text="Nessun lavoro in lavorazione." />
+          ) : (
+            lavoriAttivi.map((lavoro, index) => (
+              <LavoroRow
+                key={String(lavoro.jobNumber || index)}
+                lavoro={lavoro}
+                onClick={() => apriLavoro(lavoro)}
+              />
+            ))
+          )}
+        </Modal>
+      )}
+
+      {modal === "revisioni" && (
+        <Modal
+          title="REVISIONI"
+          onClose={() => setModal(null)}
+          topRight={
+            <button type="button" onClick={() => { setModal(null); router.push("/revisioni"); }} style={modalLinkStyle}>
+              REVISIONI
+            </button>
+          }
+        >
+          {revisioniScadute.length === 0 ? (
+            <EmptyState text="Nessuna revisione in scadenza nei prossimi 30 giorni." />
+          ) : (
+            revisioniScadute.map((revisione, index) => (
+              <RevisionRow
+                key={String(revisione.id || index)}
+                revisione={revisione}
+                onWhatsApp={() => avvisaRevisione(revisione)}
+              />
+            ))
+          )}
+        </Modal>
+      )}
+
+      {modal === "agenda" && (
+        <Modal
+          title="APPUNTAMENTI DI OGGI"
+          onClose={() => setModal(null)}
+          topRight={
+            <button type="button" onClick={() => { setModal(null); router.push("/agenda"); }} style={modalLinkStyle}>
+              AGENDA
+            </button>
+          }
+        >
+          {appuntamentiOggi.length === 0 ? (
+            <EmptyState text="Nessun appuntamento oggi." />
+          ) : (
+            appuntamentiOggi.map((appuntamento, index) => (
+              <AppointmentRow key={String(appuntamento.id || index)} appuntamento={appuntamento} />
+            ))
+          )}
+          <button
+            type="button"
+            onClick={aggiungiAppuntamentoVocale}
+            style={{ width: 52, height: 52, margin: "14px auto 0", border: "none", borderRadius: 17, background: "#2563EB", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 30, fontWeight: 400 }}
+            aria-label="Nuovo appuntamento vocale"
+          >
+            +
+          </button>
+        </Modal>
+      )}
+
+      {modal === "solleciti" && (
+        <Modal
+          title="SOLLECITI"
+          onClose={() => setModal(null)}
+        >
+          {solleciti.length === 0 ? (
+            <EmptyState text="Nessun sollecito presente." />
+          ) : (
+            solleciti.map((sollecito, index) => (
+              <SollecitoRow
+                key={String(sollecito.clientKey || sollecito.id || index)}
+                sollecito={sollecito}
+                onPayAll={() => pagaTuttoCliente(sollecito)}
+                onDetails={() => setDettaglioSollecito(sollecito)}
+                onWhatsApp={() => sollecita(sollecito)}
+              />
+            ))
+          )}
+          <button
+            type="button"
+            onClick={apriNuovoPagamento}
+            style={{ width: 52, height: 52, margin: "14px auto 0", border: "none", borderRadius: 17, background: "#D4AF37", color: "#111827", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 30, fontWeight: 400 }}
+            aria-label="Nuovo sollecito"
+          >
+            +
+          </button>
+        </Modal>
+      )}
+
+      {modal === "ordini" && (
+        <Modal
+          title="ORDINI"
+          onClose={() => setModal(null)}
         >
           {ordini.length === 0 ? (
             <EmptyState text="Nessun ordine presente." />
           ) : (
-            ordini.map(
-              (ordine, index) => (
-                <OrderRow
-                  key={ordine.id || ordine.numero || index}
-                  ordine={ordine}
-                  onClick={() => {
-                    setOrdineAperto(ordine);
-                    setOrdineDescrizione(ordine.descrizione || "");
-                    setOrdineFornitoreId(ordine.supplierId || "");
-                  }}
-                  onSend={() => void inviaOrdineHome(ordine)}
-                />
-              )
-            )
+            ordini.map((ordine, index) => (
+              <OrderRow
+                key={ordine.id || ordine.numero || index}
+                ordine={ordine}
+                onClick={() => {
+                  setOrdineAperto(ordine);
+                  setOrdineDescrizione(ordine.descrizione || "");
+                  setOrdineFornitoreId(ordine.supplierId || "");
+                }}
+                onSend={() => void inviaOrdineHome(ordine)}
+              />
+            ))
           )}
           <button
             type="button"
             onClick={() => { setOrdineAperto(null); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); setNuovoOrdineAperto(true); }}
-            style={{
-              width: 52,
-              height: 52,
-              margin: "14px auto 0",
-              border: "none",
-              borderRadius: 17,
-              background: "#D4AF37",
-              color: "#111827",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-            }}
+            style={{ width: 52, height: 52, margin: "14px auto 0", border: "none", borderRadius: 17, background: "#D4AF37", color: "#111827", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 30, fontWeight: 400 }}
             aria-label="Nuovo ordine"
           >
-            <PlusIcon />
+            +
           </button>
         </Modal>
       )}
+
+      {dettaglioSollecito && (
+        <Modal
+          title={dettaglioSollecito.nomeCliente || "SOLLECITO"}
+          onClose={() => setDettaglioSollecito(null)}
+        >
+          <div style={{fontSize:13,fontWeight:800,color:"#64748B",marginBottom:2}}>DETTAGLIO DEI LAVORI</div>
+          {pagamentiCliente(dettaglioSollecito).length === 0 ? (
+            <EmptyState text="Nessun importo da pagare." />
+          ) : (
+            pagamentiCliente(dettaglioSollecito).map((pagamento) => (
+              <div key={pagamento.id} style={{background:"#FFFFFF",borderRadius:17,padding:13,display:"flex",alignItems:"center",gap:10}}>
+                <button
+                  type="button"
+                  onClick={() => void pagaSingolo(pagamento)}
+                  style={{width:30,height:30,borderRadius:9,border:"2px solid #CBD5E1",background:"#FFFFFF",flexShrink:0,cursor:"pointer"}}
+                  aria-label="Segna come pagato"
+                />
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:900,color:"#111827"}}>{pagamento.descrizione}</div>
+                  <div style={{fontSize:16,fontWeight:900,color:"#EA580C",marginTop:3}}>{formatEuro(pagamento.importo)}</div>
+                </div>
+              </div>
+            ))
+          )}
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px 0",fontWeight:900,color:"#111827"}}>
+            <span>TOTALE RESIDUO</span>
+            <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum,p) => sum + p.importo, 0))}</span>
+          </div>
+          <button type="button" onClick={() => pagaTuttoCliente(dettaglioSollecito)} style={primaryButtonStyle}>SEGNA TUTTO COME PAGATO</button>
+        </Modal>
+      )}
+
       {agendaVoiceOpen && (
         <Modal title="CONFERMA APPUNTAMENTO" onClose={() => setAgendaVoiceOpen(false)}>
           <div style={{fontSize:12,color:"#64748B",marginBottom:8}}>Dettato: {agendaVoiceText}</div>
@@ -1289,6 +1410,33 @@ export default function Home() {
           <button type="button" onClick={()=>void salvaAgendaVoice()} style={primaryButtonStyle}>SALVA APPUNTAMENTO</button>
         </Modal>
       )}
+      {nuovoPagamentoAperto && (
+        <Modal title="NUOVO SOLLECITO" onClose={() => setNuovoPagamentoAperto(false)}>
+          <label style={labelStyle}>CERCA CLIENTE</label>
+          <div style={{display:"flex",gap:8}}>
+            <input value={clienteQuery} onChange={e=>setClienteQuery(e.target.value)} placeholder="Nome cliente" style={{...inputStyle,flex:1}} />
+            <button type="button" onClick={()=>{setInserimentoNomeLibero(true);setClienteSelezionatoPagamento(null);setClienteQuery("");}} style={{width:48,border:0,borderRadius:14,background:"#D4AF37",fontSize:22,fontWeight:900}}>+</button>
+          </div>
+          {!inserimentoNomeLibero && !clienteSelezionatoPagamento && clienteQuery.trim() && clientiFiltrati.map(cliente => (
+            <button key={cliente.clientKey} type="button" onClick={()=>{setClienteSelezionatoPagamento(cliente);setClienteQuery(cliente.nomeCliente);}} style={{width:"100%",textAlign:"left",border:0,borderRadius:12,padding:11,background:"#FFFFFF"}}>
+              <div style={{fontWeight:900}}>{cliente.nomeCliente}</div>
+            </button>
+          ))}
+          {clienteSelezionatoPagamento && <div style={{background:"#FFF4C2",borderRadius:12,padding:10,fontWeight:900}}>{clienteSelezionatoPagamento.nomeCliente}</div>}
+          {inserimentoNomeLibero && (
+            <>
+              <label style={labelStyle}>NOME CLIENTE</label>
+              <input value={nuovoClienteNome} onChange={e=>setNuovoClienteNome(e.target.value)} placeholder="Nome e cognome" style={inputStyle} />
+            </>
+          )}
+          <label style={labelStyle}>DESCRIZIONE</label>
+          <input value={nuovoPagamentoDescrizione} onChange={e=>setNuovoPagamentoDescrizione(e.target.value)} placeholder="Es. Tagliando" style={inputStyle} />
+          <label style={labelStyle}>IMPORTO</label>
+          <input value={nuovoPagamentoImporto} onChange={e=>setNuovoPagamentoImporto(e.target.value)} placeholder="0,00" inputMode="decimal" style={inputStyle} />
+          <button type="button" onClick={()=>void salvaNuovoPagamento()} style={primaryButtonStyle}>SALVA SOLLECITO</button>
+        </Modal>
+      )}
+
       {nuovoOrdineAperto && (
         <Modal title="NUOVO ORDINE" onClose={() => setNuovoOrdineAperto(false)}>
           <label style={labelStyle}>VEICOLO</label>
