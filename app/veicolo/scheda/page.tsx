@@ -2033,6 +2033,7 @@ export default function SchedaLavoroPage() {
 
                   markUnsaved={() => setSaved(false)}
                   onOrder={apriOrdineConProdotti}
+                  orderedProductKeys={orderedProductKeys}
                 />
 
               </section>
@@ -2087,6 +2088,7 @@ export default function SchedaLavoroPage() {
 
                   markUnsaved={() => setSaved(false)}
                   onOrder={apriOrdineConProdotti}
+                  orderedProductKeys={orderedProductKeys}
                 />
 
               </section>
