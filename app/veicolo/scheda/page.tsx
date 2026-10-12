@@ -3815,18 +3815,12 @@ function ProductChecklist({
                   value={product?.details ?? ""}
                   disabled={ordered}
 
-                  onChange={(e)
-
+                  onChange={(e) =>
                     updateProduct(
-
                       index,
-
                       "details",
-
                       e.target.value
-
                     )
-
                   }
 
                   placeholder="Marca, codice..."
