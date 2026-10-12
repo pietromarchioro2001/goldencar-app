@@ -16,8 +16,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Keep network behavior unchanged. The service worker exists to provide
-// the PWA lifecycle/install capability without caching dynamic Supabase data.
-self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
-});
+// Intentionally no fetch handler: let the browser handle requests normally.
+// This avoids unhandled "Failed to fetch" rejections and does not cache dynamic
+// Supabase data or interfere with APIs, uploads, microphone, or external sites.
