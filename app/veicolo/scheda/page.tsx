@@ -1209,7 +1209,7 @@ export default function SchedaLavoroPage() {
     if (!draft) return;
 
     const daOrdinare = draft.products
-      .filter((product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(productOrderKey(product.name)))
+      .filter((product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(product.name.trim().toLowerCase()))
       .map((product) => ({
         name: product.name.trim(),
         quantity: product.quantity || "1",
@@ -3909,7 +3909,7 @@ function ProductChecklist({
       </button>
 
       {draft.products.some(
-        (product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(productOrderKey(product.name))
+        (product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(product.name.trim().toLowerCase())
       ) && (
         <button
           type="button"
