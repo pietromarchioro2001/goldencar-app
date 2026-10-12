@@ -1025,49 +1025,28 @@ export default function Veicolo() {
 
 
   const apriNuovoLavoro = () => {
-
-
-
-    if (veicoloAperto) {
-
-
-
-      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE");
-
-
-
-      alert(`Questo veicolo ha già un lavoro in lavorazione${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
-
-
-
+    if (!profiloVeicolo?.id) {
+      alert("ID del veicolo non disponibile. Ricarica il profilo del veicolo e riprova.");
       return;
-
-
-
     }
 
-
+    if (veicoloAperto) {
+      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE");
+      alert(`Questo veicolo ha già un lavoro in lavorazione${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
+      return;
+    }
 
     sessionStorage.setItem("goldencar_nuova_scheda", JSON.stringify({
-
-
-
-      nomeCliente: clienteVisualizzato.nome, indirizzo: clienteVisualizzato.indirizzo, telefono: clienteVisualizzato.telefono,
-
-
-
-      codiceFiscale: clienteVisualizzato.cf, veicolo: veicoloProfilo.veicolo, targa: veicoloProfilo.targa,
-
-
-
+      vehicleId: String(profiloVeicolo.id),
+      nomeCliente: clienteVisualizzato.nome,
+      indirizzo: clienteVisualizzato.indirizzo,
+      telefono: clienteVisualizzato.telefono,
+      codiceFiscale: clienteVisualizzato.cf,
+      veicolo: veicoloProfilo.veicolo,
+      targa: veicoloProfilo.targa,
     }));
 
-
-
     router.push("/veicolo/scheda");
-
-
-
   };
 
 
