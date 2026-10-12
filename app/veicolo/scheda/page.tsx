@@ -3591,13 +3591,10 @@ function ProductChecklist({
 
 
         const selected = index >= 0;
-
-
+        const ordered = orderedProductKeys.has(name.trim().toLowerCase());
 
         const product = selected
-
           ? draft.products[index]
-
           : undefined;
 
 
