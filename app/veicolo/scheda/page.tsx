@@ -533,7 +533,6 @@ export default function SchedaLavoroPage() {
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [orderedProductKeys, setOrderedProductKeys] = useState<Set<string>>(new Set());
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
 
@@ -545,30 +544,6 @@ export default function SchedaLavoroPage() {
   // e subito dopo sovrascritta da una nuova scheda vuota.
   const initializedRef = useRef(false);
   const productOrderKey = (name: string) => name.trim().toLowerCase();
-
-  const loadOrderedProductKeys = async (jobId: string) => {
-    if (!jobId) return new Set<string>();
-    const { data, error } = await supabase
-      .from("orders")
-      .select("prodotti")
-      .eq("job_id", jobId);
-
-    if (error) {
-      console.error("Errore verifica ordini della scheda:", error);
-      return new Set<string>();
-    }
-
-    const keys = new Set<string>();
-    for (const row of data ?? []) {
-      const products = Array.isArray(row.prodotti) ? row.prodotti : [];
-      for (const product of products) {
-        const name = String(product?.name ?? "").trim();
-        if (name) keys.add(productOrderKey(name));
-      }
-    }
-    return keys;
-  };
-
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -582,7 +557,6 @@ export default function SchedaLavoroPage() {
           const { data, error } = await supabase.from("jobs").select("*").eq("id", existingJobId).maybeSingle();
           if (!error && data) {
             const normalized = rowToJobDraft(data);
-            setOrderedProductKeys(await loadOrderedProductKeys(normalized.jobId || ""));
             setDraft(normalized); setSaved(true);
             loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
               const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
@@ -1203,44 +1177,85 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const apriOrdineConProdotti = async () => {
-    if (!draft) return;
+  const syncOrderForJob = async (savedDraft: JobDraft) => {
+    if (!savedDraft.jobId || !savedDraft.vehicleId) return;
 
-    const daOrdinare = draft.products
-      .filter((product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(product.name.trim().toLowerCase()))
+    const productsToOrder = savedDraft.products
+      .filter((product) => product.orderRequested && product.name.trim())
       .map((product) => ({
         name: product.name.trim(),
         quantity: product.quantity || "1",
         details: product.details.trim(),
       }));
 
-    if (!daOrdinare.length) {
-      alert("Seleziona almeno un prodotto da ordinare.");
+    const { data: existingOrders, error: loadError } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("job_id", savedDraft.jobId)
+      .order("created_at", { ascending: true });
+
+    if (loadError) {
+      console.error("Errore lettura ordine collegato alla scheda:", loadError);
+      throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + loadError.message);
+    }
+
+    const existing = existingOrders?.[0];
+
+    // Nessun prodotto selezionato: rimuove l'ordine collegato alla scheda.
+    if (productsToOrder.length === 0) {
+      if (existingOrders?.length) {
+        const { error } = await supabase
+          .from("orders")
+          .delete()
+          .eq("job_id", savedDraft.jobId);
+        if (error) {
+          console.error("Errore rimozione ordine collegato alla scheda:", error);
+          throw new Error("La scheda è stata salvata, ma non è stato possibile rimuovere l'ordine: " + error.message);
+        }
+      }
       return;
     }
 
-    if (!draft.jobId) {
-      alert("Prima di creare un ordine, salva la scheda con il pulsante SALVA.");
-      return;
+    const orderValues = {
+      job_id: savedDraft.jobId,
+      vehicle_id: savedDraft.vehicleId,
+      cliente: savedDraft.nomeCliente,
+      telefono: savedDraft.telefono,
+      veicolo: savedDraft.veicolo,
+      targa: savedDraft.targa,
+      prodotti: productsToOrder,
+      stato: "DA_INVIARE",
+    };
+
+    if (existing) {
+      // Aggiorna l'ordine esistente senza duplicarlo e conserva l'eventuale fornitore assegnato.
+      const { error } = await supabase
+        .from("orders")
+        .update({ ...orderValues, stato: existing.stato || "DA_INVIARE" })
+        .eq("id", existing.id);
+      if (error) {
+        console.error("Errore aggiornamento ordine collegato alla scheda:", error);
+        throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + error.message);
+      }
+
+      // Se esistono duplicati creati dal vecchio flusso, ne mantiene uno solo.
+      if ((existingOrders?.length || 0) > 1) {
+        const duplicateIds = existingOrders!.slice(1).map((order: any) => String(order.id));
+        for (const duplicateId of duplicateIds) {
+          const { error: deleteError } = await supabase.from("orders").delete().eq("id", duplicateId);
+          if (deleteError) console.error("Errore rimozione ordine duplicato:", deleteError);
+        }
+      }
+    } else {
+      const { error } = await supabase.from("orders").insert({
+        id: "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+        ...orderValues,
+      });
+      if (error) {
+        console.error("Errore creazione ordine dalla scheda:", error);
+        throw new Error("La scheda è stata salvata, ma non è stato possibile creare l'ordine: " + error.message);
+      }
     }
-
-    const savedDraft = await saveDraft(false);
-    if (!savedDraft) return;
-
-    sessionStorage.setItem(
-      "goldencar_nuovo_ordine",
-      JSON.stringify({
-        vehicleId: savedDraft.vehicleId,
-        jobId: savedDraft.jobId,
-        nomeCliente: savedDraft.nomeCliente,
-        telefono: savedDraft.telefono,
-        veicolo: savedDraft.veicolo,
-        targa: savedDraft.targa,
-        prodotti: daOrdinare,
-      })
-    );
-
-    router.push("/ordini");
   };
 
   const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
@@ -1314,6 +1329,12 @@ export default function SchedaLavoroPage() {
     sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
     setDraft(savedDraft);
     setSaved(true);
+    try {
+      await syncOrderForJob(savedDraft);
+    } catch (orderError) {
+      console.error("Errore sincronizzazione ordine:", orderError);
+      alert(orderError instanceof Error ? orderError.message : "La scheda è stata salvata, ma l'ordine non è stato aggiornato.");
+    }
     if (conclude) await generateAndOpenPdf(savedDraft);
     return savedDraft;
   };
@@ -2059,8 +2080,7 @@ export default function SchedaLavoroPage() {
                   addProduct={addProduct}
 
                   markUnsaved={() => setSaved(false)}
-                  onOrder={apriOrdineConProdotti}
-                  orderedProductKeys={orderedProductKeys}
+                          orderedProductKeys={orderedProductKeys}
                 />
 
               </section>
@@ -3533,8 +3553,6 @@ function ProductChecklist({
   addProduct,
 
   markUnsaved,
-  onOrder,
-  orderedProductKeys,
 
 }: {
 
@@ -3561,8 +3579,6 @@ function ProductChecklist({
   addProduct: () => void;
 
   markUnsaved: () => void;
-  onOrder: () => void;
-  orderedProductKeys: Set<string>;
 
 }) {
 
@@ -3618,7 +3634,6 @@ function ProductChecklist({
 
 
         const selected = index >= 0;
-        const ordered = orderedProductKeys.has(name.trim().toLowerCase());
 
         const product = selected
           ? draft.products[index]
@@ -3679,7 +3694,6 @@ function ProductChecklist({
                 type="checkbox"
 
                 checked={selected}
-                disabled={ordered}
 
                 onChange={(e) => {
 
@@ -3788,7 +3802,6 @@ function ProductChecklist({
                 <input
 
                   value={product?.quantity ?? "1"}
-                  disabled={ordered}
 
                   onChange={(e) =>
 
@@ -3934,31 +3947,6 @@ function ProductChecklist({
         + ALTRO PRODOTTO
 
       </button>
-
-      {draft.products.some(
-        (product) => product.orderRequested && product.name.trim() && !orderedProductKeys.has(product.name.trim().toLowerCase())
-      ) && (
-        <button
-          type="button"
-          onClick={onOrder}
-          style={{
-            width: "100%",
-            height: 46,
-            marginTop: 8,
-            border: 0,
-            borderRadius: 14,
-            background: "#D4AF37",
-            color: "#111827",
-            fontSize: 12,
-            fontWeight: 900,
-            cursor: "pointer",
-          }}
-        >
-          ORDINA SELEZIONATI
-        </button>
-      )}
-
-
 
       {draft.products
 
