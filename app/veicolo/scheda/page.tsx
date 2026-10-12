@@ -608,13 +608,11 @@ export default function SchedaLavoroPage() {
         if (rawVehicle) { vehicle = { ...vehicle, ...JSON.parse(rawVehicle) }; sessionStorage.removeItem("goldencar_nuova_scheda"); }
         if (!vehicle.vehicleId) throw new Error("ID del veicolo non disponibile. Torna al profilo del veicolo e riprova.");
 
-        const { data: created, error: createError } = await supabase.from("jobs").insert({
-          vehicle_id: vehicle.vehicleId, titolo: "Intervento", tipo: null, stato: "APERTO",
-          dettagli: { nomeCliente: vehicle.nomeCliente, indirizzo: vehicle.indirizzo, telefono: vehicle.telefono, codiceFiscale: vehicle.codiceFiscale, veicolo: vehicle.veicolo, targa: vehicle.targa, types: [], media: [] },
-        }).select("*").single();
-
-        if (createError || !created) throw createError || new Error("Impossibile creare la scheda su Supabase.");
-        setDraft(rowToJobDraft(created)); setSaved(true); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
+        // Aprire "Nuovo lavoro" crea solo una bozza locale.
+        // La riga in Supabase viene creata esclusivamente dal pulsante SALVA.
+        const draft = emptyDraft(vehicle, createOrReuseNewJobNumber());
+        setDraft(draft);
+        setSaved(false);
       } catch (error) {
         console.error("Errore apertura scheda:", error);
         alert(error instanceof Error ? error.message : "Impossibile aprire la scheda di lavoro.");
@@ -1221,17 +1219,23 @@ export default function SchedaLavoroPage() {
       return;
     }
 
-    await saveDraft(false);
+    if (!draft.jobId) {
+      alert("Prima di creare un ordine, salva la scheda con il pulsante SALVA.");
+      return;
+    }
+
+    const savedDraft = await saveDraft(false);
+    if (!savedDraft) return;
 
     sessionStorage.setItem(
       "goldencar_nuovo_ordine",
       JSON.stringify({
-        vehicleId: draft.vehicleId,
-        jobId: draft.jobId,
-        nomeCliente: draft.nomeCliente,
-        telefono: draft.telefono,
-        veicolo: draft.veicolo,
-        targa: draft.targa,
+        vehicleId: savedDraft.vehicleId,
+        jobId: savedDraft.jobId,
+        nomeCliente: savedDraft.nomeCliente,
+        telefono: savedDraft.telefono,
+        veicolo: savedDraft.veicolo,
+        targa: savedDraft.targa,
         prodotti: daOrdinare,
       })
     );
@@ -1239,32 +1243,29 @@ export default function SchedaLavoroPage() {
     router.push("/ordini");
   };
 
-  const saveDraft = async (conclude = false) => {
-    if (!draft) return;
-  
+  const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
+    if (!draft) return null;
+
     if (conclude) {
       const missing: string[] = [];
-
       if (!draft.kilometers.trim()) missing.push("chilometri");
       if (!draft.labor.trim()) missing.push("manodopera");
       if (!draft.invoiceNumber.trim()) missing.push("numero di fattura");
-
       if (missing.length) {
-        alert(
-          `Prima di concludere il lavoro devi inserire: ${missing.join(", ")}.`
-        );
-        return;
+        alert(`Prima di concludere il lavoro devi inserire: ${missing.join(", ")}.`);
+        return null;
       }
-
       const confirmed = window.confirm(
         "Sei sicuro di voler concludere questo lavoro?\n\nUna volta concluso, la scheda verrà considerata definitiva."
       );
-  
-      if (!confirmed) return;
+      if (!confirmed) return null;
     }
-  
+
     const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
-    if (!draft.jobId || !draft.vehicleId) { alert("La scheda non è collegata correttamente al veicolo su Supabase."); return; }
+    if (!next.vehicleId) {
+      alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
+      return null;
+    }
 
     const details = {
       nomeCliente: next.nomeCliente, indirizzo: next.indirizzo, telefono: next.telefono, codiceFiscale: next.codiceFiscale,
@@ -1273,22 +1274,48 @@ export default function SchedaLavoroPage() {
       pdfUrl: next.pdfUrl || "", pdfR2Key: next.pdfR2Key || "",
     };
     const parsedPayment = next.paymentAmount.trim() ? Number(next.paymentAmount.replace(",", ".")) : null;
-
-    const { error } = await supabase.from("jobs").update({
-      titolo: next.types?.[0] || "Intervento", tipo: next.types?.join(" · ") || null,
-      problemi: next.problems.filter(Boolean).join("\n"), lavori: next.works.filter(Boolean).join("\n"),
-      prodotti_utilizzati: JSON.stringify(next.products), chilometri: next.kilometers.trim() ? next.kilometers.trim() : null,
-      manodopera: next.labor.trim() || null, note: next.notes.trim() || null, fattura: next.invoiceNumber.trim() || null,
-      stato: conclude ? "CONCLUSO" : "APERTO", closed_at: conclude ? new Date().toISOString() : null,
+    const values = {
+      vehicle_id: next.vehicleId,
+      titolo: next.types?.[0] || "Intervento",
+      tipo: next.types?.join(" · ") || null,
+      problemi: next.problems.filter(Boolean).join("\n"),
+      lavori: next.works.filter(Boolean).join("\n"),
+      prodotti_utilizzati: JSON.stringify(next.products),
+      chilometri: next.kilometers.trim() || null,
+      manodopera: next.labor.trim() || null,
+      note: next.notes.trim() || null,
+      fattura: next.invoiceNumber.trim() || null,
+      stato: conclude ? "CONCLUSO" : "APERTO",
+      closed_at: conclude ? new Date().toISOString() : null,
       payment_amount: Number.isFinite(parsedPayment as number) ? parsedPayment : null,
-      payment_status: next.paymentAmount.trim() ? next.paymentStatus : null, dettagli: details,
-    }).eq("id", draft.jobId);
+      payment_status: next.paymentAmount.trim() ? next.paymentStatus : null,
+      dettagli: details,
+    };
 
-    if (error) { console.error("Errore salvataggio scheda Supabase:", error); alert(`Impossibile salvare la scheda: ${error.message}`); return; }
+    let data: any = null;
+    let error: any = null;
+    if (next.jobId) {
+      const result = await supabase.from("jobs").update(values).eq("id", next.jobId).select("*").single();
+      data = result.data;
+      error = result.error;
+    } else {
+      const result = await supabase.from("jobs").insert(values).select("*").single();
+      data = result.data;
+      error = result.error;
+    }
 
+    if (error || !data) {
+      console.error("Errore salvataggio scheda Supabase:", error);
+      alert(`Impossibile salvare la scheda: ${error?.message || "nessun dato restituito"}`);
+      return null;
+    }
+
+    const savedDraft = rowToJobDraft(data);
     sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
-    setDraft(next); setSaved(true);
-    if (conclude) await generateAndOpenPdf(next);
+    setDraft(savedDraft);
+    setSaved(true);
+    if (conclude) await generateAndOpenPdf(savedDraft);
+    return savedDraft;
   };
 
 
