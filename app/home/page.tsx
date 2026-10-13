@@ -1588,15 +1588,26 @@ export default function Home() {
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
           <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordineAperto.numero || ""}</div>
-          <button type="button" onClick={()=>{setFornitoreEditId(ordineAperto.supplierId || "");const f=fornitori.find(x=>x.id===ordineAperto.supplierId);setFornitoreEditNome(f?.nome||"");setFornitoreEditWhatsapp(f?.whatsapp||"");setRubricaFornitoreAperta(true);}} style={secondaryButtonStyle}>RUBRICA FORNITORI</button>
           <label style={labelStyle}>PRODOTTO</label>
-          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90}}/>
+          <textarea
+            value={ordineDescrizione}
+            onChange={e=>setOrdineDescrizione(e.target.value)}
+            placeholder="Descrivi i prodotti da ordinare..."
+            style={{...inputStyle,minHeight:90,fontFamily:"Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",fontSize:16,lineHeight:1.6,fontWeight:500,letterSpacing:"0.1px",resize:"vertical"}}
+          />
           <label style={labelStyle}>FORNITORE</label>
           <select value={ordineFornitoreId} onChange={e=>setOrdineFornitoreId(e.target.value)} style={inputStyle}>
+            <option value="">Seleziona fornitore</option>
             {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
-          <button type="button" onClick={()=>void aggiornaOrdineHome()} style={secondaryButtonStyle}>SALVA MODIFICHE</button>
-          {ordineAperto.stato !== "INVIATO" && <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={primaryButtonStyle}>INVIA WHATSAPP</button>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginTop:16}}>
+            <button type="button" onClick={()=>void aggiornaOrdineHome()} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,fontSize:13,cursor:"pointer"}}>SALVA</button>
+            {ordineAperto.stato !== "INVIATO" ? (
+              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#D4AF37",color:"#111827",fontWeight:900,fontSize:13,cursor:"pointer"}}>INVIA</button>
+            ) : (
+              <div style={{fontSize:11,fontWeight:800,color:"#64748B",textAlign:"right"}}>INVIATO</div>
+            )}
+          </div>
         </Modal>
       )}
     </>
