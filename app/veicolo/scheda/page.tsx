@@ -1382,12 +1382,39 @@ export default function SchedaLavoroPage() {
     if (!draft) return;
 
     try {
+      // Rimuovi il PDF prima di modificare i dati del lavoro.
+      if (draft.jobId && draft.pdfR2Key) {
+        const response = await fetch("/api/r2/file", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: draft.pdfR2Key }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok) {
+          throw new Error(result?.error || "Impossibile rimuovere il PDF da Cloudflare R2. Nessun altro dato è stato modificato.");
+        }
+      }
+
       if (draft.jobId) {
-        const { error } = await supabase.from("jobs").delete().eq("id", draft.jobId);
-        if (error) throw new Error(`Errore eliminazione scheda Supabase: ${error.message}`);
+        const { error: ordersError } = await supabase
+          .from("orders")
+          .delete()
+          .eq("job_id", draft.jobId);
+        if (ordersError) {
+          throw new Error("PDF rimosso, ma gli ordini collegati non sono stati rimossi e il lavoro è ancora presente: " + ordersError.message);
+        }
+
+        const { error: jobError } = await supabase
+          .from("jobs")
+          .delete()
+          .eq("id", draft.jobId);
+        if (jobError) {
+          throw new Error("PDF e ordini collegati rimossi, ma la scheda è ancora presente: " + jobError.message);
+        }
       } else {
         localStorage.removeItem(`goldencar_job_${draft.jobNumber}`);
       }
+
       await deleteMediaBlobs(draft.media.map((item) => item.id));
 
       const rawManual = localStorage.getItem("goldencar_pagamenti_manuali");
@@ -1397,26 +1424,21 @@ export default function SchedaLavoroPage() {
           if (Array.isArray(manualPayments)) {
             localStorage.setItem(
               "goldencar_pagamenti_manuali",
-              JSON.stringify(
-                manualPayments.filter(
-                  (item: { jobNumber?: number }) =>
-                    item.jobNumber !== draft.jobNumber
-                )
-              )
+              JSON.stringify(manualPayments.filter(
+                (item: { jobNumber?: number }) => item.jobNumber !== draft.jobNumber
+              ))
             );
           }
         } catch {
-          // Leave the store untouched if it is malformed.
+          // Lascia invariato l'archivio locale se non è leggibile.
         }
       }
 
       setDeleteConfirmOpen(false);
-      // Ricarica la pagina Veicolo dopo l'eliminazione, così la cronologia
-      // viene riletta dal localStorage anche in StackBlitz.
       window.location.href = "/veicolo";
     } catch (error) {
-      console.error("Errore eliminazione scheda:", error);
-      alert("Non è stato possibile eliminare completamente la scheda.");
+      console.error("Errore durante la rimozione della scheda:", error);
+      alert(error instanceof Error ? "Operazione incompleta: " + error.message : "Impossibile completare l'operazione.");
     }
   };
 
