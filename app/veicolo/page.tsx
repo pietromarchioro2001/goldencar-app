@@ -81,6 +81,10 @@ type LavoroSalvato = {
 
 
 
+  jobId?: string;
+
+  vehicleId?: string;
+
   jobNumber: number;
 
 
@@ -2485,7 +2489,7 @@ export default function Veicolo() {
 
                         "goldencar_apri_scheda",
 
-                        String(intervento.jobNumber)
+                        String(intervento.jobId || intervento.jobNumber)
 
                       );
 
@@ -2503,7 +2507,7 @@ export default function Veicolo() {
 
                           "goldencar_apri_scheda",
 
-                          String(intervento.jobNumber)
+                          String(intervento.jobId || intervento.jobNumber)
 
                         );
 
