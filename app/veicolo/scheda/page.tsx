@@ -3214,7 +3214,7 @@ export default function SchedaLavoroPage() {
 
             >
 
-              {saved ? "✓ SALVATO" : "SALVA"}
+              {draft.jobId ? "SALVA MODIFICHE" : "SALVA"}
 
             </button>
 
