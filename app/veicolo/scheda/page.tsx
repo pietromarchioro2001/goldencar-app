@@ -529,6 +529,7 @@ export default function SchedaLavoroPage() {
   const [draft, setDraft] = useState<JobDraft | null>(null);
 
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -1264,6 +1265,7 @@ export default function SchedaLavoroPage() {
   };
 
   const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
+    if (saving) return null;
     if (!draft) {
       alert("Scheda non ancora caricata. Attendi un momento e riprova.");
       return null;
@@ -1284,6 +1286,8 @@ export default function SchedaLavoroPage() {
       if (!confirmed) return null;
     }
 
+    setSaving(true);
+    try {
     const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
     if (!next.vehicleId) {
       alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
@@ -1346,6 +1350,13 @@ export default function SchedaLavoroPage() {
     }
     if (conclude) await generateAndOpenPdf(savedDraft);
     return savedDraft;
+    } catch (error) {
+      console.error("Errore salvataggio scheda:", error);
+      alert(error instanceof Error ? `Salvataggio non riuscito: ${error.message}` : "Salvataggio non riuscito per un errore imprevisto.");
+      return null;
+    } finally {
+      setSaving(false);
+    }
   };
 
 
@@ -3189,14 +3200,9 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={async () => {
-                try {
-                  await saveDraft(false);
-                } catch (error) {
-                  console.error("Errore imprevisto durante il salvataggio della scheda:", error);
-                  alert(error instanceof Error ? `Errore durante il salvataggio: ${error.message}` : "Errore imprevisto durante il salvataggio della scheda.");
-                }
-              }}
+              onClick={() => { void saveDraft(false); }}
+              disabled={saving}
+              aria-label="Salva scheda di lavoro"
 
               style={{
 
@@ -3224,7 +3230,7 @@ export default function SchedaLavoroPage() {
 
             >
 
-              SALVA
+              {saving ? "SALVATAGGIO..." : "SALVA"}
 
             </button>
 
