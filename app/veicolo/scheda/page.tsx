@@ -3885,17 +3885,17 @@ function ProductChecklist({
 
                 <button
                   type="button"
-                  onClick={() => { if (!ordered) toggleOrderRequested(index); }}
+                  onClick={() => toggleOrderRequested(index)}
                   
-                  title={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
-                  aria-label={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
+                  title={product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
+                  aria-label={product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
                   style={{
                     width: 34,
                     height: 34,
-                    border: ordered ? "1px solid #CBD5E1" : product?.orderRequested ? "1px solid #D4AF37" : "1px solid #E5E7EB",
+                    border: product?.orderRequested ? "1px solid #D4AF37" : "1px solid #E5E7EB",
                     borderRadius: 10,
-                    background: ordered ? "#E2E8F0" : product?.orderRequested ? "#FFF8DB" : "#FFFFFF",
-                    color: ordered ? "#94A3B8" : product?.orderRequested ? "#A16207" : "#64748B",
+                    background: product?.orderRequested ? "#FFF8DB" : "#FFFFFF",
+                    color: product?.orderRequested ? "#A16207" : "#64748B",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
