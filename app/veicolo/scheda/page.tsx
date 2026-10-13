@@ -1264,7 +1264,10 @@ export default function SchedaLavoroPage() {
   };
 
   const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
-    if (!draft) return null;
+    if (!draft) {
+      alert("Scheda non ancora caricata. Attendi un momento e riprova.");
+      return null;
+    }
 
     if (conclude) {
       const missing: string[] = [];
@@ -3186,7 +3189,14 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={() => saveDraft(false)}
+              onClick={async () => {
+                try {
+                  await saveDraft(false);
+                } catch (error) {
+                  console.error("Errore imprevisto durante il salvataggio della scheda:", error);
+                  alert(error instanceof Error ? `Errore durante il salvataggio: ${error.message}` : "Errore imprevisto durante il salvataggio della scheda.");
+                }
+              }}
 
               style={{
 
@@ -3214,7 +3224,7 @@ export default function SchedaLavoroPage() {
 
             >
 
-              {draft.jobId ? "SALVA MODIFICHE" : "SALVA"}
+              SALVA
 
             </button>
 
