@@ -3847,7 +3847,7 @@ function ProductChecklist({
                 <input
 
                   value={product?.details ?? ""}
-                  disabled={ordered}
+                  
 
                   onChange={(e) =>
                     updateProduct(
@@ -3886,7 +3886,7 @@ function ProductChecklist({
                 <button
                   type="button"
                   onClick={() => { if (!ordered) toggleOrderRequested(index); }}
-                  disabled={ordered}
+                  
                   title={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
                   aria-label={ordered ? "Prodotto già ordinato" : product?.orderRequested ? "Ordine già richiesto" : "Aggiungi all'ordine"}
                   style={{
