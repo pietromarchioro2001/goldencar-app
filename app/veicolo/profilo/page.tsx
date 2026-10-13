@@ -867,6 +867,7 @@ export default function NuovoProfiloPage() {
     sessionStorage.setItem(
       "goldencar_nuova_scheda",
       JSON.stringify({
+        vehicleId: String(nuovoProfilo.id),
         nomeCliente: cliente1DaSalvare.nome,
         indirizzo: cliente1DaSalvare.indirizzo,
         telefono: cliente1DaSalvare.telefono,
