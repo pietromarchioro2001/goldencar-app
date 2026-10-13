@@ -530,6 +530,7 @@ export default function SchedaLavoroPage() {
 
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveConfirmed, setSaveConfirmed] = useState(false);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -1342,6 +1343,8 @@ export default function SchedaLavoroPage() {
     sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
     setDraft(savedDraft);
     setSaved(true);
+    setSaveConfirmed(true);
+    window.setTimeout(() => setSaveConfirmed(false), 1200);
     try {
       await syncOrderForJob(savedDraft);
     } catch (orderError) {
@@ -3230,7 +3233,7 @@ export default function SchedaLavoroPage() {
 
             >
 
-              {saving ? "SALVATAGGIO..." : "SALVA"}
+              {saving ? "SALVATAGGIO..." : saveConfirmed ? "✓ SALVATO" : "SALVA"}
 
             </button>
 
