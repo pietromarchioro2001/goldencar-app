@@ -1374,7 +1374,6 @@ export default function Home() {
                   setOrdineDescrizione(ordine.descrizione || "");
                   setOrdineFornitoreId(ordine.supplierId || "");
                 }}
-                onSend={() => void inviaOrdineHome(ordine)}
               />
             ))
           )}
@@ -1740,8 +1739,8 @@ function MicIcon({ active = false }: { active?: boolean }) {
 function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
-function OrderRow({ ordine, onClick, onSend }: { ordine: Ordine; onClick?:()=>void; onSend?:()=>void }) {
-  return <div onClick={onClick} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B" }}>{ordine.stato || ""}</div>{ordine.stato !== "INVIATO" && <button type="button" onClick={(e)=>{e.stopPropagation(); onSend?.();}} style={{border:0,borderRadius:10,padding:"8px 10px",background:"#D4AF37",fontWeight:900,fontSize:11}}>INVIA</button>}</div>;
+function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
+  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
 }
 
 /* =====================================================
