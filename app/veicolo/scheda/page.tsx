@@ -400,7 +400,7 @@ function rowToJobDraft(row: any): JobDraft {
     try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); products = Array.isArray(parsed) ? parsed : []; } catch {}
   }
   return {
-    jobId: String(row.id), vehicleId: String(row.vehicle_id || ""), jobNumber: jobIdToNumber(String(row.id)),
+    jobId: String(row.id), vehicleId: String(row.vehicle_id || ""), jobNumber: Number(details.jobNumber) || jobIdToNumber(String(row.id)),
     createdAt: row.created_at || new Date().toISOString(),
     nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "",
     veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri),
@@ -575,6 +575,11 @@ export default function SchedaLavoroPage() {
             sessionStorage.removeItem("goldencar_apri_scheda"); sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
             return;
           }
+
+          // Se l’ID non esiste né in Supabase né nell’archivio locale, non
+          // trasformare un’apertura di scheda esistente in una nuova scheda vuota.
+          sessionStorage.removeItem("goldencar_apri_scheda");
+          throw new Error("Scheda di lavoro non trovata. Torna alla cronologia del veicolo e riaprila.");
         }
 
         let vehicle: VeicoloScheda & { vehicleId?: string } = { ...defaultVehicle };
@@ -1283,6 +1288,7 @@ export default function SchedaLavoroPage() {
     }
 
     const details = {
+      jobNumber: next.jobNumber,
       nomeCliente: next.nomeCliente, indirizzo: next.indirizzo, telefono: next.telefono, codiceFiscale: next.codiceFiscale,
       veicolo: next.veicolo, targa: next.targa, types: next.types, products: next.products, media: next.media,
       tagliando: next.tagliando, freni: next.freni, pneumatici: next.pneumatici,
