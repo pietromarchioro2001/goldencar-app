@@ -1166,12 +1166,9 @@ export default function SchedaLavoroPage() {
         pdfR2Key,
       };
 
-      const { error } = await supabase
-        .from("jobs")
-        .update({ dettagli: currentDetails })
-        .eq("id", lavoro.jobId);
-
-      if (error) throw new Error("PDF salvato su R2, ma non è stato possibile collegarlo alla scheda su Supabase: " + error.message);
+      const response = await fetch("/api/jobs", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lavoro.jobId, dettagli: currentDetails }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error("PDF salvato su R2, ma non è stato possibile collegarlo alla scheda: " + (result?.error || "Errore sconosciuto."));
 
       const next = { ...lavoro, pdfR2Key, pdfUrl: "" };
       setDraft(next);
@@ -1195,16 +1192,10 @@ export default function SchedaLavoroPage() {
         details: product.details.trim(),
       }));
 
-    const { data: existingOrders, error: loadError } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("job_id", savedDraft.jobId)
-      .order("created_at", { ascending: true });
-
-    if (loadError) {
-      console.error("Errore lettura ordine collegato alla scheda:", loadError);
-      throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + loadError.message);
-    }
+    const response = await fetch("/api/orders?jobId=" + encodeURIComponent(savedDraft.jobId), { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
+    const existingOrders = Array.isArray(result.orders) ? result.orders : [];
 
     const existing = existingOrders?.[0];
 
