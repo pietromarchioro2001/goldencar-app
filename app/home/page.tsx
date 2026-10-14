@@ -576,7 +576,7 @@ export default function Home() {
     ========================= */
     const { data: revisionRows, error: revisionsError } = await supabase
       .from("vehicles")
-      .select("id, veicolo, targa, revisione")
+      .select("id, client_id, veicolo, targa, revisione")
       .not("revisione", "is", null);
 
     if (revisionsError) {
