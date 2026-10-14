@@ -1293,7 +1293,7 @@ export default function Home() {
             {checkInOpen && (
               <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.34)", clipPath: "polygon(0 0,100% 0,100% 38%,91% 38%,91% 62%,100% 62%,100% 100%,0 100%,0 62%,9% 62%,9% 38%,0 38%)" }} />
-                <div style={{ position: "relative", width: "82%", height: "24%", maxHeight: 150, minHeight: 78, border: "3px solid #D4AF37", borderRadius: 14, boxShadow: "0 0 0 9999px rgba(0,0,0,.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "relative", width: "min(82%, 620px)", aspectRatio: "4.7 / 1", maxHeight: 125, border: "3px solid #D4AF37", borderRadius: 14, boxShadow: "0 0 0 9999px rgba(0,0,0,.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <div style={{ position: "absolute", top: -12, left: 16, right: 16, height: 3, background: "#D4AF37", borderRadius: 3 }} />
                   <span style={{ padding: "6px 10px", borderRadius: 8, background: "rgba(5,11,22,.78)", color: "#FFFFFF", fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>TARGA</span>
                 </div>
@@ -1311,10 +1311,7 @@ export default function Home() {
             {checkInError && checkInOpen && (
               <div role="alert" style={{ marginBottom: 12, borderRadius: 12, background: "#7F1D1D", padding: 11, color: "#FEE2E2", fontSize: 13 }}>{checkInError}</div>
             )}
-            <div style={{ color: "#CBD5E1", fontSize: 13, textAlign: "center", marginBottom: 14 }}>
-              {checkInBusy ? "Lettura targa in corso…" : "Centra la targa e premi SCANSIONA"}
-            </div>
-            <button type="button" onClick={() => { void captureCheckInPlate(); }} disabled={!checkInOpen || checkInBusy} style={{ width: "100%", minHeight: 54, border: "none", borderRadius: 16, background: checkInBusy ? "#64748B" : "#D4AF37", color: "#08142F", fontSize: 15, fontWeight: 900, letterSpacing: ".6px", cursor: checkInBusy ? "wait" : "pointer", opacity: checkInOpen ? 1 : .6 }}>
+            <button type="button" onClick={() => { void captureCheckInPlate(); }} disabled={!checkInOpen || checkInBusy} style={{ width: "100%", minHeight: 70, border: "none", borderRadius: 18, background: checkInBusy ? "#64748B" : "#D4AF37", color: "#08142F", fontSize: 19, fontWeight: 900, letterSpacing: ".8px", cursor: checkInBusy ? "wait" : "pointer", opacity: checkInOpen ? 1 : .6 }}>
               {checkInBusy ? "LETTURA IN CORSO…" : "SCANSIONA TARGA"}
             </button>
             {checkInError && (
