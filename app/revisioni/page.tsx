@@ -174,82 +174,55 @@ export default function RevisioniPage() {
   const [revisioneDaAggiornare, setRevisioneDaAggiornare] = useState<Revisione | null>(null);
   const [nuovaData, setNuovaData] = useState("");
 
-  const caricaRevisioni = async () => {
-    const { data: vehicles, error: vehiclesError } = await supabase
-      .from("vehicles")
-      .select("id, client_id, veicolo, targa, revisione")
-      .not("revisione", "is", null);
+  const caricaDatiProtetti = async () => {
+    try {
+      const response = await fetch("/api/revisioni", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento revisioni e lavori.");
 
-    if (vehiclesError) {
-      console.error("Errore caricamento revisioni:", vehiclesError);
-      setRevisioni([]);
-      return;
-    }
-
-    const rows = vehicles ?? [];
-    const vehicleIds = rows.map((row: any) => String(row.id));
-
-    const [{ data: relations, error: relationsError }, { data: clients, error: clientsError }] = await Promise.all([
-      vehicleIds.length
-        ? supabase
-            .from("vehicle_clients")
-            .select("vehicle_id, client_id, ruolo")
-            .in("vehicle_id", vehicleIds)
-        : Promise.resolve({ data: [] as any[], error: null }),
-      supabase.from("clients").select("id, nome, telefono"),
-    ]);
-
-    if (relationsError) {
-      console.error("Errore caricamento collegamenti revisioni:", relationsError);
-    }
-    if (clientsError) {
-      console.error("Errore caricamento clienti revisioni:", clientsError);
-    }
-
-    const clientsById = new Map((clients ?? []).map((client: any) => [String(client.id), client]));
-    const primaryByVehicle = new Map<string, any>();
-    for (const relation of relations ?? []) {
-      const vehicleId = String(relation.vehicle_id);
-      if (relation.ruolo === "PRINCIPALE" || !primaryByVehicle.has(vehicleId)) {
-        primaryByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
+      const rows = Array.isArray(result.vehicles) ? result.vehicles : [];
+      const clients = Array.isArray(result.clients) ? result.clients : [];
+      const relations = Array.isArray(result.relations) ? result.relations : [];
+      const clientsById = new Map(clients.map((client: any) => [String(client.id), client]));
+      const primaryByVehicle = new Map<string, any>();
+      for (const relation of relations) {
+        const vehicleId = String(relation.vehicle_id);
+        if (relation.ruolo === "PRINCIPALE" || !primaryByVehicle.has(vehicleId)) {
+          primaryByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
+        }
       }
+      const items: Revisione[] = rows.map((vehicle: any) => {
+        const client = primaryByVehicle.get(String(vehicle.id)) || clientsById.get(String(vehicle.client_id ?? ""));
+        const nomeCliente = String(client?.nome ?? "").trim();
+        return {
+          id: `revisione-${vehicle.id}`,
+          vehicleId: String(vehicle.id),
+          nomeCliente,
+          cliente: nomeCliente,
+          telefono: String(client?.telefono ?? ""),
+          veicolo: String(vehicle.veicolo ?? ""),
+          targa: String(vehicle.targa ?? ""),
+          revisione: String(vehicle.revisione ?? ""),
+          scadenza: String(vehicle.revisione ?? ""),
+        };
+      });
+      setRevisioni(normalizeRevisioni(items));
+
+      const conclusi: Lavoro[] = result.jobs.map((row: any) => {
+        let details: any = {};
+        try { details = row.dettagli && typeof row.dettagli === "object" ? row.dettagli : JSON.parse(String(row.dettagli || "{}")); } catch {}
+        const idMatch = String(row.id || "").match(/^([0-9]{2})-([0-9]{3})$/);
+        const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
+        let products: Product[] = Array.isArray(details.products) ? details.products : [];
+        if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
+        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
+      });
+      setLavori(conclusi);
+    } catch (error) {
+      console.error("Errore caricamento revisioni/lavori:", error);
+      setRevisioni([]);
+      setLavori([]);
     }
-
-    const items: Revisione[] = rows.map((vehicle: any) => {
-      const relationClient = primaryByVehicle.get(String(vehicle.id));
-      const client =
-        relationClient ||
-        clientsById.get(String(vehicle.client_id ?? ""));
-      const nomeCliente = String(client?.nome ?? "").trim();
-      return {
-        id: `revisione-${vehicle.id}`,
-        vehicleId: String(vehicle.id),
-        nomeCliente,
-        cliente: nomeCliente,
-        telefono: String(client?.telefono ?? ""),
-        veicolo: String(vehicle.veicolo ?? ""),
-        targa: String(vehicle.targa ?? ""),
-        revisione: String(vehicle.revisione ?? ""),
-        scadenza: String(vehicle.revisione ?? ""),
-      };
-    });
-
-    setRevisioni(normalizeRevisioni(items));
-  };
-
-  const caricaLavori = async () => {
-    const { data, error } = await supabase.from("jobs").select("*").in("stato", ["CONCLUSO", "CHIUSO"]).order("created_at", { ascending: false });
-    if (error) { console.error("Errore caricamento lavori:", error); setLavori([]); return; }
-    const conclusi: Lavoro[] = (data || []).map((row: any) => {
-      let details: any = {};
-      try { details = row.dettagli && typeof row.dettagli === "object" ? row.dettagli : JSON.parse(String(row.dettagli || "{}")); } catch {}
-      const idMatch = String(row.id || "").match(/^(\d{2})-(\d{3})$/);
-      const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
-      let products: Product[] = Array.isArray(details.products) ? details.products : [];
-      if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
-      return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
-    });
-    setLavori(conclusi);
   };
   const apriPdf = async (lavoro: Lavoro) => {
     if (pdfLoading === lavoro.jobNumber) return;
@@ -262,9 +235,8 @@ export default function RevisioniPage() {
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
     setTab(requestedTab === "lavori" ? "LAVORI" : "REVISIONI");
-    void caricaRevisioni();
-    void caricaLavori();
-    const refresh = () => { void caricaRevisioni(); void caricaLavori(); };
+    void caricaDatiProtetti();
+    const refresh = () => { void caricaDatiProtetti(); };
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
