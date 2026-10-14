@@ -762,41 +762,22 @@ export default function Veicolo() {
 
     setSalvataggioProfilo(true);
     try {
-      const cliente1 = profiloEdit.cliente1;
-      const cliente2 = profiloEdit.cliente2;
-
-      const { error: client1Error } = await supabase.from("clients").update({
-        nome: [cliente1.nome.trim(), cliente1.cognome.trim()].filter(Boolean).join(" "),
-        indirizzo: cliente1.indirizzo.trim(),
-        telefono: cliente1.telefono.trim(),
-        data_nascita: cliente1.nascita.trim() || null,
-        codice_fiscale: cliente1.cf.trim().toUpperCase(),
-      }).eq("id", profiloEdit.cliente1Id);
-
-      if (client1Error) throw new Error("Salvataggio Cliente 1 fallito: " + client1Error.message);
-
-      if (cliente2 && profiloEdit.cliente2Id) {
-        const { error: client2Error } = await supabase.from("clients").update({
-          nome: [cliente2.nome.trim(), cliente2.cognome.trim()].filter(Boolean).join(" "),
-          indirizzo: cliente2.indirizzo.trim(),
-          telefono: cliente2.telefono.trim(),
-          data_nascita: cliente2.nascita.trim() || null,
-          codice_fiscale: cliente2.cf.trim().toUpperCase(),
-        }).eq("id", profiloEdit.cliente2Id);
-
-        if (client2Error) throw new Error("Salvataggio Cliente 2 fallito: " + client2Error.message);
+      const response = await fetch("/api/vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicleId: profiloEdit.id,
+          client1Id: profiloEdit.cliente1Id,
+          client2Id: profiloEdit.cliente2Id || "",
+          client1: profiloEdit.cliente1,
+          client2: profiloEdit.cliente2,
+          vehicle: profiloEdit.veicolo,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Non è stato possibile salvare il profilo.");
       }
-
-      const { error: vehicleError } = await supabase.from("vehicles").update({
-        veicolo: profiloEdit.veicolo.veicolo.trim(),
-        motore: profiloEdit.veicolo.motore.trim(),
-        targa: profiloEdit.veicolo.targa.trim().toUpperCase(),
-        immatricolazione: profiloEdit.veicolo.immatricolazione.trim() || null,
-        revisione: profiloEdit.veicolo.revisione.trim() || null,
-      }).eq("id", profiloEdit.id);
-
-      if (vehicleError) throw new Error("Salvataggio veicolo fallito: " + vehicleError.message);
-
       const aggiornato = JSON.parse(JSON.stringify(profiloEdit)) as ProfiloVeicolo;
       setProfiloVeicolo(aggiornato);
       setProfiliArchivio((previous) => previous.map((item) => item.id === aggiornato.id ? aggiornato : item));
