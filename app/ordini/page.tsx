@@ -255,7 +255,7 @@ export default function OrdiniPage() {
         };
       }));
 
-      const suppliersById = new Map(
+      const suppliersById = new Map<string, any>(
         (supplierRows ?? []).map((supplier: any) => [
           String(supplier.id),
           supplier,
