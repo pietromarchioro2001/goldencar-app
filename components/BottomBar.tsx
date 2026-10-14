@@ -13,7 +13,7 @@ export default function BottomBar() {
     { href: "/home", label: "Home", icon: "home" },
     { href: "/agenda", label: "Agenda", icon: "calendar" },
     { href: "/veicolo", label: "Veicoli", icon: "car" },
-    { href: "/revisioni", label: "Revisioni", icon: "wrench" },
+    { href: "/revisioni", label: "Manutenzione", icon: "wrench" },
     { href: "/vendita", label: "Vendita", icon: "tag" },
   ];
 
@@ -42,7 +42,7 @@ export default function BottomBar() {
         }}
       >
         {items.map((item) => {
-          const active = pathname === item.href;
+          const active = pathname === item.href || (item.href === "/revisioni" && pathname === "/lavori");
 
           return (
             <Link
