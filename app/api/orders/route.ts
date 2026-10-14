@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     if(jobId){const job=await client!.from("jobs").select("id").eq("id",jobId).maybeSingle();if(job.error)throw job.error;if(!job.data)return NextResponse.json({ok:false,error:"Scheda lavoro non trovata."},{status:404});}
     const {data,error}=await client!.from("orders").insert({
       id, numero:textField(body.numero,80) || String(Date.now()), job_id:jobId || null, vehicle_id:vehicleId, supplier_id:supplierId || null,
-      cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti, stato:"DA_INVIARE"
+      cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti: products, stato:"DA_INVIARE"
     }).select("*").single();
     if(error)throw error;
     return NextResponse.json({ok:true,order:data},{status:201});
