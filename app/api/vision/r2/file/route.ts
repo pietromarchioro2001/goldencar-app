@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 import {
   createDownloadUrl,
@@ -8,6 +9,9 @@ import {
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const body = await request.json();
 
@@ -43,6 +47,9 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("key") || "";
@@ -70,6 +77,9 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const body = await request.json();
 
