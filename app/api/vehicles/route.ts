@@ -7,10 +7,10 @@ type RawVehicle = Record<string, unknown>;
 
 function supabase() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error("Configurazione Supabase mancante.");
+    throw new Error("Configurazione server Supabase mancante.");
   }
 
   return createClient(url, key, {
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
       {
         ok: false,
         error:
-          error instanceof Error
+          error instanceof Error && error.message === "Configurazione server Supabase mancante."
             ? error.message
             : "Errore caricamento veicoli.",
       },
