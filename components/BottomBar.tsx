@@ -42,7 +42,7 @@ export default function BottomBar() {
         }}
       >
         {items.map((item) => {
-          const active = pathname === item.href || (item.href === "/revisioni" && pathname === "/lavori");
+          const active = pathname === item.href;
 
           return (
             <Link
