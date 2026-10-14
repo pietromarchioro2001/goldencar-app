@@ -133,6 +133,23 @@ export default function NuovoProfiloPage() {
     setCliente2((prev) => ({ ...prev, [campo]: valore }));
   };
 
+  useEffect(() => {
+    const video = cameraVideoRef.current;
+    const stream = cameraStreamRef.current;
+    if (!cameraOpen || !video || !stream) return;
+
+    video.srcObject = stream;
+    const startPreview = () => {
+      void video.play().catch((error) => {
+        console.error("Anteprima fotocamera libretto:", error);
+        setOcrErrore("La fotocamera è attiva ma l'anteprima non parte. Chiudi lo scanner e riprova.");
+      });
+    };
+    video.onloadedmetadata = startPreview;
+    if (video.readyState >= 1) startPreview();
+    return () => { video.onloadedmetadata = null; };
+  }, [cameraOpen]);
+
   const stopCamera = () => {
     cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
     cameraStreamRef.current = null;
