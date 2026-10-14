@@ -106,7 +106,7 @@ export default function RevisioniPage() {
   const caricaRevisioni = async () => {
     const { data: vehicles, error: vehiclesError } = await supabase
       .from("vehicles")
-      .select("id, veicolo, targa, revisione")
+      .select("id, client_id, veicolo, targa, revisione")
       .not("revisione", "is", null);
 
     if (vehiclesError) {
