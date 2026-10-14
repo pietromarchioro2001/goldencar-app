@@ -1,8 +1,37 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { pdf } from "@react-pdf/renderer";
+import SchedaLavoroPDF, { type SchedaLavoroPDFData } from "@/app/pdf/SchedaLavoroPDF";
 import BottomBar from "@/components/BottomBar";
 import { supabase } from "@/lib/supabase";
+
+type Product = { name: string; details: string; quantity?: string; orderRequested?: boolean };
+type Lavoro = {
+  jobNumber: number;
+  createdAt: string;
+  nomeCliente: string;
+  telefono?: string;
+  indirizzo?: string;
+  codiceFiscale?: string;
+  veicolo: string;
+  targa: string;
+  kilometers: string;
+  types?: string[];
+  problems?: string[];
+  products?: Product[];
+  works?: string[] | string;
+  labor: string;
+  notes: string;
+  invoiceNumber: string;
+  paymentAmount?: string;
+  paymentStatus?: "DA_PAGARE" | "PAGATO";
+  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  jobId?: string;
+  pdfR2Key?: string;
+};
+
 
 type Revisione = {
   id?: string;
@@ -16,6 +45,44 @@ type Revisione = {
   telefono?: string;
 };
 
+function formatJobDate(value: string) {
+  const date = new Date(value || 0);
+  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+}
+function formatJobNumber(value: number | string) {
+  const raw = String(value ?? "").trim();
+  if (/^\d{2}-\d{3}$/.test(raw)) return raw;
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return raw || "—";
+  const year = new Date().getFullYear().toString().slice(-2);
+  return `${year}-${String(numeric).padStart(3, "0")}`;
+}
+function normalizeWorks(works: string[] | string | undefined) {
+  return Array.isArray(works) ? works.filter(Boolean).join("\n") : String(works || "");
+}
+function toPdfData(lavoro: Lavoro): SchedaLavoroPDFData {
+  return {
+    nomeCliente: lavoro.nomeCliente || "",
+    indirizzo: lavoro.indirizzo || "",
+    telefono: lavoro.telefono || "",
+    codiceFiscale: lavoro.codiceFiscale || "",
+    veicolo: lavoro.veicolo || "",
+    targa: lavoro.targa || "",
+    kilometers: lavoro.kilometers || "",
+    jobNumber: Number(lavoro.jobNumber) || 0,
+    createdAt: lavoro.createdAt || "",
+    labor: lavoro.labor || "",
+    workType: lavoro.types?.join(" · ") || "",
+    problems: lavoro.problems || [],
+    works: normalizeWorks(lavoro.works),
+    notes: lavoro.notes || "",
+    invoiceNumber: lavoro.invoiceNumber || "",
+    products: lavoro.products || [],
+    status: lavoro.status,
+  };
+}
+
+function paperclipIcon() { return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M8.5 12.5 14.9 6.1a3.54 3.54 0 0 1 5 5L11 20a5 5 0 0 1-7.07-7.07l8.84-8.84a2.5 2.5 0 0 1 3.54 3.54L7.5 16.44a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
 function parseDateOnly(value: string) {
   const match = String(value || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -98,6 +165,10 @@ function whatsappIcon() {
 }
 
 export default function RevisioniPage() {
+  const router = useRouter();
+  const [tab, setTab] = useState<"REVISIONI" | "LAVORI">("REVISIONI");
+  const [lavori, setLavori] = useState<Lavoro[]>([]);
+  const [pdfLoading, setPdfLoading] = useState<number | null>(null);
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
   const [ricerca, setRicerca] = useState("");
   const [revisioneDaAggiornare, setRevisioneDaAggiornare] = useState<Revisione | null>(null);
@@ -166,17 +237,37 @@ export default function RevisioniPage() {
     setRevisioni(normalizeRevisioni(items));
   };
 
+  const caricaLavori = async () => {
+    const { data, error } = await supabase.from("jobs").select("*").in("stato", ["CONCLUSO", "CHIUSO"]).order("created_at", { ascending: false });
+    if (error) { console.error("Errore caricamento lavori:", error); setLavori([]); return; }
+    const conclusi: Lavoro[] = (data || []).map((row: any) => {
+      let details: any = {};
+      try { details = row.dettagli && typeof row.dettagli === "object" ? row.dettagli : JSON.parse(String(row.dettagli || "{}")); } catch {}
+      const idMatch = String(row.id || "").match(/^(\d{2})-(\d{3})$/);
+      const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
+      let products: Product[] = Array.isArray(details.products) ? details.products : [];
+      if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
+      return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
+    });
+    setLavori(conclusi);
+  };
+  const apriPdf = async (lavoro: Lavoro) => {
+    if (pdfLoading === lavoro.jobNumber) return;
+    setPdfLoading(lavoro.jobNumber);
+    try {
+      if (lavoro.pdfR2Key) { const response = await fetch("/api/r2/file?key=" + encodeURIComponent(lavoro.pdfR2Key)); const data = await response.json(); if (!response.ok || !data?.ok || !data?.downloadUrl) throw new Error(data?.error || "PDF non disponibile su R2."); window.open(data.downloadUrl, "_blank", "noopener,noreferrer"); return; }
+      const blob = await pdf(<SchedaLavoroPDF lavoro={toPdfData(lavoro)} />).toBlob(); const url = URL.createObjectURL(blob); window.open(url, "_blank", "noopener,noreferrer"); window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) { console.error("Errore apertura PDF scheda:", error); alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF della scheda."); } finally { setPdfLoading(null); }
+  };
   useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    setTab(requestedTab === "lavori" ? "LAVORI" : "REVISIONI");
     void caricaRevisioni();
-    const refresh = () => {
-      void caricaRevisioni();
-    };
+    void caricaLavori();
+    const refresh = () => { void caricaRevisioni(); void caricaLavori(); };
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
-    return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("focus", refresh);
-    };
+    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
   }, []);
 
   const revisioniFiltrate = useMemo(() => {
@@ -203,6 +294,12 @@ export default function RevisioniPage() {
         return dateA - dateB;
       });
   }, [revisioni, ricerca]);
+
+  const lavoriFiltrati = useMemo(() => {
+    const query = ricerca.trim().toLowerCase();
+    if (!query) return lavori;
+    return lavori.filter((lavoro) => [lavoro.veicolo, lavoro.targa, lavoro.nomeCliente].some((value) => String(value || "").toLowerCase().includes(query)));
+  }, [lavori, ricerca]);
 
   const aggiornaData = async () => {
     if (!revisioneDaAggiornare || !nuovaData) return;
@@ -289,7 +386,7 @@ export default function RevisioniPage() {
             margin: "3px 0 0",
           }}
         >
-          REVISIONI
+          MANUTENZIONE
         </h1>
       </div>
   
@@ -306,7 +403,7 @@ export default function RevisioniPage() {
         <input
           value={ricerca}
           onChange={(event) => setRicerca(event.target.value)}
-          placeholder="Cerca targa, cliente o telefono..."
+          placeholder="Cerca veicolo, targa o cliente..."
           style={{
             width: "100%",
             border: "none",
@@ -318,157 +415,37 @@ export default function RevisioniPage() {
         />
       </div>
 
-      <div
-        style={{
-          padding: "0 18px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
-        {revisioniFiltrate.length === 0 ? (
-          <div
-            style={{
-              background: "#FFFFFF",
-              borderRadius: 20,
-              padding: 24,
-              textAlign: "center",
-              color: "#64748B",
-              fontSize: 14,
-            }}
-          >
-            Nessuna revisione trovata.
-          </div>
-        ) : (
-          revisioniFiltrate.map((revisione) => {
-            const giorni = daysFromToday(getRevisionDate(revisione));
-            const scaduta = giorni !== null && giorni < 0;
-            const entro30 = giorni !== null && giorni >= 0 && giorni <= 30;
-
-            const background = scaduta
-              ? "#FEE2E2"
-              : entro30
-                ? "#FFF8DB"
-                : "#FFFFFF";
-
-            const dataColor = scaduta
-              ? "#DC2626"
-              : entro30
-                ? "#A16207"
-                : "#111827";
-
-            return (
-              <div
-                key={revisione.id}
-                style={{
-                  background,
-                  borderRadius: 19,
-                  padding: 13,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  boxShadow: "0 3px 10px rgba(15,23,42,.05)",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRevisioneDaAggiornare(revisione);
-                    setNuovaData(toDateInput(getRevisionDate(revisione)));
-                  }}
-                  aria-label="Aggiorna data revisione"
-                  style={{
-                    width: 44,
-                    height: 44,
-                    flex: "0 0 44px",
-                    border: "none",
-                    borderRadius: 13,
-                    background: scaduta ? "#FEE2E2" : "#FFFFFF",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  {calendarIcon(scaduta ? "#DC2626" : entro30 ? "#D4AF37" : "#2563EB")}
-                </button>
-
-                <div
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 15,
-                      fontWeight: 900,
-                      color: "#111827",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {revisione.nomeCliente || revisione.cliente || "Cliente"}
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 3,
-                      fontSize: 13,
-                      color: "#64748B",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {revisione.veicolo || "Veicolo"} · {revisione.targa || "—"}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    minWidth: 76,
-                    textAlign: "right",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 900,
-                      color: dataColor,
-                    }}
-                  >
-                    {formatDate(getRevisionDate(revisione))}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => ricorda(revisione)}
-                  style={{
-                    border: "none",
-                    borderRadius: 12,
-                    background: "#16A34A",
-                    color: "#FFFFFF",
-                    padding: "9px 10px",
-                    fontSize: 10,
-                    fontWeight: 900,
-                    whiteSpace: "nowrap",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    cursor: "pointer",
-                  }}
-                >
-                  {whatsappIcon()}
-                  RICORDA
-                </button>
-              </div>
-            );
-          })
-        )}
+      <div style={{ display: "flex", gap: 8, margin: "0 22px 18px", padding: 5, borderRadius: 15, background: "#E9EDF3" }}>
+        {(["LAVORI", "REVISIONI"] as const).map((nomeTab) => <button key={nomeTab} type="button" onClick={() => setTab(nomeTab)} style={{ flex: 1, border: "none", borderRadius: 11, padding: "12px 8px", background: tab === nomeTab ? "#FFFFFF" : "transparent", color: tab === nomeTab ? "#041E49" : "#64748B", boxShadow: tab === nomeTab ? "0 2px 7px rgba(15,23,42,.08)" : "none", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>{nomeTab}</button>)}
       </div>
-
+      {tab === "LAVORI" ? (
+        <section style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {lavoriFiltrati.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>{ricerca.trim() ? "Nessun lavoro trovato." : "Nessun lavoro concluso."}</div> : lavoriFiltrati.map((lavoro) => (
+            <div key={lavoro.jobId || String(lavoro.jobNumber)} onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
+              <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}><div style={{ minWidth: 0, fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div><div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#64748B" }}>{formatJobDate(lavoro.createdAt)}</div></div>
+                <div style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.nomeCliente || "Cliente non indicato"}</div>
+                <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#64748B" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.veicolo || "Veicolo non indicato"}</span><span style={{ color: "#CBD5E1" }}>•</span><span style={{ flexShrink: 0, fontWeight: 800, letterSpacing: ".3px" }}>{lavoro.targa || "—"}</span></div>
+              </div>
+              <div style={{ flexShrink: 0, alignSelf: "flex-start", marginTop: 2, fontSize: 11, fontWeight: 800, color: "#94A3B8" }}>#{formatJobNumber(lavoro.jobNumber)}</div>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <div style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {revisioniFiltrate.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>Nessuna revisione trovata.</div> : revisioniFiltrate.map((revisione) => {
+            const giorni = daysFromToday(getRevisionDate(revisione)); const scaduta = giorni !== null && giorni < 0; const entro30 = giorni !== null && giorni >= 0 && giorni <= 30;
+            const background = scaduta ? "#FEE2E2" : entro30 ? "#FFF8DB" : "#FFFFFF"; const dataColor = scaduta ? "#DC2626" : entro30 ? "#A16207" : "#111827";
+            return <div key={revisione.id} style={{ background, borderRadius: 19, padding: 13, display: "flex", alignItems: "center", gap: 10, boxShadow: "0 3px 10px rgba(15,23,42,.05)" }}>
+              <button type="button" onClick={() => { setRevisioneDaAggiornare(revisione); setNuovaData(toDateInput(getRevisionDate(revisione))); }} aria-label="Aggiorna data revisione" style={{ width: 44, height: 44, flex: "0 0 44px", border: "none", borderRadius: 13, background: scaduta ? "#FEE2E2" : "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>{calendarIcon(scaduta ? "#DC2626" : entro30 ? "#D4AF37" : "#2563EB")}</button>
+              <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 900, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{revisione.nomeCliente || revisione.cliente || "Cliente"}</div><div style={{ marginTop: 3, fontSize: 13, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{revisione.veicolo || "Veicolo"} · {revisione.targa || "—"}</div></div>
+              <div style={{ minWidth: 76, textAlign: "right" }}><div style={{ fontSize: 14, fontWeight: 900, color: dataColor }}>{formatDate(getRevisionDate(revisione))}</div></div>
+              <button type="button" onClick={() => ricorda(revisione)} style={{ border: "none", borderRadius: 12, background: "#16A34A", color: "#FFFFFF", padding: "9px 10px", fontSize: 10, fontWeight: 900, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>{whatsappIcon()} RICORDA</button>
+            </div>;
+          })}
+        </div>
+      )}
       {revisioneDaAggiornare && (
         <div
           style={{
