@@ -280,14 +280,11 @@ export default function RevisioniPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("vehicles")
-      .update({ revisione: nuovaData })
-      .eq("id", revisioneDaAggiornare.vehicleId);
-
-    if (error) {
-      console.error("Errore aggiornamento revisione:", error);
-      alert("Non è stato possibile aggiornare la revisione: " + error.message);
+    const response = await fetch("/api/revisioni", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: revisioneDaAggiornare.vehicleId, revisione: nuovaData }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore aggiornamento revisione:", result);
+      alert("Non è stato possibile aggiornare la revisione: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
