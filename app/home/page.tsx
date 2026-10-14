@@ -318,76 +318,36 @@ export default function Home() {
   };
   const handleRecognizedPlate = async (plate: string) => {
     const normalized = normalizePlate(plate);
-
     try {
-      const { data: vehicle, error: vehicleError } = await supabase
-        .from("vehicles")
-        .select("id, veicolo, motore, targa, immatricolazione, revisione")
-        .ilike("targa", normalized)
-        .maybeSingle();
-
-      if (vehicleError) throw new Error(vehicleError.message);
-
-      if (vehicle) {
-        const { error: checkInUpdateError } = await supabase
-          .from("vehicles")
-          .update({
-            stato: "APERTO",
-            ultima_apertura: new Date().toISOString(),
-          })
-          .eq("id", vehicle.id);
-
-        if (checkInUpdateError) {
-          throw new Error(checkInUpdateError.message);
-        }
-
+      const response = await fetch("/api/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plate: normalized }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore durante la ricerca del veicolo.");
+      if (result.found && result.vehicle) {
+        const vehicle = result.vehicle;
+        const cliente = result.client || null;
         stopCheckInCamera();
-        const { data: relations } = await supabase
-          .from("vehicle_clients")
-          .select("client_id, ruolo")
-          .eq("vehicle_id", vehicle.id)
-          .order("ruolo", { ascending: true });
-
-        const primaryRelation =
-          (relations ?? []).find((item: any) => item.ruolo === "PRINCIPALE") ??
-          (relations ?? [])[0];
-
-        let cliente: any = null;
-        if (primaryRelation?.client_id) {
-          const { data: client } = await supabase
-            .from("clients")
-            .select("nome, indirizzo, telefono, codice_fiscale, data_nascita")
-            .eq("id", primaryRelation.client_id)
-            .maybeSingle();
-          cliente = client;
-        }
-
-        sessionStorage.setItem(
-          "goldencar_nuova_scheda",
-          JSON.stringify({
-            vehicleId: String(vehicle.id),
-            nomeCliente: String(cliente?.nome ?? "").trim(),
-            indirizzo: cliente?.indirizzo || "",
-            telefono: cliente?.telefono || "",
-            codiceFiscale: cliente?.codice_fiscale || "",
-            veicolo: vehicle.veicolo || "",
-            targa: normalized,
-          })
-        );
+        sessionStorage.setItem("goldencar_nuova_scheda", JSON.stringify({
+          vehicleId: String(vehicle.id),
+          nomeCliente: String(cliente?.nome ?? "").trim(),
+          indirizzo: cliente?.indirizzo || "",
+          telefono: cliente?.telefono || "",
+          codiceFiscale: cliente?.codice_fiscale || "",
+          veicolo: vehicle.veicolo || "",
+          targa: normalized,
+        }));
         router.push("/veicolo/scheda");
         return;
       }
-
       sessionStorage.setItem("goldencar_checkin_targa", normalized);
       router.push("/veicolo/profilo");
     } catch (error) {
-      console.error("CHECK-IN ricerca veicolo Supabase error:", error);
+      console.error("CHECK-IN ricerca veicolo error:", error);
       stopCheckInCamera();
-      setCheckInError(
-        error instanceof Error
-          ? `Errore durante la ricerca del veicolo: ${error.message}`
-          : "Errore durante la ricerca del veicolo."
-      );
+      setCheckInError(error instanceof Error ? `Errore durante la ricerca del veicolo: ${error.message}` : "Errore durante la ricerca del veicolo.");
     }
   };
 
