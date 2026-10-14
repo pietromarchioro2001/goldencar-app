@@ -19,3 +19,24 @@ Set these in Vercel project settings, not in source code and never with a `NEXT_
 ## Known limitations
 
 The shared password is not individual device management. The current Supabase anon policies may still permit direct database access, and signed R2 URLs remain usable until expiration. These need separate remediation before considering the system fully secured.
+
+
+## Additional server-side database setting
+
+The Agenda screen has been migrated to the protected `/api/appointments` route. This route requires the server-only Vercel environment variable:
+
+- `SUPABASE_SERVICE_ROLE_KEY`: the Supabase service-role key for this project. Set it only in Vercel server-side environment variables (Preview first); never use a `NEXT_PUBLIC_` prefix and never put the value in the repository.
+
+The route returns HTTP 503 if this variable or the Supabase URL is missing. Until it is configured in the Preview environment, Agenda database operations will not work on that Preview. This is intentional fail-closed behavior. Do not revoke existing Supabase anon grants yet: other screens still use direct browser Supabase calls.
+
+## Agenda migration verification
+
+On the security Preview, verify:
+- unauthenticated GET/POST/PATCH/DELETE requests to `/api/appointments` return HTTP 401;
+- authenticated session can load the agenda;
+- create, edit, and delete each persist and remain correct after refreshing;
+- malformed IDs, blank descriptions, invalid dates, and descriptions over 1000 characters are rejected;
+- Supabase service-role key is available only server-side;
+- other workshop screens continue to work.
+
+The service-role key bypasses RLS, so every future server endpoint using it must perform its own device-session check and input/record validation.
