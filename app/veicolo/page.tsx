@@ -661,68 +661,6 @@ export default function Veicolo() {
     void caricaProfiliSupabase();
   }, []);
 
-  const trovaProfili = (query: string): ProfiloVeicolo[] => {        const relationsForVehicle =
-          relationsByVehicle.get(String(vehicle.id)) ?? [];
-
-        const primaryRelation =
-          relationsForVehicle.find(
-            (item) => item.ruolo === "PRINCIPALE"
-          ) ?? relationsForVehicle[0];
-
-        const primaryClientId =
-          primaryRelation?.client_id ?? vehicle.client_id ?? null;
-
-        const secondRelation = relationsForVehicle.find(
-          (item) =>
-            item.ruolo === "SECONDO" &&
-            String(item.client_id) !== String(primaryClientId)
-        );
-
-        return {
-          id: String(vehicle.id),
-
-          cliente1: normalizzaCliente(
-            clientsById.get(String(primaryClientId))
-          ),
-          cliente1Id: primaryClientId ? String(primaryClientId) : undefined,
-
-          cliente2: secondRelation
-            ? normalizzaCliente(
-                clientsById.get(String(secondRelation.client_id))
-              )
-            : null,
-          cliente2Id: secondRelation?.client_id
-            ? String(secondRelation.client_id)
-            : undefined,
-
-          veicolo: {
-            veicolo: String(vehicle.veicolo ?? ""),
-            motore: String(vehicle.motore ?? ""),
-            targa: String(vehicle.targa ?? ""),
-            immatricolazione: String(vehicle.immatricolazione ?? ""),
-            revisione: String(vehicle.revisione ?? ""),
-          },
-        };
-      });
-
-      console.log(
-        "GOLDENCAR Supabase: veicoli caricati:",
-        mapped.length
-      );
-
-      setProfiliArchivio(mapped);
-      return mapped;
-    } catch (error) {
-      console.error("Errore caricamento veicoli da Supabase:", error);
-      setProfiliArchivio([]);
-      return [];
-    }
-  };
-
-  useEffect(() => {
-    void caricaProfiliSupabase();
-  }, []);
-
   const trovaProfili = (query: string): ProfiloVeicolo[] => {
     if (typeof window === "undefined") return [];
 
