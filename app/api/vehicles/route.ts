@@ -194,7 +194,6 @@ export async function PATCH(request: Request) {
       revisione: clean(vehicle.revisione, 30) || null,
     }).eq("id", vehicleId);
     if (updateVehicleError) throw updateVehicleError;
-
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
