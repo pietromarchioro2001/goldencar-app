@@ -458,7 +458,7 @@ export default function OrdiniPage() {
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier.id, cliente, telefono, veicolo, targa, description: descrizione.trim() }),
+      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier.id, cliente, telefono, veicolo, targa, description: descrizione.trim(), prodotti }),
     });
     const result = await response.json();
     if (!response.ok || !result?.ok || !result?.order) {
