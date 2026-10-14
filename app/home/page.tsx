@@ -1,4 +1,5 @@
 "use client";
+import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
