@@ -809,8 +809,9 @@ export default function Home() {
     if (!ok) return;
     try {
       if (pagamento.manuale) {
-        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
-        if (error) throw error;
+        const response = await fetch("/api/payments", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pagamento.id }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore eliminazione pagamento.");
       } else {
         const response = await fetch("/api/jobs/payment", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: String(pagamento.jobNumber), paymentStatus: "PAGATO", paymentPaidAmount: parseImporto(pagamento.totale ?? pagamento.importo) }) });
         const result = await response.json();
