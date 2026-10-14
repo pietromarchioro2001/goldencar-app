@@ -31,7 +31,9 @@ async function validSession(token: string | undefined, secret: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/accesso" || pathname === "/api/auth/device" || pathname.startsWith("/_next/") || pathname === "/favicon.ico" || pathname === "/logo.png" || pathname === "/manifest.json" || pathname === "/sw.js" || pathname.startsWith("/icons/")) return NextResponse.next();
+  // Keep framework assets, PWA install files, and static public files accessible.
+  if (pathname.startsWith("/_next/") || pathname === "/favicon.ico" || pathname === "/logo.png" || pathname === "/manifest.json" || pathname === "/sw.js" || pathname.startsWith("/icons/") || /\.[a-zA-Z0-9]{2,8}$/.test(pathname)) return NextResponse.next();
+  if (pathname === "/accesso" || pathname === "/api/auth/device") return NextResponse.next();
 
   const secret = process.env.GOLDENCAR_SESSION_SECRET;
   if (secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret)) return NextResponse.next();
