@@ -16,6 +16,13 @@ export async function GET(request: Request) {
   if (!(await isDeviceRequestAuthorized(request))) return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
   try {
     const client = db();
+    const jobId = new URL(request.url).searchParams.get("jobId");
+    if (jobId !== null) {
+      if (!jobId || jobId.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(jobId)) return NextResponse.json({ok:false,error:"ID scheda non valido."},{status:400});
+      const {data,error}=await client.from("orders").select("*").eq("job_id",jobId).order("created_at",{ascending:true});
+      if(error)throw error;
+      return NextResponse.json({ok:true,orders:data??[]},{headers:{"Cache-Control":"no-store"}});
+    }
     const [orders, suppliers, vehicles, clients, relations] = await Promise.all([
       client.from("orders").select("*").order("created_at", { ascending: false }),
       client.from("suppliers").select("*").order("nome", { ascending: true }),
