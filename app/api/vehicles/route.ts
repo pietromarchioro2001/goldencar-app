@@ -129,3 +129,79 @@ export async function GET(request: Request) {
     );
   }
 }
+
+
+export async function PATCH(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ ok: false, error: "Corpo della richiesta non valido." }, { status: 400 });
+    }
+
+    const vehicleId = typeof body.vehicleId === "string" ? body.vehicleId.trim() : "";
+    const client1Id = typeof body.client1Id === "string" ? body.client1Id.trim() : "";
+    const client2Id = typeof body.client2Id === "string" ? body.client2Id.trim() : "";
+    const client1 = body.client1 && typeof body.client1 === "object" && !Array.isArray(body.client1) ? body.client1 : null;
+    const client2 = body.client2 && typeof body.client2 === "object" && !Array.isArray(body.client2) ? body.client2 : null;
+    const vehicle = body.vehicle && typeof body.vehicle === "object" && !Array.isArray(body.vehicle) ? body.vehicle : null;
+
+    const validId = (id: string) => Boolean(id && id.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(id));
+    const clean = (value: unknown, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : "";
+    if (!validId(vehicleId) || !validId(client1Id) || !client1 || !vehicle) {
+      return NextResponse.json({ ok: false, error: "Dati del profilo incompleti o non validi." }, { status: 400 });
+    }
+    if (client2Id && !validId(client2Id)) {
+      return NextResponse.json({ ok: false, error: "ID Cliente 2 non valido." }, { status: 400 });
+    }
+
+    const db = supabase();
+    const clientFields = (value: Record<string, unknown>) => ({
+      nome: [clean(value.nome, 120), clean(value.cognome, 120)].filter(Boolean).join(" "),
+      indirizzo: clean(value.indirizzo, 300),
+      telefono: clean(value.telefono, 60),
+      data_nascita: clean(value.nascita, 30) || null,
+      codice_fiscale: clean(value.cf, 32).toUpperCase(),
+    });
+
+    const { data: existingVehicle, error: vehicleCheckError } = await db.from("vehicles").select("id").eq("id", vehicleId).maybeSingle();
+    if (vehicleCheckError) throw vehicleCheckError;
+    if (!existingVehicle) return NextResponse.json({ ok: false, error: "Veicolo non trovato." }, { status: 404 });
+
+    const { data: existingClient, error: clientCheckError } = await db.from("clients").select("id").eq("id", client1Id).maybeSingle();
+    if (clientCheckError) throw clientCheckError;
+    if (!existingClient) return NextResponse.json({ ok: false, error: "Cliente 1 non trovato." }, { status: 404 });
+
+    const { error: client1Error } = await db.from("clients").update(clientFields(client1)).eq("id", client1Id);
+    if (client1Error) throw client1Error;
+
+    if (client2 && client2Id) {
+      const { data: existingClient2, error: client2CheckError } = await db.from("clients").select("id").eq("id", client2Id).maybeSingle();
+      if (client2CheckError) throw client2CheckError;
+      if (!existingClient2) return NextResponse.json({ ok: false, error: "Cliente 2 non trovato." }, { status: 404 });
+      const { error: client2Error } = await db.from("clients").update(clientFields(client2)).eq("id", client2Id);
+      if (client2Error) throw client2Error;
+    }
+
+    const { error: updateVehicleError } = await db.from("vehicles").update({
+      veicolo: clean(vehicle.veicolo, 160),
+      motore: clean(vehicle.motore, 160),
+      targa: clean(vehicle.targa, 24).toUpperCase(),
+      immatricolazione: clean(vehicle.immatricolazione, 30) || null,
+      revisione: clean(vehicle.revisione, 30) || null,
+    }).eq("id", vehicleId);
+    if (updateVehicleError) throw updateVehicleError;
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "Configurazione server Supabase mancante.") {
+      return NextResponse.json({ ok: false, error: message }, { status: 503 });
+    }
+    console.error("Errore PATCH /api/vehicles:", error);
+    return NextResponse.json({ ok: false, error: "Errore salvataggio profilo veicolo." }, { status: 500 });
+  }
+}
