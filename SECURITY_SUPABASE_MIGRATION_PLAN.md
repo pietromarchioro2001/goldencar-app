@@ -21,6 +21,10 @@ The browser-side Supabase client is initialized in `lib/supabase.ts`. The code i
 
 This is a minimum inventory from the currently reviewed pages; before final RLS changes, search the full repository for `supabase.from(`, `supabase.rpc(`, direct `fetch` calls to Supabase REST, and any SQL RPC usage. Table names and operations may change as the UI evolves.
 
+## Progress made in this branch
+
+The Agenda screen now uses the device-session-protected `/api/appointments` endpoint for list/create/update/delete operations. The route requires the server-only `SUPABASE_SERVICE_ROLE_KEY`, validates IDs/descriptions/dates, and fails closed with HTTP 503 if the server configuration is missing. This is the first migrated module, not a complete database migration. Verify it on Preview before continuing.
+
 ## Recommended architecture
 
 Use a server-only Supabase client with a server-only service-role secret, and expose narrowly scoped application APIs. Do not create a generic endpoint that accepts arbitrary table names, column lists, filters, or operations from the browser: that would turn the device cookie into a broad database proxy.
@@ -36,8 +40,8 @@ Each server handler must:
 ## Safe migration order
 
 1. Complete the operation inventory for every page and helper.
-2. Add the server-only database client, requiring `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_` for the service-role key).
-3. Implement domain-specific endpoints, starting with appointments and vehicle/client read/update flows; migrate all reads and writes that those pages use.
+2. The Agenda endpoint now uses a server-only database client requiring `SUPABASE_URL` (or the existing public URL variable) and `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_` for the service-role key). Configure the key on Preview and test Agenda before expanding the pattern.
+3. Implement domain-specific endpoints, starting with appointments (implemented; Preview verification pending) and vehicle/client read/update flows; migrate all reads and writes that those pages use.
 4. Move remaining job, order, supplier, payment, revision, and media metadata operations to the protected API.
 5. Run the Vercel Preview and verify vehicle lookup/edit, job create/edit/close, job media upload/download/delete, appointments, orders/suppliers, revisions, payments, OCR, and R2.
 6. Inspect the live Supabase grants and RLS policies and export them before making changes. Policy names and current grants must be read from the actual project, not guessed.
