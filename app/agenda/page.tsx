@@ -78,25 +78,6 @@ export default function Agenda() {
   }, []);
 
   async function loadAppointments() {
-    const current = new Date();
-    const cutoff = new Date(
-      current.getFullYear(),
-      current.getMonth(),
-      current.getDate() - 7,
-      0,
-      0,
-      0
-    );
-
-    const cleanup = await supabase
-      .from("appointments")
-      .delete()
-      .lt("data_ora", cutoff.toISOString());
-
-    if (cleanup.error) {
-      console.error("Errore pulizia appuntamenti:", cleanup.error);
-    }
-
     const { data, error } = await supabase
       .from("appointments")
       .select("id, vehicle_id, titolo, descrizione, data_ora")
