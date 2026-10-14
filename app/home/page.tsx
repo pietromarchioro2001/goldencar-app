@@ -1255,6 +1255,74 @@ export default function Home() {
           </div>
       </main>
       <BottomBar />
+      {(checkInOpen || checkInError) && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Check-in e lettura targa"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10000,
+            background: "#050B16",
+            display: "flex",
+            flexDirection: "column",
+            color: "#FFFFFF",
+            padding: "env(safe-area-inset-top) 0 env(safe-area-inset-bottom)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", flexShrink: 0 }}>
+            <div>
+              <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: ".5px" }}>CHECK-IN</div>
+              <div style={{ marginTop: 4, color: "#CBD5E1", fontSize: 13 }}>Inquadra la targa dentro il riquadro</div>
+            </div>
+            <button type="button" onClick={stopCheckInCamera} aria-label="Chiudi fotocamera" style={{ width: 42, height: 42, border: "1px solid #475569", borderRadius: "50%", background: "#172033", color: "#FFFFFF", fontSize: 25, cursor: "pointer" }}>×</button>
+          </div>
+
+          <div style={{ position: "relative", flex: 1, minHeight: 0, overflow: "hidden", background: "#111827", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {checkInOpen && (
+              <video
+                ref={checkInVideoRef}
+                autoPlay
+                muted
+                playsInline
+                onLoadedMetadata={(event) => { void event.currentTarget.play().catch((error) => { console.error("CHECK-IN video playback error:", error); setCheckInError("La fotocamera è attiva ma l'anteprima non parte. Chiudi e riprova."); }); }}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
+            )}
+            {checkInOpen && (
+              <div style={{ position: "absolute", inset: 0, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.34)", clipPath: "polygon(0 0,100% 0,100% 38%,91% 38%,91% 62%,100% 62%,100% 100%,0 100%,0 62%,9% 62%,9% 38%,0 38%)" }} />
+                <div style={{ position: "relative", width: "82%", height: "24%", maxHeight: 150, minHeight: 78, border: "3px solid #D4AF37", borderRadius: 14, boxShadow: "0 0 0 9999px rgba(0,0,0,.22)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ position: "absolute", top: -12, left: 16, right: 16, height: 3, background: "#D4AF37", borderRadius: 3 }} />
+                  <span style={{ padding: "6px 10px", borderRadius: 8, background: "rgba(5,11,22,.78)", color: "#FFFFFF", fontSize: 12, fontWeight: 800, letterSpacing: 1 }}>TARGA</span>
+                </div>
+              </div>
+            )}
+            {!checkInOpen && checkInError && (
+              <div style={{ padding: 28, textAlign: "center", maxWidth: 420 }}>
+                <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>Fotocamera non disponibile</div>
+                <div style={{ color: "#FECACA", fontSize: 14, lineHeight: 1.5 }}>{checkInError}</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: "18px 20px 24px", flexShrink: 0, background: "#050B16" }}>
+            {checkInError && checkInOpen && (
+              <div role="alert" style={{ marginBottom: 12, borderRadius: 12, background: "#7F1D1D", padding: 11, color: "#FEE2E2", fontSize: 13 }}>{checkInError}</div>
+            )}
+            <div style={{ color: "#CBD5E1", fontSize: 13, textAlign: "center", marginBottom: 14 }}>
+              {checkInBusy ? "Lettura targa in corso…" : "Centra la targa e premi SCANSIONA"}
+            </div>
+            <button type="button" onClick={() => { void captureCheckInPlate(); }} disabled={!checkInOpen || checkInBusy} style={{ width: "100%", minHeight: 54, border: "none", borderRadius: 16, background: checkInBusy ? "#64748B" : "#D4AF37", color: "#08142F", fontSize: 15, fontWeight: 900, letterSpacing: ".6px", cursor: checkInBusy ? "wait" : "pointer", opacity: checkInOpen ? 1 : .6 }}>
+              {checkInBusy ? "LETTURA IN CORSO…" : "SCANSIONA TARGA"}
+            </button>
+            {checkInError && (
+              <button type="button" onClick={() => { setCheckInError(""); if (!checkInOpen) void openCheckInCamera(); }} style={{ width: "100%", marginTop: 10, minHeight: 44, border: "1px solid #475569", borderRadius: 14, background: "transparent", color: "#FFFFFF", fontWeight: 700, cursor: "pointer" }}>RIPROVA</button>
+            )}
+          </div>
+        </div>
+      )}
       {/* =========================
           MODAL LAVORI
       ========================= */}
