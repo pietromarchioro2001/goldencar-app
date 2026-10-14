@@ -1030,10 +1030,15 @@ export default function Veicolo() {
         if (!response.ok || !data?.ok || !data?.uploadUrl) throw new Error(data?.error || 'Impossibile preparare il caricamento.');
         const upload = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
         if (!upload.ok) throw new Error('Caricamento di ' + file.name + ' fallito.');
-        const { error } = await supabase.from('vehicle_media').insert({ id, vehicle_id: profiloVeicolo.id, name: file.name, mime_type: file.type || 'application/octet-stream', size: file.size, r2_key: key });
-        if (error) {
+        const metadataResponse = await fetch('/api/vehicles/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, vehicleId: profiloVeicolo.id, name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, key }),
+        });
+        const metadataResult = await metadataResponse.json();
+        if (!metadataResponse.ok || !metadataResult?.ok) {
           await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) }).catch(() => undefined);
-          throw error;
+          throw new Error(metadataResult?.error || 'Impossibile salvare i dati del file.');
         }
       }
       await apriMedia();
@@ -1050,9 +1055,11 @@ export default function Veicolo() {
     setMediaCaricamento(true);
     setMediaVisualizzato(null);
     try {
-      const { data: vehicleMedia, error: vehicleError } = await supabase.from('vehicle_media').select('id, name, mime_type, size, r2_key, created_at').eq('vehicle_id', profiloVeicolo?.id || '').order('created_at', { ascending: false });
-      if (vehicleError) throw vehicleError;
-      const vehicleItems = await Promise.all((vehicleMedia ?? []).map(async (item: any) => {
+      const response = await fetch('/api/vehicles/media?vehicleId=' + encodeURIComponent(profiloVeicolo?.id || ''), { cache: 'no-store' });
+      const mediaResult = await response.json();
+      if (!response.ok || !mediaResult?.ok) throw new Error(mediaResult?.error || 'Errore caricamento documenti.');
+      const vehicleMedia = Array.isArray(mediaResult.media) ? mediaResult.media : [];
+      const vehicleItems = await Promise.all(vehicleMedia.map(async (item: any) => {
         let url: string | undefined;
         try {
           const response = await fetch('/api/r2/file?key=' + encodeURIComponent(String(item.r2_key)));
@@ -1081,8 +1088,13 @@ export default function Veicolo() {
         if (item.r2Key) {
           await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: item.r2Key }) });
         }
-        const { error } = await supabase.from('vehicle_media').delete().eq('id', item.id);
-        if (error) throw error;
+        const response = await fetch('/api/vehicles/media', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: item.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || 'Impossibile eliminare il documento.');
       } else {
         const key = 'goldencar_job_' + item.jobNumber;
         const raw = localStorage.getItem(key);
