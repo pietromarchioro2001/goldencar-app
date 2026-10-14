@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 
 
 
@@ -198,31 +197,15 @@ export default function OrdiniPage() {
 
   const carica = async () => {
     try {
-      const [
-        { data: orderRows, error: ordersError },
-        { data: supplierRows, error: suppliersError },
-        { data: vehicles, error: vehiclesError },
-      ] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }),
-        supabase.from("suppliers").select("*").order("nome", { ascending: true }),
-        supabase.from("vehicles").select("id, client_id, veicolo, motore, targa, immatricolazione, revisione"),
-      ]);
+      const response = await fetch("/api/orders", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Caricamento ordini fallito.");
 
-      if (ordersError) throw new Error("Caricamento ordini fallito: " + ordersError.message);
-      if (suppliersError) throw new Error("Caricamento fornitori fallito: " + suppliersError.message);
-      if (vehiclesError) throw new Error("Caricamento veicoli fallito: " + vehiclesError.message);
-
-      const { data: clients, error: clientsError } = await supabase
-        .from("clients")
-        .select("*");
-
-      if (clientsError) console.error("Errore Supabase clients:", clientsError);
-
-      const { data: relations, error: relationsError } = await supabase
-        .from("vehicle_clients")
-        .select("vehicle_id, client_id, ruolo");
-
-      if (relationsError) console.error("Errore Supabase vehicle_clients:", relationsError);
+      const orderRows = Array.isArray(result.orders) ? result.orders : [];
+      const supplierRows = Array.isArray(result.suppliers) ? result.suppliers : [];
+      const vehicles = Array.isArray(result.vehicles) ? result.vehicles : [];
+      const clients = Array.isArray(result.clients) ? result.clients : [];
+      const relations = Array.isArray(result.relations) ? result.relations : [];
 
       const clientsById = new Map(
         (clients ?? []).map((client: any) => [String(client.id), client])
