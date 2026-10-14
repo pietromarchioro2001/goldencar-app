@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -94,6 +95,9 @@ async function analyzeImage(file: File, apiKey: string) {
 }
 
 export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
 
