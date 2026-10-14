@@ -13,7 +13,7 @@ export default function BottomBar() {
     { href: "/home", label: "Home", icon: "home" },
     { href: "/agenda", label: "Agenda", icon: "calendar" },
     { href: "/veicolo", label: "Veicoli", icon: "car" },
-    { href: "/revisioni", label: "Manutenzione", icon: "wrench" },
+    { href: "/revisioni", label: "Attività", icon: "wrench" },
     { href: "/vendita", label: "Vendita", icon: "tag" },
   ];
 
