@@ -5,13 +5,6 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function db() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error("Configurazione server Supabase mancante.");
-  return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-}
-
 export async function GET(request: Request) {
   if (!(await isDeviceRequestAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
