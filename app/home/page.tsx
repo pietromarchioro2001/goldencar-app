@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
@@ -823,15 +822,14 @@ export default function Home() {
     if (!ok) return;
     try {
       for (const lavoro of targetJobs) {
-        const { error } = await supabase.from("jobs").update({
-          payment_status: "PAGATO",
-          payment_paid_amount: parseImporto(lavoro.paymentAmount),
-        }).eq("id", String(lavoro.jobNumber));
-        if (error) throw error;
+        const response = await fetch("/api/jobs/payment", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: String(lavoro.jobNumber), paymentStatus: "PAGATO", paymentPaidAmount: parseImporto(lavoro.paymentAmount) }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore aggiornamento pagamento scheda.");
       }
       for (const pagamento of targetManuali) {
-        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
-        if (error) throw error;
+        const response = await fetch("/api/payments", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pagamento.id }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore eliminazione pagamento.");
       }
       await caricaDati();
       setDettaglioSollecito(null);
@@ -854,11 +852,9 @@ export default function Home() {
         const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("jobs").update({
-          payment_status: "PAGATO",
-          payment_paid_amount: parseImporto(pagamento.totale ?? pagamento.importo),
-        }).eq("id", String(pagamento.jobNumber));
-        if (error) throw error;
+        const response = await fetch("/api/jobs/payment", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: String(pagamento.jobNumber), paymentStatus: "PAGATO", paymentPaidAmount: parseImporto(pagamento.totale ?? pagamento.importo) }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore aggiornamento pagamento scheda.");
       }
       await caricaDati();
       setDettaglioSollecito(null);
@@ -975,16 +971,9 @@ export default function Home() {
     if (importo <= 0) { alert("Inserisci un importo valido."); return; }
     if (!descrizione) { alert("Inserisci la descrizione."); return; }
     try {
-      const { error } = await supabase.from("payments").insert({
-        id: crypto.randomUUID(),
-        client_id: clienteSelezionatoPagamento?.clientId || null,
-        nome_cliente: nome,
-        description: descrizione,
-        amount: importo,
-        paid_amount: 0,
-        status: "DA_PAGARE",
-      });
-      if (error) throw error;
+      const response = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), client_id: clienteSelezionatoPagamento?.clientId || null, nome_cliente: nome, description: descrizione, amount: importo }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio sollecito.");
       setNuovoPagamentoAperto(false);
       setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
@@ -1050,11 +1039,9 @@ export default function Home() {
   const salvaAgendaVoice = async () => {
     if (!agendaDraft.date || !agendaDraft.time || !agendaDraft.description) return;
     const local = new Date(`${agendaDraft.date}T${agendaDraft.time}:00`);
-    const { error } = await supabase.from("appointments").insert({
-      id: crypto.randomUUID(), titolo: agendaDraft.description, descrizione: agendaDraft.description,
-      data_ora: local.toISOString(),
-    });
-    if (error) { alert("Non è stato possibile salvare l'appuntamento: " + error.message); return; }
+    const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), description: agendaDraft.description, dateTime: local.toISOString() }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Non è stato possibile salvare l'appuntamento: " + (result?.error || "Errore sconosciuto.")); return; }
     setAgendaVoiceOpen(false); setAgendaVoiceText(""); await caricaDati();
   };
 
@@ -1063,12 +1050,9 @@ export default function Home() {
     const supplier = fornitori.find(s => s.id === ordineFornitoreId);
     const desc = ordineDescrizione.trim();
     if (!vehicle || !supplier || !desc) { alert("Seleziona veicolo, fornitore e inserisci cosa ordinare."); return; }
-    const { error } = await supabase.from("orders").insert({
-      id: crypto.randomUUID(), numero: String(Date.now()), vehicle_id: vehicle.id, supplier_id: supplier.id,
-      cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{name: desc, quantity:"1"}],
-      stato: "DA_INVIARE",
-    });
-    if (error) { alert("Errore salvataggio ordine: " + error.message); return; }
+    const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), numero: String(Date.now()), vehicleId: vehicle.id, supplierId: supplier.id, cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{ name: desc, quantity: "1" }] }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Errore salvataggio ordine: " + (result?.error || "Errore sconosciuto.")); return; }
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
   };
   const inviaOrdineHome = async (ordine: Ordine) => {
@@ -1077,8 +1061,9 @@ export default function Home() {
     const numero = supplier.whatsapp.replace(/\D/g,"");
     const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const { error } = await supabase.from("orders").update({stato:"INVIATO"}).eq("id",ordine.id);
-    if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
+    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordine.id, stato: "INVIATO" }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: " + (result?.error || "Errore sconosciuto.")); return; }
     await caricaDati();
   };
   const salvaFornitoreHome = async () => {
@@ -1087,12 +1072,14 @@ export default function Home() {
     if (!nome || !whatsapp) { alert("Inserisci nome e numero WhatsApp."); return; }
     try {
       if (fornitoreEditId) {
-        const { error } = await supabase.from("suppliers").update({ nome, whatsapp }).eq("id", fornitoreEditId);
-        if (error) throw error;
+        const response = await fetch("/api/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: fornitoreEditId, nome, whatsapp }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio fornitore.");
       } else {
         const id = `fornitore-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-        const { error } = await supabase.from("suppliers").insert({ id, nome, whatsapp });
-        if (error) throw error;
+        const response = await fetch("/api/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, nome, whatsapp }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio fornitore.");
       }
       setRubricaFornitoreAperta(false);
       setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp(""); setNuovoFornitoreMode(false);
@@ -1107,8 +1094,9 @@ export default function Home() {
     const supplier = fornitori.find(s=>s.id===ordineFornitoreId);
     const desc = ordineDescrizione.trim();
     if(!desc || !supplier){ alert("Inserisci descrizione e fornitore."); return; }
-    const {error}=await supabase.from("orders").update({prodotti:[{name:desc,quantity:"1"}],supplier_id:supplier.id}).eq("id",ordineAperto.id);
-    if(error){alert("Errore aggiornamento ordine: "+error.message);return;}
+    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordineAperto.id, description: desc, supplierId: supplier.id }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Errore aggiornamento ordine: " + (result?.error || "Errore sconosciuto.")); return; }
     setOrdineAperto(null); await caricaDati();
   };
 
