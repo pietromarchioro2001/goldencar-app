@@ -703,7 +703,7 @@ export default function Home() {
         revisione.revisione;
       if (!raw) return false;
       const dataString = String(raw).slice(0, 10);
-      const match = dataString.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+      const match = dataString.match(/^(\d{4})-(\d{2})-(\d{2})$/);
       if (!match) return false;
       const data = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
       if (Number.isNaN(data.getTime())) return false;
@@ -765,7 +765,7 @@ export default function Home() {
       revisione.cliente ||
       "cliente";
     const rawDate = String(revisione.scadenza || revisione.revisione || "").slice(0, 10);
-    const matchDate = rawDate.match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+    const matchDate = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     const dateLabel = matchDate
       ? `${matchDate[3]}/${matchDate[2]}/${matchDate[1]}`
       : rawDate;
