@@ -1264,7 +1264,7 @@ export default function Home() {
           onClose={() => setModal(null)}
           topRight={
             <button type="button" onClick={() => { setModal(null); router.push("/revisioni?tab=lavori"); }} style={modalLinkStyle}>
-              LISTA LAVORI
+              LAVORI
             </button>
           }
         >
