@@ -386,7 +386,7 @@ export default function RevisioniPage() {
             margin: "3px 0 0",
           }}
         >
-          MANUTENZIONE
+          ATTIVITÀ
         </h1>
       </div>
   
