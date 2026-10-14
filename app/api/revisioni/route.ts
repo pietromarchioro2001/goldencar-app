@@ -12,6 +12,16 @@ function db() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+export async function PATCH(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) return NextResponse.json({ok:false,error:"Accesso non autorizzato."},{status:401});
+  const body=await request.json().catch(()=>null);
+  const id=body&&typeof body==="object"&&!Array.isArray(body)?body.id:null;
+  const date=body&&typeof body==="object"&&!Array.isArray(body)?body.revisione:null;
+  if(typeof id!=="string"||!id||id.length>128||!/^[a-zA-Z0-9_-]+$/.test(id)||typeof date!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||Number.isNaN(Date.parse(date+"T00:00:00Z"))) return NextResponse.json({ok:false,error:"Veicolo o data revisione non validi."},{status:400});
+  try { const {data,error}=await db().from("vehicles").update({revisione:date}).eq("id",id).select("id,revisione").maybeSingle(); if(error)throw error; if(!data)return NextResponse.json({ok:false,error:"Veicolo non trovato."},{status:404}); return NextResponse.json({ok:true,vehicle:data}); }
+  catch(error){const config=error instanceof Error&&error.message==="Configurazione server Supabase mancante.";if(!config)console.error("PATCH /api/revisioni:",error);return NextResponse.json({ok:false,error:config?"Configurazione server Supabase mancante.":"Errore aggiornamento revisione."},{status:config?503:500});}
+}
+
 export async function GET(request: Request) {
   if (!(await isDeviceRequestAuthorized(request))) {
     return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
