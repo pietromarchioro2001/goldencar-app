@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -56,7 +57,10 @@ function mapVehicle(vehicle: RawVehicle, clientsById: Map<string, RawClient>) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const db = supabase();
 
