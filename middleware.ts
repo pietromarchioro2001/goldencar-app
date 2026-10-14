@@ -31,13 +31,16 @@ async function validSession(token: string | undefined, secret: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  // Keep framework assets, PWA install files, and static public files accessible.
-  if (pathname.startsWith("/_next/") || pathname === "/favicon.ico" || pathname === "/logo.png" || pathname === "/manifest.json" || pathname === "/sw.js" || pathname.startsWith("/icons/") || /\.[a-zA-Z0-9]{2,8}$/.test(pathname)) return NextResponse.next();
   if (pathname === "/accesso" || pathname === "/api/auth/device") return NextResponse.next();
 
   const secret = process.env.GOLDENCAR_SESSION_SECRET;
   if (secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret)) return NextResponse.next();
+
+  // API endpoints are always checked, even if a path happens to end with a file extension.
   if (pathname.startsWith("/api/")) return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+
+  // Public framework and PWA assets must load before the access screen can render.
+  if (pathname.startsWith("/_next/") || pathname === "/favicon.ico" || pathname === "/logo.png" || pathname === "/manifest.json" || pathname === "/sw.js" || pathname.startsWith("/icons/") || /\.[a-zA-Z0-9]{2,8}$/.test(pathname)) return NextResponse.next();
 
   const url = request.nextUrl.clone();
   url.pathname = "/accesso";
