@@ -23,7 +23,6 @@ import {
 import { useRouter } from "next/navigation";
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 import { pdf } from "@react-pdf/renderer";
 import SchedaLavoroPDF, {
   type SchedaLavoroPDFData,
@@ -556,9 +555,10 @@ export default function SchedaLavoroPage() {
         const existingJobId = sessionStorage.getItem("goldencar_apri_scheda");
 
         if (existingJobId) {
-          const { data, error } = await supabase.from("jobs").select("*").eq("id", existingJobId).maybeSingle();
-          if (!error && data) {
-            const normalized = rowToJobDraft(data);
+          const response = await fetch("/api/jobs?id=" + encodeURIComponent(existingJobId), { cache: "no-store" });
+          const result = await response.json();
+          if (response.ok && result?.ok && result?.job) {
+            const normalized = rowToJobDraft(result.job);
             setDraft(normalized); setSaved(true);
             loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
               const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
