@@ -23,7 +23,7 @@ This is a minimum inventory from the currently reviewed pages; before final RLS 
 
 ## Progress made in this branch
 
-The Agenda screen now uses the device-session-protected `/api/appointments` endpoint for list/create/update/delete operations. The route requires the server-only `SUPABASE_SERVICE_ROLE_KEY`, validates IDs/descriptions/dates, and fails closed with HTTP 503 if the server configuration is missing. This is the first migrated module, not a complete database migration. Verify it on Preview before continuing.
+The Agenda screen now uses the device-session-protected `/api/appointments` endpoint for list/create/update/delete operations. The route requires the server-only `SUPABASE_SERVICE_ROLE_KEY`, validates IDs/descriptions/dates, and fails closed with HTTP 503 if the server configuration is missing. The Vehicle screen's vehicle/client/relation reads now use the protected `/api/vehicles` route, which also requires the service-role key, and its job history reads use `/api/vehicles/jobs`. These are partial migrations: vehicle/client writes and vehicle media metadata operations still use the browser Supabase client. Verify the migrated reads on Preview before continuing.
 
 ## Recommended architecture
 
@@ -40,8 +40,8 @@ Each server handler must:
 ## Safe migration order
 
 1. Complete the operation inventory for every page and helper.
-2. The Agenda endpoint now uses a server-only database client requiring `SUPABASE_URL` (or the existing public URL variable) and `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_` for the service-role key). Configure the key on Preview and test Agenda before expanding the pattern.
-3. Implement domain-specific endpoints, starting with appointments (implemented; Preview verification pending) and vehicle/client read/update flows; migrate all reads and writes that those pages use.
+2. The Agenda and Vehicle read endpoints now use server-only database clients requiring `SUPABASE_URL` (or the existing public URL variable) and `SUPABASE_SERVICE_ROLE_KEY` (never `NEXT_PUBLIC_` for the service-role key). Configure the key on Preview and test Agenda and vehicle lookup/history before expanding the pattern.
+3. Implement domain-specific endpoints: appointments (implemented; Preview verification pending), vehicle/client/relation reads (implemented; Preview verification pending), and vehicle job-history reads (implemented; Preview verification pending). Continue with vehicle/client writes, vehicle media metadata, then jobs/orders/suppliers/payments.
 4. Move remaining job, order, supplier, payment, revision, and media metadata operations to the protected API.
 5. Run the Vercel Preview and verify vehicle lookup/edit, job create/edit/close, job media upload/download/delete, appointments, orders/suppliers, revisions, payments, OCR, and R2.
 6. Inspect the live Supabase grants and RLS policies and export them before making changes. Policy names and current grants must be read from the actual project, not guessed.
