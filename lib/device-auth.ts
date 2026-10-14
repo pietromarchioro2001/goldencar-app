@@ -10,7 +10,12 @@ export async function isDeviceRequestAuthorized(request: Request): Promise<boole
 
   const cookieHeader = request.headers.get("cookie") || "";
   const match = cookieHeader.match(/(?:^|;\s*)goldencar_device=([^;]*)/);
-  const token = match?.[1] ? decodeURIComponent(match[1]) : "";
+  let token = "";
+  try {
+    token = match?.[1] ? decodeURIComponent(match[1]) : "";
+  } catch {
+    return false;
+  }
   const separator = token.indexOf(".");
   if (separator <= 0) return false;
 
