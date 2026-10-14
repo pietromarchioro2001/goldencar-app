@@ -1,11 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function AccessoPage() {
   const router = useRouter();
-  const params = useSearchParams();
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +17,7 @@ export default function AccessoPage() {
       const response = await fetch("/api/auth/device", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }), cache: "no-store" });
       const result = await response.json();
       if (!response.ok || !result.ok) { setError(result.error || "Accesso non riuscito."); return; }
-      const next = params.get("next");
+      const next = new URLSearchParams(window.location.search).get("next");
       router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/home");
       router.refresh();
     } catch { setError("Connessione non disponibile. Riprova."); }
