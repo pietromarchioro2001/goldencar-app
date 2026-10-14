@@ -455,24 +455,18 @@ export default function OrdiniPage() {
         : [{ name: descrizione.trim(), quantity: "1", details: "" }];
     const id = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 
-    const { data, error } = await supabase.from("orders").insert({
-      id,
-      job_id: context?.jobId || null,
-      vehicle_id: selectedVehicleId,
-      supplier_id: supplier.id,
-      cliente,
-      telefono,
-      veicolo,
-      targa,
-      prodotti,
-      stato: "DA_INVIARE",
-    }).select("*").single();
-
-    if (error) {
-      console.error("Errore creazione ordine:", error);
-      alert("Non è stato possibile creare l'ordine: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier.id, cliente, telefono, veicolo, targa, description: descrizione.trim() }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok || !result?.order) {
+      console.error("Errore creazione ordine:", result);
+      alert("Non è stato possibile creare l'ordine: " + (result?.error || "Errore sconosciuto."));
       return;
     }
+    const data = result.order;
 
     const ordine: Ordine = {
       id: String(data.id),
@@ -512,10 +506,15 @@ export default function OrdiniPage() {
       whatsapp: nuovoWhatsApp.replace(/[^\d+]/g, ""),
     };
 
-    const { error } = await supabase.from("suppliers").insert(fornitore);
-    if (error) {
-      console.error("Errore salvataggio fornitore:", error);
-      alert("Non è stato possibile salvare il fornitore: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fornitore),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore salvataggio fornitore:", result);
+      alert("Non è stato possibile salvare il fornitore: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
@@ -528,13 +527,15 @@ export default function OrdiniPage() {
     const supplier = fornitori.find((item) => item.id === id);
     if (!supplier) return;
 
-    const { error } = await supabase.from("orders").update({
-      supplier_id: supplier.id,
-    }).eq("id", ordineId);
-
-    if (error) {
-      console.error("Errore assegnazione fornitore:", error);
-      alert("Non è stato possibile assegnare il fornitore: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordineId, supplierId: supplier.id }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore assegnazione fornitore:", result);
+      alert("Non è stato possibile assegnare il fornitore: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
@@ -549,14 +550,15 @@ export default function OrdiniPage() {
     const conferma = window.confirm("Eliminare questo ordine?\n\nL'ordine verrà rimosso definitivamente dalla lista.");
     if (!conferma) return;
 
-    const { error } = await supabase
-      .from("orders")
-      .delete()
-      .eq("id", ordineId);
-
-    if (error) {
-      console.error("Errore eliminazione ordine:", error);
-      alert("Non è stato possibile eliminare l'ordine: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordineId }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore eliminazione ordine:", result);
+      alert("Non è stato possibile eliminare l'ordine: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
