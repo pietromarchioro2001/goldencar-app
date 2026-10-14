@@ -1160,6 +1160,7 @@ export default function Home() {
             onClick={() =>
               setModal("lavori")
             }
+            onTitleClick={() => router.push("/revisioni?tab=lavori")}
           />
           <StatCard
             title="REVISIONI"
@@ -1169,6 +1170,7 @@ export default function Home() {
             onClick={() =>
               setModal("revisioni")
             }
+            onTitleClick={() => router.push("/revisioni?tab=revisioni")}
           />
           <StatCard
             title="AGENDA"
@@ -1263,7 +1265,7 @@ export default function Home() {
           title="LAVORI ATTIVI"
           onClose={() => setModal(null)}
           topRight={
-            <button type="button" onClick={() => { setModal(null); router.push("/lavori"); }} style={modalLinkStyle}>
+            <button type="button" onClick={() => { setModal(null); router.push("/revisioni?tab=lavori"); }} style={modalLinkStyle}>
               LISTA LAVORI
             </button>
           }
@@ -1287,7 +1289,7 @@ export default function Home() {
           title="REVISIONI"
           onClose={() => setModal(null)}
           topRight={
-            <button type="button" onClick={() => { setModal(null); router.push("/revisioni"); }} style={modalLinkStyle}>
+            <button type="button" onClick={() => { setModal(null); router.push("/revisioni?tab=revisioni"); }} style={modalLinkStyle}>
               REVISIONI
             </button>
           }
@@ -1772,73 +1774,22 @@ function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
 /* =====================================================
    STAT CARD
 \===================================================== */
-function StatCard({
-  title,
-  value,
-  color,
-  icon,
-  onClick,
-}: {
-  title: string;
-  value: string | number;
-  color: string;
-  icon: React.ReactNode;
-  onClick: () => void;
+function StatCard({ title, value, color, icon, onClick, onTitleClick }: {
+  title: string; value: string | number; color: string; icon: React.ReactNode;
+  onClick: () => void; onTitleClick?: () => void;
 }) {
   return (
-    <div
-      style={{
-        position: "relative",
-      }}
-    >
-      <button
-        type="button"
-        onClick={onClick}
-        style={{
-          width: "100%",
-          height: 140,
-          border: "none",
-          borderRadius: 24,
-          background: "#FFFFFF",
-          padding: 14,
-          paddingTop: 16,
-          textAlign: "left",
-          boxShadow:
-            "0 4px 14px rgba(15,23,42,.08)",
-          display: "flex",
-          flexDirection:
-            "column",
-          justifyContent:
-            "space-between",
-          cursor: "pointer",
-        }}
-      >
+    <div style={{ position: "relative" }}>
+      <button type="button" onClick={onClick} style={{ width: "100%", height: 140, border: "none", borderRadius: 24, background: "#FFFFFF", padding: 14, paddingTop: 16, textAlign: "left", boxShadow: "0 4px 14px rgba(15,23,42,.08)", display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "pointer" }}>
         {icon}
         <div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "#6B7280",
-              marginBottom: 4,
-              fontWeight: 700,
-            }}
-          >
+          <div role={onTitleClick ? "link" : undefined} tabIndex={onTitleClick ? 0 : undefined}
+            onClick={onTitleClick ? (event) => { event.stopPropagation(); onTitleClick(); } : undefined}
+            onKeyDown={onTitleClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onTitleClick(); } } : undefined}
+            style={{ fontSize: 13, color: "#6B7280", marginBottom: 4, fontWeight: 700, cursor: onTitleClick ? "pointer" : "inherit", textDecoration: onTitleClick ? "underline" : "none", textUnderlineOffset: 3 }}>
             {title}
           </div>
-          {value !== "web" ? (
-            <div
-              style={{
-                fontSize: 40,
-                fontWeight: 900,
-                lineHeight: 1,
-                color,
-              }}
-            >
-              {value}
-            </div>
-          ) : (
-            <GlobeIcon />
-          )}
+          {value !== "web" ? <div style={{ fontSize: 40, fontWeight: 900, lineHeight: 1, color }}>{value}</div> : <GlobeIcon /> }
         </div>
       </button>
     </div>
