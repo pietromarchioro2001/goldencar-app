@@ -67,9 +67,10 @@ export async function POST(request: Request) {
   const id = textField(body.id, 128), vehicleId = textField(body.vehicleId, 128);
   const supplierId = textField(body.supplierId, 128), jobId = textField(body.jobId, 128);
   const description = textField(body.description, 1000);
+  const products = Array.isArray(body.prodotti) ? body.prodotti.filter((item: unknown) => isRecord(item)).slice(0, 100).map((item: Record<string, unknown>) => ({ name: textField(item.name, 300), quantity: textField(item.quantity, 30) || "1", details: textField(item.details, 500) })) : (description ? [{ name: description, quantity: "1" }] : []);
   const clientName = textField(body.cliente, 200), phone = textField(body.telefono, 60);
   const vehicleName = textField(body.veicolo, 160), plate = textField(body.targa, 24).toUpperCase();
-  if (!validId(id) || !validId(vehicleId) || !validId(supplierId) || (jobId && !validId(jobId)) || !description) {
+  if (!validId(id) || !validId(vehicleId) || !validId(supplierId) || (jobId && !validId(jobId)) || products.length === 0) {
     return NextResponse.json({ ok: false, error: "Dati dell'ordine incompleti o non validi." }, { status: 400 });
   }
   const {client,response}=await getDbOrResponse(); if(response) return response;
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     if(jobId){const job=await client!.from("jobs").select("id").eq("id",jobId).maybeSingle();if(job.error)throw job.error;if(!job.data)return NextResponse.json({ok:false,error:"Scheda lavoro non trovata."},{status:404});}
     const {data,error}=await client!.from("orders").insert({
       id, numero:textField(body.numero,80) || String(Date.now()), job_id:jobId || null, vehicle_id:vehicleId, supplier_id:supplierId,
-      cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti:[{name:description,quantity:"1"}], stato:"DA_INVIARE"
+      cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti, stato:"DA_INVIARE"
     }).select("*").single();
     if(error)throw error;
     return NextResponse.json({ok:true,order:data},{status:201});
