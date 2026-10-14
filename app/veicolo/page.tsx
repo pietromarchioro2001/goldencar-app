@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 
 
 
@@ -475,14 +474,14 @@ export default function Veicolo() {
     if (typeof window === "undefined") return;
     if (!profiloVeicolo?.id) { setLavori([]); return; }
 
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("vehicle_id", profiloVeicolo.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Errore caricamento lavori Supabase:", error);
+    let data: any[] = [];
+    try {
+      const response = await fetch("/api/vehicles/jobs?vehicleId=" + encodeURIComponent(profiloVeicolo.id), { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento lavori.");
+      data = Array.isArray(result.jobs) ? result.jobs : [];
+    } catch (error) {
+      console.error("Errore caricamento lavori:", error);
       setLavori([]);
       return;
     }
@@ -630,50 +629,39 @@ export default function Veicolo() {
 
   const caricaProfiliSupabase = async () => {
     try {
-      // Carichiamo prima i veicoli: la ricerca deve funzionare anche se
-      // una delle tabelle collegate ha un problema di RLS.
-      const { data: vehicles, error: vehiclesError } = await supabase
-        .from("vehicles")
-        .select("id, client_id, veicolo, motore, targa, immatricolazione, revisione");
+      const response = await fetch("/api/vehicles", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento veicoli.");
+      const mapped: ProfiloVeicolo[] = (result.profiles ?? []).map((profile: any) => ({
+        id: String(profile.id),
+        cliente1: normalizzaCliente(profile.cliente1),
+        cliente1Id: profile.cliente1?.id ? String(profile.cliente1.id) : undefined,
+        cliente2: profile.cliente2 ? normalizzaCliente(profile.cliente2) : null,
+        cliente2Id: profile.cliente2?.id ? String(profile.cliente2.id) : undefined,
+        veicolo: {
+          veicolo: String(profile.veicolo?.veicolo ?? ""),
+          motore: String(profile.veicolo?.motore ?? ""),
+          targa: String(profile.veicolo?.targa ?? ""),
+          immatricolazione: String(profile.veicolo?.immatricolazione ?? ""),
+          revisione: String(profile.veicolo?.revisione ?? ""),
+        },
+      }));
 
-      if (vehiclesError) {
-        console.error("Errore Supabase vehicles:", vehiclesError);
-        throw vehiclesError;
-      }
+      console.log("GOLDENCAR API: veicoli caricati:", mapped.length);
+      setProfiliArchivio(mapped);
+      return mapped;
+    } catch (error) {
+      console.error("Errore caricamento veicoli:", error);
+      setProfiliArchivio([]);
+      return [];
+    }
+  };
 
-      // Clienti e relazioni vengono caricati separatamente.
-      // Se una delle due query fallisce, manteniamo comunque i veicoli.
-      const { data: clients, error: clientsError } = await supabase
-        .from("clients")
-        .select("*");
+  useEffect(() => {
+    void caricaProfiliSupabase();
+  }, []);
 
-      if (clientsError) {
-        console.error("Errore Supabase clients:", clientsError);
-      }
-
-      const clientsById = new Map(
-        (clients ?? []).map((client: any) => [String(client.id), client])
-      );
-
-      const { data: relations, error: relationsError } = await supabase
-        .from("vehicle_clients")
-        .select("vehicle_id, client_id, ruolo");
-
-      if (relationsError) {
-        console.error("Errore Supabase vehicle_clients:", relationsError);
-      }
-
-      const relationsByVehicle = new Map<string, any[]>();
-
-      for (const relation of relations ?? []) {
-        const key = String(relation.vehicle_id);
-        const list = relationsByVehicle.get(key) ?? [];
-        list.push(relation);
-        relationsByVehicle.set(key, list);
-      }
-
-      const mapped: ProfiloVeicolo[] = (vehicles ?? []).map((vehicle: any) => {
-        const relationsForVehicle =
+  const trovaProfili = (query: string): ProfiloVeicolo[] => {        const relationsForVehicle =
           relationsByVehicle.get(String(vehicle.id)) ?? [];
 
         const primaryRelation =
