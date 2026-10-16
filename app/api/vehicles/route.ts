@@ -72,11 +72,12 @@ export async function GET(request: Request) {
 
     if (vehiclesResult.error) throw vehiclesResult.error;
     if (clientsResult.error) throw clientsResult.error;
+    if (relationsResult.error) throw relationsResult.error;
 
     const clients = (clientsResult.data ?? []) as RawClient[];
     const clientsById = new Map(clients.map((client) => [text(client.id), client]));
 
-    const relations = relationsResult.error ? [] : relationsResult.data ?? [];
+    const relations = relationsResult.data ?? [];
 
     const profiles = (vehiclesResult.data ?? []).map((vehicle) => {
       const profile = mapVehicle(vehicle as RawVehicle, clientsById);
