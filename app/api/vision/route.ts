@@ -128,6 +128,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const imageFiles = [photo1, photo1Top, photo1TopRight, photo1B, photo2, photo2B]
+      .filter((item): item is File => item instanceof File);
+    const maxImageBytes = 15 * 1024 * 1024;
+    const maxTotalBytes = 30 * 1024 * 1024;
+    if (imageFiles.some((file) => file.size <= 0 || file.size > maxImageBytes) ||
+        imageFiles.reduce((total, file) => total + file.size, 0) > maxTotalBytes) {
+      return NextResponse.json(
+        { error: "Le immagini superano il limite consentito. Usa foto più leggere (massimo 15 MB ciascuna e 30 MB complessivi)." },
+        { status: 413 }
+      );
+    }
+
     const [clientResult, vehicleResult] = await Promise.all([
       analyzeImage(photo1, apiKey),
       analyzeImage(photo2, apiKey),
