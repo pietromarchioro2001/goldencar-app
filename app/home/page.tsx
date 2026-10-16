@@ -379,8 +379,8 @@ export default function Home() {
     const supplierRows = Array.isArray(result.suppliers) ? result.suppliers : [];
     let lavoriPerSolleciti: Lavoro[] = lavori;
     const vehicleIds = jobRows.map((row: any) => row.vehicle_id).filter(Boolean).map(String);
-    const vehiclesForJobs = new Map(vehicleRows.filter((row: any) => vehicleIds.includes(String(row.id))).map((row: any) => [String(row.id), row]));
-    const clientsById = new Map(clientRows.map((row: any) => [String(row.id), row]));
+    const vehiclesForJobs = new Map<string, any>(vehicleRows.filter((row: any) => vehicleIds.includes(String(row.id))).map((row: any) => [String(row.id), row] as [string, any]));
+    const clientsById = new Map<string, any>(clientRows.map((row: any) => [String(row.id), row] as [string, any]));
     setClientiAnagrafica(clientRows.map((row: any) => {
       const nomeCliente = String(row?.nome ?? "").trim();
       if (!nomeCliente) return null;
@@ -410,8 +410,6 @@ export default function Home() {
     });
     setLavori(lavoriCaricati);
     lavoriPerSolleciti = lavoriCaricati;
-    const paymentClientIds = new Set(paymentRows.map((row: any) => String(row.client_id ?? "")));
-    const paymentVehicleIds = new Set(paymentRows.map((row: any) => String(row.vehicle_id ?? "")));
     const manuali: PagamentoManuale[] = paymentRows.map((row: any) => {
       const client = clientsById.get(String(row.client_id ?? ""));
       const vehicle = vehicleRows.find((item: any) => String(item.id) === String(row.vehicle_id ?? ""));
