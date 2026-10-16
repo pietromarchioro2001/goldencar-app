@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { pdf } from "@react-pdf/renderer";
 import SchedaLavoroPDF, { type SchedaLavoroPDFData } from "@/app/pdf/SchedaLavoroPDF";
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 
 type Product = { name: string; details: string; quantity?: string; orderRequested?: boolean };
 type Lavoro = {
