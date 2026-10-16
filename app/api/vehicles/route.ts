@@ -160,8 +160,7 @@ export async function POST(request: Request) {
     const relations=[{vehicle_id:vehicleId,client_id:client1Id,ruolo:"PRINCIPALE"},...(client2Id?[{vehicle_id:vehicleId,client_id:client2Id,ruolo:"SECONDO"}]:[])];
     const {error:relationError}=await client.from("vehicle_clients").insert(relations);
     if(relationError)throw relationError;
-    const {error:documentsError}=await client.from("vehicle_documents").upsert([{id:vehicleId+"-libretto-cliente",vehicle_id:vehicleId,tipo:"LIBRETTO_CLIENTE",nome:"libretto-cliente.jpg",r2_key:clean(documents.cliente,500)},{id:vehicleId+"-libretto-veicolo",vehicle_id:vehicleId,tipo:"LIBRETTO_VEICOLO",nome:"libretto-veicolo.jpg",r2_key:clean(documents.veicolo,500)}],{onConflict:"id"});
-    if(documentsError)throw documentsError;
+    // I riferimenti ai documenti sono mantenuti dal flusso client esistente; non scrivere in una tabella vehicle_documents non presente nelle migrazioni del repository.
     return NextResponse.json({ok:true,vehicleId,client1Id,client2Id});
   }catch(error){const config=error instanceof Error&&error.message==="Configurazione server Supabase mancante.";if(!config)console.error("POST /api/vehicles:",error);return NextResponse.json({ok:false,error:config?"Configurazione server Supabase mancante.":"Errore salvataggio profilo veicolo."},{status:config?503:500});}
 }
