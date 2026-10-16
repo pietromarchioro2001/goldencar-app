@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 
 
 
@@ -198,31 +197,15 @@ export default function OrdiniPage() {
 
   const carica = async () => {
     try {
-      const [
-        { data: orderRows, error: ordersError },
-        { data: supplierRows, error: suppliersError },
-        { data: vehicles, error: vehiclesError },
-      ] = await Promise.all([
-        supabase.from("orders").select("*").order("created_at", { ascending: false }),
-        supabase.from("suppliers").select("*").order("nome", { ascending: true }),
-        supabase.from("vehicles").select("id, client_id, veicolo, motore, targa, immatricolazione, revisione"),
-      ]);
+      const response = await fetch("/api/orders", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Caricamento ordini fallito.");
 
-      if (ordersError) throw new Error("Caricamento ordini fallito: " + ordersError.message);
-      if (suppliersError) throw new Error("Caricamento fornitori fallito: " + suppliersError.message);
-      if (vehiclesError) throw new Error("Caricamento veicoli fallito: " + vehiclesError.message);
-
-      const { data: clients, error: clientsError } = await supabase
-        .from("clients")
-        .select("*");
-
-      if (clientsError) console.error("Errore Supabase clients:", clientsError);
-
-      const { data: relations, error: relationsError } = await supabase
-        .from("vehicle_clients")
-        .select("vehicle_id, client_id, ruolo");
-
-      if (relationsError) console.error("Errore Supabase vehicle_clients:", relationsError);
+      const orderRows = Array.isArray(result.orders) ? result.orders : [];
+      const supplierRows = Array.isArray(result.suppliers) ? result.suppliers : [];
+      const vehicles = Array.isArray(result.vehicles) ? result.vehicles : [];
+      const clients = Array.isArray(result.clients) ? result.clients : [];
+      const relations = Array.isArray(result.relations) ? result.relations : [];
 
       const clientsById = new Map(
         (clients ?? []).map((client: any) => [String(client.id), client])
@@ -272,7 +255,7 @@ export default function OrdiniPage() {
         };
       }));
 
-      const suppliersById = new Map(
+      const suppliersById = new Map<string, any>(
         (supplierRows ?? []).map((supplier: any) => [
           String(supplier.id),
           supplier,
@@ -472,24 +455,18 @@ export default function OrdiniPage() {
         : [{ name: descrizione.trim(), quantity: "1", details: "" }];
     const id = "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 
-    const { data, error } = await supabase.from("orders").insert({
-      id,
-      job_id: context?.jobId || null,
-      vehicle_id: selectedVehicleId,
-      supplier_id: supplier.id,
-      cliente,
-      telefono,
-      veicolo,
-      targa,
-      prodotti,
-      stato: "DA_INVIARE",
-    }).select("*").single();
-
-    if (error) {
-      console.error("Errore creazione ordine:", error);
-      alert("Non è stato possibile creare l'ordine: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier.id, cliente, telefono, veicolo, targa, description: descrizione.trim(), prodotti }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok || !result?.order) {
+      console.error("Errore creazione ordine:", result);
+      alert("Non è stato possibile creare l'ordine: " + (result?.error || "Errore sconosciuto."));
       return;
     }
+    const data = result.order;
 
     const ordine: Ordine = {
       id: String(data.id),
@@ -529,10 +506,15 @@ export default function OrdiniPage() {
       whatsapp: nuovoWhatsApp.replace(/[^\d+]/g, ""),
     };
 
-    const { error } = await supabase.from("suppliers").insert(fornitore);
-    if (error) {
-      console.error("Errore salvataggio fornitore:", error);
-      alert("Non è stato possibile salvare il fornitore: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fornitore),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore salvataggio fornitore:", result);
+      alert("Non è stato possibile salvare il fornitore: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
@@ -545,13 +527,15 @@ export default function OrdiniPage() {
     const supplier = fornitori.find((item) => item.id === id);
     if (!supplier) return;
 
-    const { error } = await supabase.from("orders").update({
-      supplier_id: supplier.id,
-    }).eq("id", ordineId);
-
-    if (error) {
-      console.error("Errore assegnazione fornitore:", error);
-      alert("Non è stato possibile assegnare il fornitore: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordineId, supplierId: supplier.id }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore assegnazione fornitore:", result);
+      alert("Non è stato possibile assegnare il fornitore: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
@@ -566,14 +550,15 @@ export default function OrdiniPage() {
     const conferma = window.confirm("Eliminare questo ordine?\n\nL'ordine verrà rimosso definitivamente dalla lista.");
     if (!conferma) return;
 
-    const { error } = await supabase
-      .from("orders")
-      .delete()
-      .eq("id", ordineId);
-
-    if (error) {
-      console.error("Errore eliminazione ordine:", error);
-      alert("Non è stato possibile eliminare l'ordine: " + error.message);
+    const response = await fetch("/api/orders", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordineId }),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) {
+      console.error("Errore eliminazione ordine:", result);
+      alert("Non è stato possibile eliminare l'ordine: " + (result?.error || "Errore sconosciuto."));
       return;
     }
 
