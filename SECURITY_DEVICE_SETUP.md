@@ -23,18 +23,18 @@ The shared password is not individual device management. The current Supabase an
 
 ## Additional server-side database setting
 
-The Agenda screen has been migrated to the protected `/api/appointments` route. This route requires the server-only Vercel environment variable:
+The reviewed database-backed screens now use protected server APIs, including `/api/appointments`, `/api/home`, `/api/orders`, `/api/payments`, `/api/jobs`, `/api/revisioni`, and `/api/vehicles`. These routes require the server-only Vercel environment variable:
 
 - `SUPABASE_SERVICE_ROLE_KEY`: the Supabase service-role key for this project. Set it only in Vercel server-side environment variables (Preview first); never use a `NEXT_PUBLIC_` prefix and never put the value in the repository.
 
-The route returns HTTP 503 if this variable or the Supabase URL is missing. Until it is configured in the Preview environment, Agenda database operations will not work on that Preview. This is intentional fail-closed behavior. Do not revoke existing Supabase anon grants yet: other screens still use direct browser Supabase calls.
+The route returns HTTP 503 if this variable or the Supabase URL is missing. Until it is configured in the Preview environment, database-backed operations routed through these APIs will return a configuration error. This is intentional fail-closed behavior. Do not revoke existing Supabase anon grants yet: although the reviewed pages have been migrated to protected APIs, the live Preview still needs end-to-end verification and a final full-repository scan before changing RLS/grants.
 
-## Agenda migration verification
+## Preview migration verification
 
 On the security Preview, verify:
-- unauthenticated GET/POST/PATCH/DELETE requests to `/api/appointments` return HTTP 401;
-- authenticated session can load the agenda;
-- create, edit, and delete each persist and remain correct after refreshing;
+- unauthenticated requests to every protected database API return HTTP 401;
+- an authenticated session can load Home, Agenda, Orders, Revisions, vehicle/profile, and Job Sheet;
+- create, edit, and delete operations persist and remain correct after refreshing;
 - malformed IDs, blank descriptions, invalid dates, and descriptions over 1000 characters are rejected;
 - Supabase service-role key is available only server-side;
 - other workshop screens continue to work.
