@@ -9,10 +9,10 @@ import {
 export const runtime = "nodejs";
 
 function cleanKey(value: unknown) {
-  return typeof value === "string" ? value.trim().replace(/^\\/+/, "") : "";
+  return typeof value === "string" ? value.trim().replace(/^[/]+/, "") : "";
 }
 function validContentType(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 200 && !/[\\r\\n]/.test(value);
+  return typeof value === "string" && value.length > 0 && value.length <= 200 && !value.includes("\r") && !value.includes("\n");
 }
 
 export async function POST(request: Request) {
