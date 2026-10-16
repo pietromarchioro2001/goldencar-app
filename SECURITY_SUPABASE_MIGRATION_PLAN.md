@@ -88,3 +88,5 @@ The device-password endpoint now includes best-effort per-instance throttling. T
 - `/api/vehicles/media` validates the media key prefix against the supplied vehicle ID and caps declared metadata size at 50 MiB; however, declared size is client-supplied and does not itself enforce the actual R2 upload size. Confirm upload constraints and consistency between R2 objects and metadata in Preview tests.
 
 - The Jobs API now allowlists the columns accepted by POST/PATCH before passing values to the service-role Supabase client. This reduces the risk of callers setting unreviewed columns such as ownership/admin-like fields through arbitrary JSON properties. Build verification for this code commit is pending.
+
+- The legacy `/api/vision/r2/file` endpoint now validates empty keys and content-type input consistently with the main R2 endpoint. The OCR endpoints now reject empty/oversized image files before invoking Google Vision: 15 MiB per image, with a 30 MiB aggregate limit for the vehicle-document OCR request. Verify real Android photos and cropped images in Preview before rollout.
