@@ -1,5 +1,4 @@
 "use client";
-import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
@@ -354,297 +353,97 @@ export default function Home() {
 
   const caricaDati = async () => {
     if (typeof window === "undefined") return;
-    /* =========================
-       LAVORI
-       Anche la Home usa Supabase per le schede lavoro.
-    ========================= */
-    const { data: jobRows, error: jobsError } = await supabase
-      .from("jobs")
-      .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli")
-      .order("created_at", { ascending: false });
-
-    let lavoriPerSolleciti: Lavoro[] = lavori;
-
-    if (jobsError) {
-      console.error("Errore caricamento lavori Home:", jobsError);
+    const response = await fetch("/api/home", { cache: "no-store" });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      console.error("Errore caricamento dati Home:", result?.error || response.status);
       setLavori([]);
-      lavoriPerSolleciti = [];
-    } else {
-      const vehicleIds = (jobRows ?? [])
-        .map((row: any) => row.vehicle_id)
-        .filter(Boolean)
-        .map(String);
-
-      const [{ data: vehicleRows }, { data: relationRows }, { data: clientRows }] =
-        await Promise.all([
-          vehicleIds.length
-            ? supabase.from("vehicles").select("id, veicolo, targa").in("id", vehicleIds)
-            : Promise.resolve({ data: [] as any[] }),
-          vehicleIds.length
-            ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
-            : Promise.resolve({ data: [] as any[] }),
-          supabase.from("clients").select("id, nome, telefono"),
-        ]);
-
-      const vehiclesById = new Map(
-        (vehicleRows ?? []).map((row: any) => [String(row.id), row])
-      );
-      const clientsById = new Map(
-        (clientRows ?? []).map((row: any) => [String(row.id), row])
-      );
-      setClientiAnagrafica(
-        (clientRows ?? [])
-          .map((row: any) => {
-            const nomeCliente = String(row?.nome ?? "").trim();
-            if (!nomeCliente) return null;
-            return {
-              clientKey: makeClientKey(nomeCliente, row?.telefono),
-              clientId: String(row?.id ?? ""),
-              nomeCliente,
-              telefono: String(row?.telefono ?? "").trim(),
-            };
-          })
-          .filter(Boolean) as ClienteRicerca[]
-      );
-
-      const primaryClientByVehicle = new Map<string, any>();
-
-      for (const relation of relationRows ?? []) {
-        const vehicleId = String(relation.vehicle_id);
-        if (
-          relation.ruolo === "PRINCIPALE" ||
-          !primaryClientByVehicle.has(vehicleId)
-        ) {
-          primaryClientByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
-        }
-      }
-
-      const lavoriCaricati: Lavoro[] = (jobRows ?? []).map((row: any) => {
-        const vehicle = vehiclesById.get(String(row.vehicle_id));
-        const client = primaryClientByVehicle.get(String(row.vehicle_id));
-        const nomeCliente = String(client?.nome ?? "").trim();
-
-        const dettagli = row.dettagli && typeof row.dettagli === "object"
-          ? row.dettagli
-          : {};
-
-        const jobNumberRaw = String(row.id ?? "");
-        const jobNumber = jobNumberRaw;
-
-        return {
-          jobNumber,
-          createdAt: String(row.created_at ?? ""),
-          nomeCliente: nomeCliente || "Cliente",
-          veicolo: String(vehicle?.veicolo ?? ""),
-          targa: String(vehicle?.targa ?? ""),
-          telefono: String(client?.telefono ?? ""),
-          paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
-          paymentPaidAmount: row.payment_paid_amount != null ? String(row.payment_paid_amount) : "0",
-          paymentStatus:
-            row.payment_status === "PAGATO"
-              ? "PAGATO"
-              : row.payment_status === "PARZIALE"
-                ? "PARZIALE"
-                : "DA_PAGARE",
-          types: Array.isArray(dettagli.types)
-            ? dettagli.types
-            : row.tipo
-              ? [String(row.tipo)]
-              : [],
-          works: Array.isArray(dettagli.works)
-            ? dettagli.works
-            : String(row.lavori ?? ""),
-          status:
-            ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase())
-              ? "IN_LAVORAZIONE"
-              : "CONCLUSO",
-          pdfUrl: String(dettagli.pdfUrl ?? ""),
-        };
-      });
-
-      setLavori(lavoriCaricati);
-      lavoriPerSolleciti = lavoriCaricati;
-    }
-    /* =       PAGAMENTI / SOLLECITI
-    ========================= */
-    const { data: paymentRows, error: paymentsError } = await supabase
-      .from("payments")
-      .select("id, client_id, vehicle_id, job_id, nome_cliente, description, amount, paid_amount, status, created_at")
-      .is("job_id", null)
-      .in("status", ["DA_PAGARE", "PARZIALE"])
-      .order("created_at", { ascending: false });
-
-    if (paymentsError) {
-      console.error("Errore caricamento pagamenti Home:", paymentsError);
       setPagamentiManuali([]);
-      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, []));
-    } else {
-      const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
-      const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
-      const [{ data: paymentClients }, { data: paymentVehicles }] = await Promise.all([
-        clientIds.length ? supabase.from("clients").select("id, nome, telefono").in("id", clientIds) : Promise.resolve({data: [] as any[]}),
-        vehicleIds.length ? supabase.from("vehicles").select("id, targa").in("id", vehicleIds) : Promise.resolve({data: [] as any[]}),
-      ]);
-      const clientsById = new Map((paymentClients ?? []).map((row:any)=>[String(row.id),row]));
-      const vehiclesById = new Map((paymentVehicles ?? []).map((row:any)=>[String(row.id),row]));
-      const manuali: PagamentoManuale[] = (paymentRows ?? []).map((row:any)=>{
-        const client=clientsById.get(String(row.client_id));
-        const vehicle=vehiclesById.get(String(row.vehicle_id));
-        const nomeCliente=String(client?.nome ?? row.nome_cliente ?? "").trim() || "Cliente";
-        const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
-        return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
-      });
-      setPagamentiManuali(manuali);
-      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, manuali));
-    }
-
-    /* =========================
-       AGENDA
-       La Home usa la stessa sorgente Supabase della pagina Agenda.
-    ========================= */
-    const { data: appointmentRows, error: appointmentsError } = await supabase
-      .from("appointments")
-      .select("id, vehicle_id, titolo, descrizione, data_ora")
-      .order("data_ora", { ascending: true });
-
-    if (appointmentsError) {
-      console.error("Errore caricamento appuntamenti Home:", appointmentsError);
+      setSolleciti([]);
       setAppuntamenti([]);
-    } else {
-      setAppuntamenti(
-        (appointmentRows ?? []).map((row: any) => {
-          const dateTime = new Date(String(row.data_ora ?? ""));
-          return {
-            id: String(row.id ?? ""),
-            date: Number.isNaN(dateTime.getTime()) ? "" : `${dateTime.getFullYear()}-${String(dateTime.getMonth()+1).padStart(2,"0")}-${String(dateTime.getDate()).padStart(2,"0")}`,
-            time: Number.isNaN(dateTime.getTime())
-              ? ""
-              : dateTime.toLocaleTimeString("it-IT", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }),
-            description: String(row.descrizione ?? row.titolo ?? ""),
-          };
-        })
-      );
-    }
-
-    /* =========================
-       REVISIONI
-       La Home usa la stessa sorgente Supabase della pagina Revisioni.
-    ========================= */
-    const { data: revisionRows, error: revisionsError } = await supabase
-      .from("vehicles")
-      .select("id, client_id, veicolo, targa, revisione")
-      .not("revisione", "is", null);
-
-    if (revisionsError) {
-      console.error("Errore caricamento revisioni Home:", revisionsError);
       setRevisioni([]);
-    } else {
-      const revisionVehicleIds = (revisionRows ?? []).map((row: any) => String(row.id));
-      const [{ data: revisionRelations }, { data: revisionClients }] = await Promise.all([
-        revisionVehicleIds.length
-          ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", revisionVehicleIds)
-          : Promise.resolve({ data: [] as any[] }),
-        supabase.from("clients").select("id, nome, telefono"),
-      ]);
-
-      const revisionClientsById = new Map(
-        (revisionClients ?? []).map((row: any) => [String(row.id), row])
-      );
-      const revisionPrimaryByVehicle = new Map<string, any>();
-
-      for (const relation of revisionRelations ?? []) {
-        const vehicleId = String(relation.vehicle_id);
-        if (relation.ruolo === "PRINCIPALE" || !revisionPrimaryByVehicle.has(vehicleId)) {
-          revisionPrimaryByVehicle.set(
-            vehicleId,
-            revisionClientsById.get(String(relation.client_id))
-          );
-        }
-      }
-
-      setRevisioni(
-        (revisionRows ?? []).map((row: any) => {
-          const client =
-            revisionPrimaryByVehicle.get(String(row.id)) ||
-            revisionClientsById.get(String(row.client_id ?? ""));
-          const nomeCliente = String(client?.nome ?? "").trim();
-
-          return {
-            id: `revisione-${row.id}`,
-            nomeCliente,
-            cliente: nomeCliente,
-            telefono: String(client?.telefono ?? ""),
-            veicolo: String(row.veicolo ?? ""),
-            targa: String(row.targa ?? ""),
-            revisione: String(row.revisione ?? "").slice(0, 10),
-            scadenza: String(row.revisione ?? "").slice(0, 10),
-          };
-        })
-      );
-    }
-
-/* =========================
-       ORDINI
-       Gli ordini sono gestiti da Supabase, quindi la Home
-       deve leggere la stessa sorgente usata dalla pagina ORDINI.
-    ========================= */
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const { data: orderRows, error: ordersError } = await supabase
-      .from("orders")
-      .select("id, numero, cliente, veicolo, prodotti, vehicle_id, supplier_id, stato")
-      .order("created_at", { ascending: false });
-
-    if (ordersError) {
-      console.error("Errore caricamento ordini Home:", ordersError);
       setOrdini([]);
-    } else {
-      setOrdini(
-        (orderRows ?? []).map((row: any) => {
-          const prodotti = Array.isArray(row.prodotti) ? row.prodotti : [];
-          const descrizione = prodotti
-            .map((product: any) => {
-              const nome = String(product?.name ?? "").trim();
-              if (!nome) return "";
-              const quantita = String(product?.quantity ?? "1").trim() || "1";
-              const dettagli = String(product?.details ?? "").trim();
-              return `${quantita} × ${nome}${dettagli ? ` — ${dettagli}` : ""}`;
-            })
-            .filter(Boolean)
-            .join(" · ");
-
-          return {
-            id: String(row.id ?? ""),
-            numero: String(row.numero ?? ""),
-            cliente: String(row.cliente ?? ""),
-            veicolo: String(row.veicolo ?? ""),
-            descrizione,
-            stato: String(row.stato ?? "DA_INVIARE"),
-            vehicleId: row.vehicle_id ? String(row.vehicle_id) : undefined,
-            supplierId: row.supplier_id ? String(row.supplier_id) : undefined,
-          };
-        })
-      );
+      setFornitori([]);
+      setVeicoliOrdini([]);
+      setClientiAnagrafica([]);
+      return;
     }
-    const [{ data: supplierRows }, { data: vehicleRows }] = await Promise.all([
-      supabase.from("suppliers").select("id, nome, whatsapp").order("nome", { ascending: true }),
-      supabase.from("vehicles").select("id, veicolo, targa, client_id").order("targa", { ascending: true }),
-    ]);
-    setFornitori((supplierRows ?? []).map((r:any)=>({id:String(r.id),nome:String(r.nome??""),whatsapp:String(r.whatsapp??"")})));
-    const vehicleIds=(vehicleRows??[]).map((r:any)=>String(r.id));
-    if(vehicleIds.length){
-      const {data:rels}=await supabase.from("vehicle_clients").select("vehicle_id,client_id,ruolo").in("vehicle_id",vehicleIds);
-      const clientIds=Array.from(new Set((rels??[]).map((r:any)=>String(r.client_id))));
-      const {data:cls}=clientIds.length?await supabase.from("clients").select("id,nome,telefono").in("id",clientIds):{data:[]};
-      const cm=new Map((cls??[]).map((r:any)=>[String(r.id),r]));
-      const rm=new Map<string,any>();
-      for(const rel of rels??[]){const k=String(rel.vehicle_id); if(rel.ruolo==="PRINCIPALE"||!rm.has(k)) rm.set(k,cm.get(String(rel.client_id)));}
-      setVeicoliOrdini((vehicleRows??[]).map((v:any)=>({id:String(v.id),veicolo:String(v.veicolo??""),targa:String(v.targa??""),cliente:String(rm.get(String(v.id))?.nome??"")})));
-    } else setVeicoliOrdini([]);
+    const jobRows = Array.isArray(result.jobs) ? result.jobs : [];
+    const paymentRows = Array.isArray(result.payments) ? result.payments : [];
+    const appointmentRows = Array.isArray(result.appointments) ? result.appointments : [];
+    const revisionRows = Array.isArray(result.vehicles) ? result.vehicles.filter((row: any) => row.revisione != null) : [];
+    const relationRows = Array.isArray(result.relations) ? result.relations : [];
+    const clientRows = Array.isArray(result.clients) ? result.clients : [];
+    const vehicleRows = Array.isArray(result.vehicles) ? result.vehicles : [];
+    const orderRows = Array.isArray(result.orders) ? result.orders : [];
+    const supplierRows = Array.isArray(result.suppliers) ? result.suppliers : [];
+    let lavoriPerSolleciti: Lavoro[] = lavori;
+    const vehicleIds = jobRows.map((row: any) => row.vehicle_id).filter(Boolean).map(String);
+    const vehiclesForJobs = new Map(vehicleRows.filter((row: any) => vehicleIds.includes(String(row.id))).map((row: any) => [String(row.id), row]));
+    const clientsById = new Map(clientRows.map((row: any) => [String(row.id), row]));
+    setClientiAnagrafica(clientRows.map((row: any) => {
+      const nomeCliente = String(row?.nome ?? "").trim();
+      if (!nomeCliente) return null;
+      return { clientKey: makeClientKey(nomeCliente, row?.telefono), clientId: String(row?.id ?? ""), nomeCliente, telefono: String(row?.telefono ?? "").trim() };
+    }).filter(Boolean) as ClienteRicerca[]);
+    const primaryClientByVehicle = new Map<string, any>();
+    for (const relation of relationRows) {
+      const vehicleId = String(relation.vehicle_id);
+      if (relation.ruolo === "PRINCIPALE" || !primaryClientByVehicle.has(vehicleId)) primaryClientByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
+    }
+    const lavoriCaricati: Lavoro[] = jobRows.map((row: any) => {
+      const vehicle = vehiclesForJobs.get(String(row.vehicle_id));
+      const client = primaryClientByVehicle.get(String(row.vehicle_id));
+      const dettagli = row.dettagli && typeof row.dettagli === "object" ? row.dettagli : {};
+      return {
+        jobNumber: String(row.id ?? ""), createdAt: String(row.created_at ?? ""),
+        nomeCliente: String(client?.nome ?? "").trim() || "Cliente",
+        veicolo: String(vehicle?.veicolo ?? ""), targa: String(vehicle?.targa ?? ""), telefono: String(client?.telefono ?? ""),
+        paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
+        paymentPaidAmount: row.payment_paid_amount != null ? String(row.payment_paid_amount) : "0",
+        paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : row.payment_status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
+        types: Array.isArray(dettagli.types) ? dettagli.types : row.tipo ? [String(row.tipo)] : [],
+        works: Array.isArray(dettagli.works) ? dettagli.works : String(row.lavori ?? ""),
+        status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
+        pdfUrl: String(dettagli.pdfUrl ?? ""),
+      };
+    });
+    setLavori(lavoriCaricati);
+    lavoriPerSolleciti = lavoriCaricati;
+    const paymentClientIds = new Set(paymentRows.map((row: any) => String(row.client_id ?? "")));
+    const paymentVehicleIds = new Set(paymentRows.map((row: any) => String(row.vehicle_id ?? "")));
+    const manuali: PagamentoManuale[] = paymentRows.map((row: any) => {
+      const client = clientsById.get(String(row.client_id ?? ""));
+      const vehicle = vehicleRows.find((item: any) => String(item.id) === String(row.vehicle_id ?? ""));
+      const nomeCliente = String(client?.nome ?? row.nome_cliente ?? "").trim() || "Cliente";
+      const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
+      return { id: String(row.id), clientKey: makeClientKey(nomeCliente, client?.telefono), nomeCliente, telefono: String(client?.telefono ?? ""), targa: String(vehicle?.targa ?? ""), descrizione: String(row.description ?? ""), importo: String(row.amount ?? ""), paidAmount: String(row.paid_amount ?? "0"), stato, createdAt: String(row.created_at ?? "") };
+    });
+    setPagamentiManuali(manuali);
+    setSolleciti(aggregaSolleciti(lavoriPerSolleciti, manuali));
+    setAppuntamenti(appointmentRows.map((row: any) => {
+      const dateTime = new Date(String(row.data_ora ?? ""));
+      return { id: String(row.id ?? ""), date: Number.isNaN(dateTime.getTime()) ? "" : `${dateTime.getFullYear()}-${String(dateTime.getMonth()+1).padStart(2,"0")}-${String(dateTime.getDate()).padStart(2,"0")}`, time: Number.isNaN(dateTime.getTime()) ? "" : dateTime.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",hour12:false}), description: String(row.descrizione ?? row.titolo ?? "") };
+    }));
+    const revisionPrimaryByVehicle = new Map<string, any>();
+    for (const relation of relationRows) {
+      const id = String(relation.vehicle_id);
+      if (relation.ruolo === "PRINCIPALE" || !revisionPrimaryByVehicle.has(id)) revisionPrimaryByVehicle.set(id, clientsById.get(String(relation.client_id)));
+    }
+    setRevisioni(revisionRows.map((row: any) => {
+      const client = revisionPrimaryByVehicle.get(String(row.id)) || clientsById.get(String(row.client_id ?? ""));
+      const nomeCliente = String(client?.nome ?? "").trim();
+      return { id: `revisione-${row.id}`, nomeCliente, cliente: nomeCliente, telefono: String(client?.telefono ?? ""), veicolo: String(row.veicolo ?? ""), targa: String(row.targa ?? ""), revisione: String(row.revisione ?? "").slice(0,10), scadenza: String(row.revisione ?? "").slice(0,10) };
+    }));
+    setOrdini(orderRows.map((row: any) => {
+      const prodotti = Array.isArray(row.prodotti) ? row.prodotti : [];
+      const descrizione = prodotti.map((product: any) => { const nome=String(product?.name??"").trim(); if(!nome)return ""; const quantita=String(product?.quantity??"1").trim()||"1"; const dettagli=String(product?.details??"").trim(); return `${quantita} × ${nome}${dettagli ? ` — ${dettagli}` : ""}`; }).filter(Boolean).join(" · ");
+      return { id:String(row.id??""), numero:String(row.numero??""), cliente:String(row.cliente??""), veicolo:String(row.veicolo??""), descrizione, stato:String(row.stato??"DA_INVIARE"), vehicleId:row.vehicle_id?String(row.vehicle_id):undefined, supplierId:row.supplier_id?String(row.supplier_id):undefined };
+    }));
+    setFornitori(supplierRows.map((row: any) => ({ id:String(row.id), nome:String(row.nome??""), whatsapp:String(row.whatsapp??"") })));
+    const clientForVehicle = new Map<string, any>();
+    for (const relation of relationRows) { const id=String(relation.vehicle_id); if(relation.ruolo==="PRINCIPALE"||!clientForVehicle.has(id))clientForVehicle.set(id,clientsById.get(String(relation.client_id))); }
+    setVeicoliOrdini(vehicleRows.map((row: any) => ({ id:String(row.id), veicolo:String(row.veicolo??""), targa:String(row.targa??""), cliente:String(clientForVehicle.get(String(row.id))?.nome??"") })));
   };
   const lavoriAttivi = useMemo(
     () =>
