@@ -71,6 +71,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const maxImageBytes = 15 * 1024 * 1024;
+    if (file.size <= 0 || file.size > maxImageBytes) {
+      return NextResponse.json(
+        { error: "La foto della targa deve essere maggiore di zero e non superare 15 MB." },
+        { status: 413 }
+      );
+    }
+
     const buffer = Buffer.from(await file.arrayBuffer());
     const content = buffer.toString("base64");
 
