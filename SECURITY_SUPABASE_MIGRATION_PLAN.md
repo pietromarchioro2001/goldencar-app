@@ -74,3 +74,11 @@ The device-password endpoint now includes best-effort per-instance throttling. T
 - [ ] All workshop workflows pass on Preview.
 - [ ] SQL rollback steps are documented and reviewed.
 - [ ] No changes are deployed to production before the above checks pass.
+
+
+## Additional findings from the latest review
+
+- The device-login endpoint's attempt counter is process-local memory. It is useful as best-effort throttling but is not global across Vercel serverless instances. Before calling the login flow production-ready, add shared rate limiting (for example, a managed KV/Redis provider or an appropriate edge/WAF rule). This requires a separate configuration decision; no provider has been enabled by this code change.
+- The protected profile-creation endpoint writes to `vehicle_documents`, but no checked-in migration in this repository defines that table. This does not prove the live Supabase table is absent; verify the actual Preview database schema before relying on this endpoint. Do not remove the write or invent a schema migration without checking the existing table definition and R2 document flow.
+- The Home aggregate endpoint now explicitly selects `jobs.lavori` because the Home mapper uses that field as a fallback when structured work details are absent. Runtime verification against the Preview database is still required; a successful TypeScript build does not validate remote table/column names.
+- The Vehicle aggregate endpoint now fails explicitly if loading `vehicle_clients` relations fails, instead of silently returning profiles without their client links.
