@@ -9,7 +9,7 @@ export async function GET(request:Request){
  try{
  const client=db();
  const [jobs,payments,appointments,vehicles,relations,clients,orders,suppliers]=await Promise.all([
-  client.from("jobs").select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli").order("created_at",{ascending:false}),
+  client.from("jobs").select("id, vehicle_id, titolo, tipo, lavori, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli").order("created_at",{ascending:false}),
   client.from("payments").select("id, client_id, vehicle_id, job_id, nome_cliente, description, amount, paid_amount, status, created_at").is("job_id",null).in("status",["DA_PAGARE","PARZIALE"]).order("created_at",{ascending:false}),
   client.from("appointments").select("id, vehicle_id, titolo, descrizione, data_ora").order("data_ora",{ascending:true}),
   client.from("vehicles").select("id, client_id, veicolo, targa, revisione").order("targa",{ascending:true}),
