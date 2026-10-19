@@ -25,9 +25,11 @@ DECLARE
     'clients',
     'job_counter',
     'jobs',
+    'job_files',
     'order_counter',
     'orders',
     'payments',
+    'payments_due',
     'suppliers',
     'vehicle_clients',
     'vehicle_documents',
@@ -70,6 +72,33 @@ BEGIN
     REVOKE ALL PRIVILEGES ON SEQUENCE public.order_number_seq FROM authenticated;
     GRANT ALL PRIVILEGES ON SEQUENCE public.order_number_seq TO service_role;
   END IF;
+
+  -- Prevent direct RPC execution of the audited public functions. Trigger functions remain
+  -- usable by their installed triggers; the app has no browser-side .rpc() calls.
+  REVOKE EXECUTE ON FUNCTION public.genera_numero_scheda() FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION public.genera_numero_scheda() FROM anon;
+  REVOKE EXECUTE ON FUNCTION public.genera_numero_scheda() FROM authenticated;
+  GRANT EXECUTE ON FUNCTION public.genera_numero_scheda() TO service_role;
+
+  REVOKE EXECUTE ON FUNCTION public.set_job_id() FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION public.set_job_id() FROM anon;
+  REVOKE EXECUTE ON FUNCTION public.set_job_id() FROM authenticated;
+  GRANT EXECUTE ON FUNCTION public.set_job_id() TO service_role;
+
+  REVOKE EXECUTE ON FUNCTION public.set_order_number() FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION public.set_order_number() FROM anon;
+  REVOKE EXECUTE ON FUNCTION public.set_order_number() FROM authenticated;
+  GRANT EXECUTE ON FUNCTION public.set_order_number() TO service_role;
+
+  REVOKE EXECUTE ON FUNCTION public.set_orders_updated_at() FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION public.set_orders_updated_at() FROM anon;
+  REVOKE EXECUTE ON FUNCTION public.set_orders_updated_at() FROM authenticated;
+  GRANT EXECUTE ON FUNCTION public.set_orders_updated_at() TO service_role;
+
+  REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM PUBLIC;
+  REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM anon;
+  REVOKE EXECUTE ON FUNCTION public.set_updated_at() FROM authenticated;
+  GRANT EXECUTE ON FUNCTION public.set_updated_at() TO service_role;
 END
 $goldencar_lockdown$;
 
@@ -83,8 +112,8 @@ SELECT
 FROM information_schema.role_table_grants
 WHERE table_schema = 'public'
   AND table_name IN (
-    'appointments','clients','job_counter','jobs','order_counter','orders',
-    'payments','suppliers','vehicle_clients','vehicle_documents','vehicle_media','vehicles'
+    'appointments','clients','job_counter','jobs','job_files','order_counter','orders',
+    'payments','payments_due','suppliers','vehicle_clients','vehicle_documents','vehicle_media','vehicles'
   )
   AND grantee IN ('anon','authenticated','PUBLIC','service_role')
 ORDER BY table_name, grantee, privilege_type;
