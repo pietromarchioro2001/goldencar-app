@@ -224,6 +224,23 @@ export default function Home() {
 
   useEffect(() => {
     void caricaDati();
+    const rawOrderContext = sessionStorage.getItem("goldencar_nuovo_ordine");
+    if (rawOrderContext) {
+      try {
+        const orderContext = JSON.parse(rawOrderContext) as { vehicleId?: string; nomeCliente?: string; telefono?: string; veicolo?: string; targa?: string };
+        if (orderContext.vehicleId) setOrdineVeicoloId(String(orderContext.vehicleId));
+        if (orderContext.nomeCliente || orderContext.veicolo || orderContext.targa) {
+          setOrdineDescrizione("");
+        }
+        setOrdineFornitoreId("");
+        setModal("ordini");
+        setNuovoOrdineAperto(true);
+      } catch (error) {
+        console.error("Contesto nuovo ordine non valido:", error);
+      } finally {
+        sessionStorage.removeItem("goldencar_nuovo_ordine");
+      }
+    }
     const refresh = () => caricaDati();
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
@@ -808,8 +825,8 @@ export default function Home() {
     const vehicle = veicoliOrdini.find(v => v.id === ordineVeicoloId);
     const supplier = fornitori.find(s => s.id === ordineFornitoreId);
     const desc = ordineDescrizione.trim();
-    if (!vehicle || !supplier || !desc) { alert("Seleziona veicolo, fornitore e inserisci cosa ordinare."); return; }
-    const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), numero: String(Date.now()), vehicleId: vehicle.id, supplierId: supplier.id, cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{ name: desc, quantity: "1" }] }) });
+    if (!vehicle || !desc) { alert("Seleziona il veicolo e inserisci cosa ordinare."); return; }
+    const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), numero: String(Date.now()), vehicleId: vehicle.id, supplierId: supplier?.id || "", cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{ name: desc, quantity: "1" }] }) });
     const result = await response.json();
     if (!response.ok || !result?.ok) { alert("Errore salvataggio ordine: " + (result?.error || "Errore sconosciuto.")); return; }
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
@@ -1197,6 +1214,24 @@ export default function Home() {
                 key={ordine.id || ordine.numero || index}
                 ordine={ordine}
                 onClick={() => {
+                  if (ordine.stato === "INVIATO") {
+                    const conferma = window.confirm("Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?");
+                    if (!conferma) return;
+                    void (async () => {
+                      const response = await fetch("/api/orders", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: ordine.id }),
+                      });
+                      const result = await response.json().catch(() => null);
+                      if (!response.ok || !result?.ok) {
+                        alert("Non è stato possibile eliminare l'ordine: " + (result?.error || "Errore sconosciuto."));
+                        return;
+                      }
+                      await caricaDati();
+                    })();
+                    return;
+                  }
                   setOrdineAperto(ordine);
                   setOrdineDescrizione(ordine.descrizione || "");
                   setOrdineFornitoreId(ordine.supplierId || "");
@@ -1414,7 +1449,6 @@ export default function Home() {
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
-          <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordineAperto.numero || ""}</div>
           <label style={labelStyle}>PRODOTTO</label>
           <textarea
             value={ordineDescrizione}
@@ -1578,7 +1612,7 @@ function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
-  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
+  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>ORDINE</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
 }
 
 /* =====================================================
