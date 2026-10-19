@@ -6,7 +6,7 @@ Status: staging only. No Supabase SQL has been run. This document does not autho
 
 The device-session middleware and API-level checks protect the page shell and the API routes that have been updated. This is not sufficient to secure database access: the browser bundle still imports the public Supabase client and sends database queries directly.
 
-The browser-side Supabase client remains initialized in `lib/supabase.ts`, but the reviewed application pages no longer issue direct `supabase.from(...)` or `supabase.rpc(...)` calls after the latest migration commits. The server APIs now own those database operations. A final repository-wide search (including helpers and non-page files) is still required before RLS changes. The original code inventory covered these screens:
+The browser-side Supabase client remains initialized in `lib/supabase.ts`. A manual scan of all tracked `.ts`/`.tsx` application pages, components, and API routes on branch `security/device-registration` found no imports of `lib/supabase`, no direct `supabase.from(...)` or `supabase.rpc(...)` calls in UI files, and no hard-coded Supabase REST `/rest/v1` calls. The server APIs now own those database operations. Keep the legacy helper until a final diff review confirms it is unused; do not treat this source scan as proof that Preview runtime and remote database behavior are correct. The original code inventory covered these screens:
 
 | Screen | Tables | Operations found |
 |---|---|---|
@@ -78,7 +78,7 @@ The device-password endpoint now includes best-effort per-instance throttling. T
 
 ## Repository-wide source scan (2026-10-19)
 
-A manual scan of all application page/component files and the API route inventory found no direct browser-side `supabase.from(...)` or `supabase.rpc(...)` calls in the reviewed screens. The screens call the domain-specific `/api/*` routes instead. `lib/supabase.ts` still defines a public anon client for legacy compatibility, so it should not be treated as proof that direct access is impossible; confirm no imports/usages remain before removing it. GitHub code-search results alone are not considered authoritative for a branch-wide scan.
+A manual scan of all tracked application page/component files and API routes found no `lib/supabase` imports in the UI, no direct browser-side `supabase.from(...)` or `supabase.rpc(...)` calls, and no hard-coded Supabase REST `/rest/v1` calls. The screens call the domain-specific `/api/*` routes instead. `lib/supabase.ts` still defines a public anon client but appears unused in the scanned tracked files; retain it until the final diff/runtime review, then remove it only if no hidden build/tool usage depends on it. GitHub code-search results alone are not considered authoritative.
 
 The API inventory includes device auth, appointments, check-in, Home and Home-data, job reads/writes/payment status, orders/suppliers, manual payments, revision dates, vehicle/profile/client/relation/document operations, vehicle job history/media, OCR/plate recognition, and R2 signing/deletion. The reviewed sensitive routes perform an in-handler device-session check, with the expected exception of the device login/logout endpoint. This is a source review, not an end-to-end test of Preview or a live verification of Supabase grants.
 
@@ -89,7 +89,7 @@ Outstanding compatibility checks remain:
 - Review R2 shared-device authorization and deployment-wide login throttling before production rollout.
 - Review dependency/runtime compatibility and current package audit findings separately; do not apply automatic breaking upgrades without testing.
 
-Latest checked branch commit `e3c4ba00b9b7543b355278e5a1be55f8814b3fbe` has passing CI build runs. Build success does not verify remote database schema, configured Preview secrets, or runtime behavior.
+Latest checked branch commit `b4b6ffc6ee7648e257ded15325917c0978660498` has passing CI build runs. The read-only SQL audit file is available at `supabase/security_audit_readonly.sql`. Build success does not verify remote database schema, configured Preview secrets, or runtime behavior.
 
 ## Additional findings from the latest review
 
