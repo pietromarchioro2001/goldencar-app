@@ -105,3 +105,14 @@ Latest checked branch commit `b4b6ffc6ee7648e257ded15325917c0978660498` has pass
 - The Jobs API allowlists the columns accepted by POST/PATCH before passing values to the service-role Supabase client. This reduces the risk of callers setting unreviewed columns such as ownership/admin-like fields through arbitrary JSON properties. The latest branch build at commit `4231d4afc002ae365de9749e49ee8fa3d67161f9` passed; this confirms compilation only, not Preview runtime/database compatibility.
 
 - The legacy `/api/vision/r2/file` endpoint now validates empty keys and content-type input consistently with the main R2 endpoint. The OCR endpoints now reject empty/oversized image files before invoking Google Vision: 15 MiB per image, with a 30 MiB aggregate limit for the vehicle-document OCR request. Verify real Android photos and cropped images in Preview before rollout.
+
+
+## Preview schema audit result (2026-10-19)
+
+The read-only schema audit confirms that all 14 targeted tables exist in Preview, including `job_files`, `payments_due`, and `vehicle_documents`. The `vehicle_documents` columns match the fields used by the protected profile endpoint: `id`, `vehicle_id`, `tipo`, `nome`, `r2_key`, and timestamps.
+
+The observed `payments` schema includes `paid_amount`, `description`, `amount`, `status`, `client_id`, and `nome_cliente`; the protected manual-payment endpoint uses these column names. The `jobs` schema includes `manodopera`, `lavori`, `payment_amount`, `payment_paid_amount`, `payment_status`, and `dettagli`, matching the job API allowlist.
+
+Function/trigger review found `set_job_id()` attached to `jobs` as `trg_job_id`; it calls `genera_numero_scheda()`, which updates `job_counter`. Both functions are `SECURITY DEFINER` with `search_path=public, pg_temp`. Preserve the trigger and owner privileges. `set_order_number()` is attached to `orders` and updates `order_counter`; the protected server API uses `service_role`. Timestamp triggers are attached to `clients`, `vehicles`, `vehicle_documents`, `suppliers`, and `orders`.
+
+This audit confirms the reported schema and function definitions, but it does not validate Vercel environment variables or prove runtime behavior. Before running the mutating lockdown, configure Preview secrets and test the protected app workflows against Preview. After applying lockdown in Preview, verify that direct anonymous PostgREST access is denied and the app workflows still succeed. Never run this SQL against production during this staging phase.
