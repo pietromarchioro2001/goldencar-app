@@ -76,6 +76,21 @@ The device-password endpoint now includes best-effort per-instance throttling. T
 - [ ] No changes are deployed to production before the above checks pass.
 
 
+## Repository-wide source scan (2026-10-19)
+
+A manual scan of all application page/component files and the API route inventory found no direct browser-side `supabase.from(...)` or `supabase.rpc(...)` calls in the reviewed screens. The screens call the domain-specific `/api/*` routes instead. `lib/supabase.ts` still defines a public anon client for legacy compatibility, so it should not be treated as proof that direct access is impossible; confirm no imports/usages remain before removing it. GitHub code-search results alone are not considered authoritative for a branch-wide scan.
+
+The API inventory includes device auth, appointments, check-in, Home and Home-data, job reads/writes/payment status, orders/suppliers, manual payments, revision dates, vehicle/profile/client/relation/document operations, vehicle job history/media, OCR/plate recognition, and R2 signing/deletion. The reviewed sensitive routes perform an in-handler device-session check, with the expected exception of the device login/logout endpoint. This is a source review, not an end-to-end test of Preview or a live verification of Supabase grants.
+
+Outstanding compatibility checks remain:
+- Verify the Preview database contains `vehicle_documents` with the columns used by `POST /api/vehicles`; no checked-in migration creates that table.
+- Test all job/payment/order/appointment flows in Preview against the actual schema and realistic records.
+- Review the multi-step profile save: client, vehicle, relation, and document writes are sequential and are not transactional, so a mid-operation error can leave partial changes.
+- Review R2 shared-device authorization and deployment-wide login throttling before production rollout.
+- Review dependency/runtime compatibility and current package audit findings separately; do not apply automatic breaking upgrades without testing.
+
+Latest checked branch commit `e3c4ba00b9b7543b355278e5a1be55f8814b3fbe` has passing CI build runs. Build success does not verify remote database schema, configured Preview secrets, or runtime behavior.
+
 ## Additional findings from the latest review
 
 - The device-login endpoint's attempt counter is process-local memory. It is useful as best-effort throttling but is not global across Vercel serverless instances. Before calling the login flow production-ready, add shared rate limiting (for example, a managed KV/Redis provider or an appropriate edge/WAF rule). This requires a separate configuration decision; no provider has been enabled by this code change.
