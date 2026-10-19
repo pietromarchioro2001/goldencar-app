@@ -121,3 +121,16 @@ This audit confirms the reported schema and function definitions, but it does no
 ## Client-save compatibility fix (2026-10-19)
 
 The Preview constraints audit showed that `clients.codice_fiscale` does not have a unique constraint/index, so `upsert(..., { onConflict: "codice_fiscale" })` could fail with an ON CONFLICT error. The protected `POST /api/vehicles` path was updated on the security branch to look up the client by tax code, update the existing record if found, or insert a new record otherwise. This matches the observed Preview schema without adding a database constraint or altering existing data. The change compiled successfully in GitHub Actions on commit `fee70c90e903116350aaf6ca99a22972cd5709e1` (run https://github.com/pietromarchioro2001/goldencar-app/actions/runs/39230494642). Runtime save/update tests are still required; because there is no unique index, concurrent requests could theoretically create duplicate tax codes, though the expected workshop usage is low-concurrency.
+
+
+## Updated rollout constraint (2026-10-19)
+
+The Vercel Preview and Production currently use the SAME Supabase project. This changes the rollout order and is a hard safety constraint:
+
+- Do NOT execute `supabase/security_lockdown.sql` against the shared database while Production may still run the legacy browser-side Supabase client. The script revokes direct `anon`/`authenticated` table grants and removes policies; the legacy Production frontend could stop reading/writing data immediately.
+- Source review of all tracked `app/api/**/route.ts` files on `security/device-registration` found 17 route handlers: all data, OCR, and R2 handlers perform a device-session check in the handler; `/api/auth/device` is the intentional login/logout exception. Database handlers use server-side `SUPABASE_SERVICE_ROLE_KEY`. The reviewed pages use the protected APIs rather than direct Supabase table/RPC calls.
+- This source review does not prove that the currently deployed Production frontend has migrated, nor does it prove runtime security. Do not infer that the shared Supabase database is safe to lock down merely because Preview workflows pass.
+- Safe next sequence: (1) complete Preview regression tests and verify the exact branch/commit deployed; (2) review and validate the full PR diff; (3) schedule a controlled Production rollout of the protected API code, with a rollback plan; (4) only after confirming the deployed Production frontend no longer depends on direct anon table access, export current grants/policies and apply the lockdown during a controlled window; (5) verify direct PostgREST denial and every workshop workflow.
+- If zero downtime / zero Production risk is required, first create a separate Supabase project for Preview. Until either a separate database or the controlled Production code rollout exists, keep the mutating lockdown unapplied.
+
+The current branch is still a draft PR and must not be merged or promoted automatically. Recent order UI commits also require Preview build and manual regression testing before sign-off.
