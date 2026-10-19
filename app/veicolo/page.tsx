@@ -974,6 +974,7 @@ export default function Veicolo() {
         veicolo: veicoloProfilo.veicolo,
         targa: veicoloProfilo.targa,
         vehicleId: profiloVeicolo?.id,
+        returnTo: "/veicolo",
       })
 
     );
