@@ -979,7 +979,7 @@ export default function Veicolo() {
 
     );
 
-    router.push("/ordini");
+    router.push("/home");
 
   };
 
