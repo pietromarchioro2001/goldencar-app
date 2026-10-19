@@ -3,6 +3,7 @@
 
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 
 import BottomBar from "@/components/BottomBar";
 
@@ -109,11 +110,15 @@ type ContextOrdine = {
   targa?: string;
   prodotti?: ProdottoOrdine[];
 
+  returnTo?: string;
+
 };
 
 
 
 export default function OrdiniPage() {
+
+  const router = useRouter();
 
   const [ordini, setOrdini] = useState<Ordine[]>([]);
 
@@ -438,16 +443,7 @@ export default function OrdiniPage() {
       return;
     }
 
-    if (!fornitoreId) {
-      alert("Seleziona prima un fornitore.");
-      return;
-    }
-
     const supplier = fornitori.find((item) => item.id === fornitoreId);
-    if (!supplier?.whatsapp) {
-      alert("Il fornitore selezionato non ha un numero WhatsApp.");
-      return;
-    }
 
     const prodotti =
       context?.prodotti?.length
@@ -458,7 +454,7 @@ export default function OrdiniPage() {
     const response = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier.id, cliente, telefono, veicolo, targa, description: descrizione.trim(), prodotti }),
+      body: JSON.stringify({ id, jobId: context?.jobId || "", vehicleId: selectedVehicleId, supplierId: supplier?.id || "", cliente, telefono, veicolo, targa, description: descrizione.trim(), prodotti }),
     });
     const result = await response.json();
     if (!response.ok || !result?.ok || !result?.order) {
@@ -479,19 +475,18 @@ export default function OrdiniPage() {
       veicolo,
       targa,
       prodotti,
-      supplierId: supplier.id,
-      supplierName: supplier.nome,
-      supplierPhone: supplier.whatsapp,
+      supplierId: supplier?.id,
+      supplierName: supplier?.nome,
+      supplierPhone: supplier?.whatsapp,
     };
 
     setOrdini((current) => [ordine, ...current]);
 
-    const numero = supplier.whatsapp.replace(/\D/g, "");
-    const messaggio = "Ciao, per la targa " + targa + " e il veicolo " + veicolo +
-      " mi servirebbe: " + descrizione.trim();
-
-
+    const returnTo = context?.returnTo;
     resetNuovo();
+    if (returnTo === "/veicolo") {
+      router.push("/veicolo");
+    }
   };
 
   const aggiungiFornitore = async () => {
@@ -1359,7 +1354,7 @@ export default function OrdiniPage() {
 
 
 
-          <button type="button" onClick={creaOrdine} style={saveButtonStyle}>INVIA</button>
+          <button type="button" onClick={creaOrdine} style={saveButtonStyle}>SALVA</button>
 
         </Overlay>
 
