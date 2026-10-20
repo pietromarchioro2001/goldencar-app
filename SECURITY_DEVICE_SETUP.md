@@ -58,10 +58,10 @@ Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. The en
 
 The generic `/api/r2/file` and `/api/vision/r2/file` endpoints now call `lib/r2-access.ts` before issuing upload/download URLs or deleting objects. For `veicoli/` keys, reads and deletes require an exact persisted reference in `vehicle_media`, `vehicle_documents`, or a job's `dettagli`; vehicle media references are also checked against the matching vehicle ID. Uploads are restricted to recognized vehicle key formats. Job-media upload is allowed for an existing vehicle while a draft is being edited, but later reads/deletes require a saved reference.
 
-Known remaining limitation: `annunci/` keys are temporarily allowed for compatibility because the sales-ad data relationship/callers have not yet been mapped to a server-side authorization check. This remains a Production blocker.
+Known remaining limitation: `annunci/` keys are now rejected (HTTP 403) until the sales-ad callers and their persisted record relationship are mapped and migrated. If a sales-ad workflow currently depends on this namespace, it will need a dedicated server-side authorization path before that workflow is used again.
 
 Before Production:
-- finish mapping sales-ad callers and add per-record authorization for `annunci/`;
+- map sales-ad callers and add a dedicated per-record authorization path for `annunci/`, then test the sales-ad workflow;
 - test valid and invalid uploads, downloads and deletes for vehicle media, libretto images and job PDFs, including cross-vehicle keys and unknown references;
 - verify cleanup behavior if an R2 upload succeeds but its database metadata save fails (an unreferenced object is intentionally not deletable through the normal record-authorized endpoint);
 - re-run the full Preview workflow checklist.
