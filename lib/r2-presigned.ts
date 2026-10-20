@@ -63,8 +63,8 @@ function validateKey(key: string) {
   // Do not rewrite internal separators: a malformed key must fail closed.
   if (
     normalized.length > 1024 ||
-    normalized.includes("\\\\") ||
-    /[\\u0000-\\u001f\\u007f?#]/.test(normalized)
+    normalized.includes("\\") ||
+    /[\u0000-\u001f\u007f?#]/.test(normalized)
   ) {
     throw new Error("Percorso R2 non valido.");
   }
