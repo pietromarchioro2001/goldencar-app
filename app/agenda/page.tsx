@@ -255,6 +255,7 @@ export default function Agenda() {
 
   return (
     <main
+      className="responsive-page"
       style={{
         maxWidth: 430,
         margin: "0 auto",
