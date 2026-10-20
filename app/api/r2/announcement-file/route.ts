@@ -4,11 +4,10 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-// The sales screen currently persists listing metadata in this browser's
-// localStorage/IndexedDB, so there is no server-side record to authorize against.
-// Keep this endpoint isolated from generic R2 access and fail closed on every
-// key outside the one documented photo-key format. This is NOT record ownership;
-// migrate listings to server-side records before Production.
+// Sales listing metadata remains browser-local by design for this security pass.
+// Per-listing ownership is intentionally out of scope: this endpoint limits access
+// to the annunci/ photo-key format, requires the device session, and allows only
+// raster image types. Keep it isolated from generic vehicle/document R2 access.
 function validAnnouncementPhotoKey(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 1024) return false;
   return /^annunci\/[a-zA-Z0-9_-]{1,128}\/foto-[a-zA-Z0-9_-]{1,128}-[a-zA-Z0-9._-]{1,200}$/.test(value);
