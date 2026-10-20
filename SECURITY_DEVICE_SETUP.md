@@ -40,3 +40,30 @@ On the security Preview, verify:
 - other workshop screens continue to work.
 
 The service-role key bypasses RLS, so every future server endpoint using it must perform its own device-session check and input/record validation.
+
+
+## Shared login throttling — required before Production
+
+The in-memory counter in `app/api/auth/device/route.ts` is only best-effort. It is not shared between Vercel serverless instances and must not be treated as production brute-force protection.
+
+Choose and configure one deployment-wide mechanism before production rollout:
+- a Vercel/edge WAF rate-limit rule scoped to `POST /api/auth/device`, with a per-client-IP threshold and a temporary block response; or
+- a shared-store limiter such as Upstash Redis, configured only with server-side environment variables.
+
+Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. After configuring the chosen mechanism, test that repeated failed login attempts from the same source are blocked across separate requests/instances and that a correct password still works after the limit expires. If the shared limiter is unavailable, fail closed or ensure the edge rule remains active; do not silently claim the local in-memory counter is equivalent.
+
+## R2 authorization boundary — required before Production
+
+The current signed-URL endpoints require the shared device session and constrain keys to `veicoli/` or `annunci/`, but they do not establish per-record ownership. A valid device session can request a signed URL or deletion for another key under those prefixes. Signed URLs remain usable until expiration (currently five minutes).
+
+Before Production:
+- inventory existing `veicoli/` and `annunci/` key formats and all callers of both `/api/r2/file` and `/api/vision/r2/file`;
+- preserve current upload, download, delete, vehicle-media, job-PDF, and sales-ad workflows;
+- add route-specific key validation and, where a key corresponds to a stored record, verify the associated vehicle/document/job/ad on the server before signing a download or deleting an object;
+- test invalid prefixes, traversal-like segments, unknown record IDs, and cross-vehicle keys, as well as normal workflows.
+
+Do not narrow the generic endpoint to vehicle-only keys until the sales-ad callers and their existing key conventions are confirmed.
+
+## Safe rollout gate
+
+The Preview and Production deployments currently share the same Supabase project. The database lockdown remains unapplied. Do not run `supabase/security_lockdown.sql` until the protected code is live in Production in a controlled rollout, the rollback procedure is ready, and Production workflows no longer rely on direct anonymous Supabase table access.
