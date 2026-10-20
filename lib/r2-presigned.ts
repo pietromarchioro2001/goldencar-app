@@ -59,13 +59,26 @@ function validateKey(key: string) {
     throw new Error("Chiave R2 mancante.");
   }
 
-  const allowedPrefixes = ["veicoli/", "annunci/"];
+  // Keep the accepted namespace narrow and reject malformed path components.
+  // Do not rewrite internal separators: a malformed key must fail closed.
+  if (
+    normalized.length > 1024 ||
+    normalized.includes("\\\\") ||
+    /[\\u0000-\\u001f\\u007f?#]/.test(normalized)
+  ) {
+    throw new Error("Percorso R2 non valido.");
+  }
 
+  const allowedPrefixes = ["veicoli/", "annunci/"];
   if (!allowedPrefixes.some((prefix) => normalized.startsWith(prefix))) {
     throw new Error("Percorso R2 non consentito.");
   }
 
-  if (normalized.includes("..")) {
+  const segments = normalized.split("/");
+  if (
+    segments.some((segment) => !segment || segment === "." || segment === "..") ||
+    !segments.every((segment) => /^[a-zA-Z0-9._ -]+$/.test(segment))
+  ) {
     throw new Error("Percorso R2 non valido.");
   }
 
