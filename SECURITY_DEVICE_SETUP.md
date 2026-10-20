@@ -50,7 +50,7 @@ The login endpoint now supports a deployment-wide Upstash Redis limiter. Configu
 - `UPSTASH_REDIS_REST_URL`
 - `UPSTASH_REDIS_REST_TOKEN`
 
-With both variables absent, only the best-effort per-instance fallback runs; that is not sufficient for Production. If only one variable is set, or Redis is configured but unavailable, login fails closed with HTTP 503 rather than bypassing the shared limiter. Alternatively, an edge/WAF rule scoped to `POST /api/auth/device` can provide deployment-wide throttling.
+In Vercel Production, both variables are mandatory: if they are absent or incomplete, login fails closed with HTTP 503 rather than falling back to the per-instance counter. In Preview/development, both variables may be absent and the local best-effort fallback remains available for testing. If Redis is configured but unavailable, login fails closed with HTTP 503. Alternatively, an edge/WAF rule scoped to `POST /api/auth/device` can provide deployment-wide throttling.
 
 Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. The endpoint prefers `x-real-ip` and otherwise uses the final address appended to `x-forwarded-for`; keep it behind the trusted Vercel proxy. After configuring Redis or the edge rule, test repeated login requests across separate requests/instances, verify HTTP 429 after the threshold, and confirm a correct password works again after the limit expires. The Redis counter increments on each attempt and is reset after a successful login. Tune the threshold/window deliberately and verify expected legitimate usage.
 
