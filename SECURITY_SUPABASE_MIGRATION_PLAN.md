@@ -2,16 +2,16 @@
 
 ## Current status — 2026-10-20
 
-The user confirms the current Vercel Preview deployments are green and the tested app workflows work. The latest commits extend the R2 authorization boundary and make the shared login limiter mandatory in Vercel Production. GitHub Actions is rebuilding the newest commit; treat the build as pending until the check concludes.
+The user confirms the current Vercel Preview deployments are green and the tested app workflows work. The latest commits extend the R2 authorization boundary and remove the optional external login-rate-limit dependency. GitHub Actions must be checked for the newest commit before treating the build as verified.
 
 Implemented on `security/device-registration`:
 - Browser-side Supabase data operations for the reviewed screens have been moved to server-side APIs using the server-only service-role key.
 - Device session checks run in protected API handlers.
 - Generic R2 endpoints check persisted vehicle/document/job references before issuing URLs or deleting objects. Sales photos use a dedicated endpoint and SVG content types are rejected.
-- Production login fails closed if shared Upstash configuration is absent/incomplete or the shared limiter is unavailable. Preview/development can still use the local best-effort limiter.
+- Device login uses best-effort per-instance in-memory throttling; it does not require an external rate-limiting service.
 
 Remaining blockers:
-1. Configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel server-side Production environment and test the shared limiter; without them Production login intentionally returns HTTP 503.
+1. No external login-limiter setup is required. The in-memory counter is only best-effort across Vercel serverless instances, so do not describe it as deployment-wide brute-force protection.
 2. Sales-photo per-listing ownership is intentionally out of scope. The dedicated R2 endpoint protects the `annunci/` namespace with device-session checks and raster-only content types. Do not migrate listings solely for this security pass.
 3. Review multi-step profile writes and order/job/payment mutations for consistency and cross-record validation.
 4. Confirm Vercel Production branch/promotion settings and prepare rollback.
@@ -80,13 +80,15 @@ Each server handler must:
 
 ## Device login throttling
 
-The device-password endpoint now includes best-effort per-instance throttling. This is defense-in-depth, not a deployment-wide limiter: serverless instances do not share memory, and IP headers must only be trusted when set by a trusted proxy. Before considering brute-force protection complete, configure a deployment-wide rate limit/WAF rule or a shared-store limiter and test it from Preview.
+The device-password endpoint uses a best-effort per-instance in-memory counter: after 8 failed attempts from the same detected IP within 15 minutes, further attempts are temporarily rejected. No external service or additional environment variables are required.
+
+This is defense-in-depth, not a deployment-wide limiter: Vercel serverless instances do not share memory. IP headers must only be trusted when set by the trusted deployment proxy. The primary security controls remain the device password, signed HttpOnly session cookie, and in-handler authorization on every protected API.
 
 ## Acceptance checklist
 
 - [ ] No app page can load without a valid device session (except the access screen and public static assets).
 - [ ] Every sensitive API validates the device session inside the handler.
-- [ ] Device password attempts are throttled by a deployment-wide mechanism.
+- [ ] Device login's best-effort local throttling behavior is understood; deployment-wide throttling is intentionally not configured.
 - [ ] All direct browser Supabase operations have been inventoried and migrated or explicitly justified.
 - [ ] Preview environment and branch are confirmed separate from production; do not merge PR or promote a deployment before sign-off.
 - [ ] The service-role secret exists only in server-side environment variables.
