@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
-import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
+import { fetchJsonCached } from "@/lib/client-api-cache";
 
 
 type Lavoro = {
