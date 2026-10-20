@@ -60,6 +60,27 @@ function clearFailures(ip: string) {
 // Optional shared limiter backed by Upstash Redis REST. Configure both
 // variables in Vercel to enforce the limit across serverless instances.
 // If configured but unavailable, fail closed rather than silently bypass it.
+async function clearSharedFailures(ip: string): Promise<void> {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (!redisUrl && !redisToken) return;
+  if (!redisUrl || !redisToken) throw new Error("Shared login limiter configuration is incomplete");
+
+  const response = await fetch(redisUrl.replace(/\/$/, ""), {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + redisToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(["DEL", "goldencar:device-login:" + ip]),
+    cache: "no-store",
+    signal: AbortSignal.timeout(2500),
+  });
+  if (!response.ok) throw new Error("Shared login limiter unavailable");
+  const result = await response.json();
+  if (typeof result?.result !== "number") throw new Error("Invalid shared login limiter response");
+}
+
 async function isSharedRateLimited(ip: string): Promise<boolean | null> {
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
@@ -127,6 +148,15 @@ export async function POST(request: Request) {
   }
 
   clearFailures(ip);
+  try {
+    await clearSharedFailures(ip);
+  } catch (error) {
+    console.error("Shared login limiter reset error:", error);
+    return NextResponse.json(
+      { ok: false, error: "Accesso temporaneamente non disponibile. Riprova tra poco." },
+      { status: 503, headers: { "Retry-After": "60" } }
+    );
+  }
   const expiresAt = Math.floor(Date.now() / 1000) + DAYS * 86400;
   const payload = String(expiresAt);
   const response = NextResponse.json({ ok: true, expiresAt });
