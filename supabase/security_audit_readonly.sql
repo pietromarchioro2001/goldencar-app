@@ -9,9 +9,9 @@ WITH relevant_tables AS (
   WHERE t.table_schema = 'public'
     AND t.table_type = 'BASE TABLE'
     AND t.table_name IN (
-      'appointments', 'clients', 'jobs', 'job_counter', 'orders',
-      'order_counter', 'payments', 'suppliers', 'vehicle_clients',
-      'vehicle_documents', 'vehicle_media', 'vehicles'
+      'appointments', 'clients', 'jobs', 'job_counter', 'job_files',
+      'orders', 'order_counter', 'payments', 'payments_due', 'suppliers',
+      'vehicle_clients', 'vehicle_documents', 'vehicle_media', 'vehicles'
     )
 ),
 columns_info AS (
@@ -79,14 +79,38 @@ functions_info AS (
         'function', n.nspname || '.' || p.proname,
         'arguments', pg_get_function_identity_arguments(p.oid),
         'security_definer', p.prosecdef,
-        'search_path_config', p.proconfig
-      ) ORDER BY p.proname
+        'search_path_config', p.proconfig,
+        'owner', pg_get_userbyid(p.proowner),
+        'execute_acl', COALESCE(p.proacl::text, 'default')
+      ) ORDER BY p.proname, pg_get_function_identity_arguments(p.oid)
     ), '[]'::jsonb
   ) AS items
   FROM pg_proc p
   JOIN pg_namespace n ON n.oid = p.pronamespace
   WHERE n.nspname = 'public'
-    AND p.proname IN ('genera_numero_scheda', 'set_job_id', 'set_order_number')
+    AND p.proname IN (
+      'genera_numero_scheda',
+      'set_job_id',
+      'set_order_number',
+      'set_orders_updated_at',
+      'set_updated_at'
+    )
+),
+sequence_info AS (
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'sequence', n.nspname || '.' || c.relname,
+        'owner', pg_get_userbyid(c.relowner),
+        'acl', COALESCE(c.relacl::text, 'default')
+      ) ORDER BY c.relname
+    ), '[]'::jsonb
+  ) AS items
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.relkind = 'S'
+    AND c.relname IN ('order_number_seq')
 )
 SELECT jsonb_pretty(
   jsonb_build_object(
@@ -95,6 +119,7 @@ SELECT jsonb_pretty(
     'tables', (SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY t.table_name), '[]'::jsonb) FROM table_info t),
     'policies', (SELECT items FROM policies_info),
     'table_grants', (SELECT items FROM grants_info),
-    'security_sensitive_functions', (SELECT items FROM functions_info)
+    'security_sensitive_functions', (SELECT items FROM functions_info),
+    'sequences', (SELECT items FROM sequence_info)
   )
 ) AS goldencar_security_audit;
