@@ -2,7 +2,7 @@ type ApiCacheEntry = { value: any; savedAt: number };
 
 const apiCache = new Map<string, ApiCacheEntry>();
 const apiRequests = new Map<string, Promise<any>>();
-const CACHE_FRESH_MS = 1500;
+const CACHE_FRESH_MS = 5000;
 const CACHE_STALE_MS = 30000;
 
 /**
