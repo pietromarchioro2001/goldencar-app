@@ -897,7 +897,13 @@ export default function Home() {
     }
 
     const descrizione = ordineDescrizione.trim() || ordine.descrizione || "";
-    const testo = `Ciao, ordine ${ordine.numero || ""}: ${descrizione} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
+    const targa = String(veicoliOrdini.find((vehicle) => String(vehicle.id) === String(ordine.vehicleId))?.targa || "").trim();
+    if (!targa) {
+      alert("Non trovo la targa del veicolo associato all'ordine. Verifica il veicolo prima di inviare.");
+      return;
+    }
+    const elenco = descrizione.split(/\s·\s/).map((voce) => voce.trim()).filter(Boolean).map((voce) => "• " + voce).join("\n");
+    const testo = "Buongiorno,\nMi servirebbe per la targa " + targa + ":" + (elenco ? "\n" + elenco : "");
     const whatsappWindow = window.open("about:blank", "_blank");
     if (!whatsappWindow) {
       alert("Il browser ha bloccato l'apertura di WhatsApp. Consenti i popup e riprova.");
@@ -1555,7 +1561,7 @@ export default function Home() {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginTop:16}}>
             <button type="button" onClick={()=>void aggiornaOrdineHome()} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,fontSize:13,cursor:"pointer"}}>SALVA</button>
             {ordineAperto.stato !== "INVIATO" ? (
-              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#D4AF37",color:"#111827",fontWeight:900,fontSize:13,cursor:"pointer"}}>INVIA</button>
+              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#25D366",color:"#FFFFFF",fontWeight:900,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><span aria-hidden="true" style={{fontSize:17,lineHeight:1}}>◉</span> WHATSAPP</button>
             ) : (
               <div style={{fontSize:11,fontWeight:800,color:"#64748B",textAlign:"right"}}>INVIATO</div>
             )}
