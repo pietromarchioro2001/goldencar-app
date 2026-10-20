@@ -37,10 +37,9 @@ function keyParts(key: string) {
  * exact stored reference so a device cannot enumerate or delete arbitrary keys.
  */
 export async function isR2KeyAuthorized(key: string, operation: R2Operation): Promise<boolean> {
-  // The sales-ad namespace has a separate workflow/schema not yet migrated to
-  // record-aware authorization. Preserve it for compatibility; it remains a
-  // production blocker and must be migrated before the database lockdown.
-  if (key.startsWith("annunci/")) return true;
+  // No current sales-ad route or persisted ad relationship has been verified
+  // in this branch. Fail closed until that workflow is explicitly migrated.
+  if (key.startsWith("annunci/")) return false;
 
   const parts = keyParts(key);
   if (!parts) return false;
@@ -67,14 +66,14 @@ export async function isR2KeyAuthorized(key: string, operation: R2Operation): Pr
     if (vehicleError) throw vehicleError;
     if (!vehicle) return false;
 
-    if (relative.startsWith("media/")) {
+    if (/^media\/[0-9]{10,}-[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-[a-zA-Z0-9._-]{1,200}$/.test(relative)) {
       const { data, error } = await client
         .from("vehicle_media").select("id").eq("r2_key", key).maybeSingle();
       if (error) throw error;
       return !data;
     }
 
-    if (/^media-[a-zA-Z0-9._ -]{1,700}$/.test(relative)) {
+    if (/^media-[0-9]{1,12}-[0-9]{10,}-[a-z0-9]{1,20}-[a-zA-Z0-9._-]{1,200}$/.test(relative)) {
       // Job media may be uploaded while the user is still editing a draft.
       // Reads/deletes below still require an exact persisted reference.
       return true;
