@@ -1,4 +1,5 @@
 import { isDeviceRequestAuthorized } from "@/lib/device-auth";
+import { isR2KeyAuthorized } from "@/lib/r2-access";
 import { NextResponse } from "next/server";
 import {
   createDownloadUrl,
@@ -39,6 +40,9 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!(await isR2KeyAuthorized(key, "upload"))) {
+      return NextResponse.json({ ok: false, error: "La chiave non è autorizzata per questo file." }, { status: 403 });
+    }
     const uploadUrl = await createUploadUrl(key, contentType);
 
     return NextResponse.json({
@@ -77,6 +81,9 @@ export async function GET(request: Request) {
       );
     }
 
+    if (!(await isR2KeyAuthorized(key, "read"))) {
+      return NextResponse.json({ ok: false, error: "File non associato a un record autorizzato." }, { status: 403 });
+    }
     const downloadUrl = await createDownloadUrl(key);
 
     return NextResponse.json({
@@ -114,6 +121,9 @@ export async function DELETE(request: Request) {
       );
     }
 
+    if (!(await isR2KeyAuthorized(key, "delete"))) {
+      return NextResponse.json({ ok: false, error: "Eliminazione non autorizzata per questo file." }, { status: 403 });
+    }
     await deleteR2Object(key);
 
     return NextResponse.json({
