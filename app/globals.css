@@ -486,3 +486,40 @@ textarea {
     width: auto !important;
   }
 }
+
+
+/* Compact shared page headers on very narrow phones. */
+@media (max-width: 380px) {
+  .app > div[style*="gap: 18px"][style*="padding: 28px 20px 24px"],
+  .responsive-page > div[style*="gap: 18px"][style*="padding: 28px 20px 24px"] {
+    gap: 10px !important;
+    padding: 18px 12px 16px !important;
+  }
+
+  .app [style*="width: 110px"][style*="height: 90px"],
+  .responsive-page [style*="width: 110px"][style*="height: 90px"] {
+    width: 78px !important;
+    height: 66px !important;
+  }
+
+  .app [style*="width: 110px"][style*="height: 90px"] img,
+  .responsive-page [style*="width: 110px"][style*="height: 90px"] img {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .app h1,
+  .responsive-page h1 {
+    font-size: clamp(23px, 7vw, 29px) !important;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Desktop page content remains centered instead of stretching into long lines. */
+@media (min-width: 1000px) {
+  .app > div[style*="padding: 28px 20px 24px"],
+  .responsive-page > div[style*="padding: 28px 20px 24px"] {
+    max-width: 1360px;
+    margin-inline: auto;
+  }
+}
