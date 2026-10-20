@@ -198,6 +198,8 @@ export default function Home() {
   const [nuovoPagamentoDescrizione, setNuovoPagamentoDescrizione] = useState("");
   const [nuovoPagamentoImporto, setNuovoPagamentoImporto] = useState("");
   const [ordini, setOrdini] = useState<Ordine[]>([]);
+  const [conteggiRapidi, setConteggiRapidi] = useState<{ lavori: number; agenda: number; revisioni: number; ordini: number } | null>(null);
+  const [sollecitiRapido, setSollecitiRapido] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
   const [listening, setListening] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
@@ -221,9 +223,43 @@ export default function Home() {
   const [nuovoFornitoreMode, setNuovoFornitoreMode] = useState(false);
   const checkInVideoRef = useRef<HTMLVideoElement>(null);
   const checkInStreamRef = useRef<MediaStream | null>(null);
+  const conteggiRequestRef = useRef(0);
+
+  const caricaConteggiRapidi = async () => {
+    const requestId = ++conteggiRequestRef.current;
+    const oggi = new Date();
+    const inizio = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
+    const fine = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() + 1);
+    const fineRevisioni = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate() + 30);
+    const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const params = new URLSearchParams({
+      start: inizio.toISOString(),
+      end: fine.toISOString(),
+      until: dateKey(fineRevisioni),
+    });
+
+    // Conteggi essenziali indipendenti dal caricamento delle liste complete.
+    void fetch("/api/home/counts?" + params.toString(), { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
+        setConteggiRapidi(result.counts);
+      })
+      .catch((error) => console.error("Errore conteggi rapidi Home:", error));
+
+    // I solleciti richiedono un'aggregazione distinta per cliente: non rallentano le altre card.
+    void fetch("/api/home/counts/reminders", { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
+        setSollecitiRapido(Number(result.count) || 0);
+      })
+      .catch((error) => console.error("Errore conteggio solleciti Home:", error));
+  };
 
   useEffect(() => {
-    void caricaDati();
+    void caricaDati(false);
+    void caricaConteggiRapidi();
     const rawOrderContext = sessionStorage.getItem("goldencar_nuovo_ordine");
     if (rawOrderContext) {
       try {
@@ -241,7 +277,7 @@ export default function Home() {
         sessionStorage.removeItem("goldencar_nuovo_ordine");
       }
     }
-    const refresh = () => caricaDati();
+    const refresh = () => { void caricaDati(false); void caricaConteggiRapidi(); };
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
@@ -368,7 +404,7 @@ export default function Home() {
     }
   };
 
-  const caricaDati = async () => {
+  const caricaDati = async (aggiornaConteggi = true) => {
     if (typeof window === "undefined") return;
     const response = await fetch("/api/home", { cache: "no-store" });
     const result = await response.json().catch(() => null);
@@ -459,6 +495,7 @@ export default function Home() {
     const clientForVehicle = new Map<string, any>();
     for (const relation of relationRows) { const id=String(relation.vehicle_id); if(relation.ruolo==="PRINCIPALE"||!clientForVehicle.has(id))clientForVehicle.set(id,clientsById.get(String(relation.client_id))); }
     setVeicoliOrdini(vehicleRows.map((row: any) => ({ id:String(row.id), veicolo:String(row.veicolo??""), targa:String(row.targa??""), cliente:String(clientForVehicle.get(String(row.id))?.nome??"") })));
+    if (aggiornaConteggi) void caricaConteggiRapidi();
   };
   const lavoriAttivi = useMemo(
     () =>
@@ -918,7 +955,7 @@ export default function Home() {
         >
           <StatCard
             title="LAVORI"
-            value={lavoriAttivi.length}
+            value={conteggiRapidi?.lavori ?? lavoriAttivi.length}
             color="#111827"
             icon={<IconLavori />}
             onClick={() =>
@@ -927,7 +964,7 @@ export default function Home() {
           />
           <StatCard
             title="REVISIONI"
-            value={revisioniScadute.length}
+            value={conteggiRapidi?.revisioni ?? revisioniScadute.length}
             color="#D4AF37"
             icon={<IconRevisioni />}
             onClick={() =>
@@ -936,7 +973,7 @@ export default function Home() {
           />
           <StatCard
             title="AGENDA"
-            value={appuntamentiOggi.length}
+            value={conteggiRapidi?.agenda ?? appuntamentiOggi.length}
             color="#2563EB"
             icon={<IconAgenda />}
             onClick={() =>
@@ -945,7 +982,7 @@ export default function Home() {
           />
           <StatCard
             title="SOLLECITI"
-            value={solleciti.length}
+            value={sollecitiRapido ?? solleciti.length}
             color="#EA580C"
             icon={<IconAlert />}
             onClick={() =>
@@ -954,7 +991,7 @@ export default function Home() {
           />
           <StatCard
             title="ORDINI"
-            value={ordini.length}
+            value={conteggiRapidi?.ordini ?? ordini.length}
             color="#0F766E"
             icon={<IconOrdini />}
             onClick={() =>
