@@ -205,13 +205,28 @@ export async function PATCH(request: Request) {
       codice_fiscale: clean(value.cf, 32).toUpperCase(),
     });
 
-    const { data: existingVehicle, error: vehicleCheckError } = await db.from("vehicles").select("id").eq("id", vehicleId).maybeSingle();
+    const { data: existingVehicle, error: vehicleCheckError } = await db.from("vehicles").select("id, client_id").eq("id", vehicleId).maybeSingle();
     if (vehicleCheckError) throw vehicleCheckError;
     if (!existingVehicle) return NextResponse.json({ ok: false, error: "Veicolo non trovato." }, { status: 404 });
 
     const { data: existingClient, error: clientCheckError } = await db.from("clients").select("id").eq("id", client1Id).maybeSingle();
     if (clientCheckError) throw clientCheckError;
     if (!existingClient) return NextResponse.json({ ok: false, error: "Cliente 1 non trovato." }, { status: 404 });
+
+    // A valid vehicle ID and client ID are not enough: the client must belong to this vehicle.
+    const { data: relations, error: relationsError } = await db.from("vehicle_clients").select("client_id, ruolo").eq("vehicle_id", vehicleId);
+    if (relationsError) throw relationsError;
+    const client1Linked = String(existingVehicle.client_id ?? "") === client1Id ||
+      (relations ?? []).some((relation) => String(relation.client_id) === client1Id);
+    if (!client1Linked) return NextResponse.json({ ok: false, error: "Cliente 1 non associato al veicolo selezionato." }, { status: 400 });
+
+    if (client2Id) {
+      const { data: existingClient2, error: client2CheckError } = await db.from("clients").select("id").eq("id", client2Id).maybeSingle();
+      if (client2CheckError) throw client2CheckError;
+      if (!existingClient2) return NextResponse.json({ ok: false, error: "Cliente 2 non trovato." }, { status: 404 });
+      const client2Linked = (relations ?? []).some((relation) => String(relation.client_id) === client2Id && relation.ruolo === "SECONDO");
+      if (!client2Linked) return NextResponse.json({ ok: false, error: "Cliente 2 non associato al veicolo selezionato." }, { status: 400 });
+    }
 
     const { error: client1Error } = await db.from("clients").update(clientFields(client1)).eq("id", client1Id);
     if (client1Error) throw client1Error;
