@@ -63,7 +63,12 @@ function clearFailures(ip: string) {
 async function clearSharedFailures(ip: string): Promise<void> {
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (!redisUrl && !redisToken) return;
+  if (!redisUrl && !redisToken) {
+    if (process.env.VERCEL_ENV === "production") {
+      throw new Error("Shared login limiter is required in Production");
+    }
+    return;
+  }
   if (!redisUrl || !redisToken) throw new Error("Shared login limiter configuration is incomplete");
 
   const response = await fetch(redisUrl.replace(/\/$/, ""), {
@@ -84,7 +89,12 @@ async function clearSharedFailures(ip: string): Promise<void> {
 async function isSharedRateLimited(ip: string): Promise<boolean | null> {
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (!redisUrl && !redisToken) return null;
+  if (!redisUrl && !redisToken) {
+    if (process.env.VERCEL_ENV === "production") {
+      throw new Error("Shared login limiter is required in Production");
+    }
+    return null;
+  }
   if (!redisUrl || !redisToken) throw new Error("Shared login limiter configuration is incomplete");
 
   const key = "goldencar:device-login:" + ip;
