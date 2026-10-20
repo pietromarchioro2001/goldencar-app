@@ -1,5 +1,26 @@
 # GOLDENCAR security rollout — Supabase migration plan
 
+## Current status — 2026-10-20
+
+The user confirms the current Vercel Preview deployments are green and the tested app workflows work. The latest commits extend the R2 authorization boundary and make the shared login limiter mandatory in Vercel Production. GitHub Actions is rebuilding the newest commit; treat the build as pending until the check concludes.
+
+Implemented on `security/device-registration`:
+- Browser-side Supabase data operations for the reviewed screens have been moved to server-side APIs using the server-only service-role key.
+- Device session checks run in protected API handlers.
+- Generic R2 endpoints check persisted vehicle/document/job references before issuing URLs or deleting objects. Sales photos use a dedicated endpoint and SVG content types are rejected.
+- Production login fails closed if shared Upstash configuration is absent/incomplete or the shared limiter is unavailable. Preview/development can still use the local best-effort limiter.
+
+Remaining blockers:
+1. Configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel server-side Production environment and test the shared limiter; without them Production login intentionally returns HTTP 503.
+2. Sales listings are stored in browser localStorage/IndexedDB. Their dedicated R2 endpoint narrows key scope but cannot prove a photo belongs to a persisted listing; migrate listings to server-side records before Production.
+3. Review multi-step profile writes and order/job/payment mutations for consistency and cross-record validation.
+4. Confirm Vercel Production branch/promotion settings and prepare rollback.
+5. Do not run `supabase/security_lockdown.sql` while Production still uses the same Supabase project and may run legacy browser-side table operations. No lockdown SQL has been executed.
+
+The Preview being green is useful validation of the current app flows, but does not prove the Production branch is migrated or that direct anonymous PostgREST access is blocked. Keep the PR in draft until the blockers and controlled rollout sequence are closed.
+
+---
+
 Status: staging only. No Supabase SQL has been run. This document does not authorize removing existing policies.
 
 ## Current findings
