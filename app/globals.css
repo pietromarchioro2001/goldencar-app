@@ -452,3 +452,30 @@ textarea {
     padding-inline: clamp(24px, 4vw, 72px) !important;
   }
 }
+
+
+/* Dialogs and bottom sheets stay inside the visible phone viewport. */
+@media (max-width: 600px) {
+  .app [style*="position: fixed"][style*="inset: 0"] > div,
+  .responsive-page [style*="position: fixed"][style*="inset: 0"] > div {
+    box-sizing: border-box;
+    max-width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .app [style*="position: fixed"][style*="inset: 0"],
+  .responsive-page [style*="position: fixed"][style*="inset: 0"] {
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (min-width: 601px) {
+  .app [style*="position: fixed"][style*="inset: 0"] > div,
+  .responsive-page [style*="position: fixed"][style*="inset: 0"] > div {
+    max-height: min(90vh, 900px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
