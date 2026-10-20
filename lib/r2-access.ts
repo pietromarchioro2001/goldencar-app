@@ -37,6 +37,11 @@ function keyParts(key: string) {
  * exact stored reference so a device cannot enumerate or delete arbitrary keys.
  */
 export async function isR2KeyAuthorized(key: string, operation: R2Operation): Promise<boolean> {
+  // The sales-ad namespace has a separate workflow/schema not yet migrated to
+  // record-aware authorization. Preserve it for compatibility; it remains a
+  // production blocker and must be migrated before the database lockdown.
+  if (key.startsWith("annunci/")) return true;
+
   const parts = keyParts(key);
   if (!parts) return false;
 
@@ -69,14 +74,10 @@ export async function isR2KeyAuthorized(key: string, operation: R2Operation): Pr
       return !data;
     }
 
-    if (relative.startsWith("media-")) {
-      const { data: jobs, error } = await client
-        .from("jobs").select("dettagli").eq("vehicle_id", vehicleId);
-      if (error) throw error;
-      return !(jobs ?? []).some((job: any) => {
-        const details = parseJobDetails(job.dettagli);
-        return Array.isArray(details.media) && details.media.some((item: any) => item?.r2Key === key);
-      });
+    if (/^media-[a-zA-Z0-9._ -]{1,700}$/.test(relative)) {
+      // Job media may be uploaded while the user is still editing a draft.
+      // Reads/deletes below still require an exact persisted reference.
+      return true;
     }
 
     const pdfMatch = /^schede\/([a-zA-Z0-9_-]{1,128})\.pdf$/.exec(relative);
