@@ -56,15 +56,17 @@ Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. After 
 
 ## R2 authorization boundary — required before Production
 
-The current signed-URL endpoints require the shared device session and constrain keys to `veicoli/` or `annunci/`, but they do not establish per-record ownership. A valid device session can request a signed URL or deletion for another key under those prefixes. Signed URLs remain usable until expiration (currently five minutes).
+The generic `/api/r2/file` and `/api/vision/r2/file` endpoints now call `lib/r2-access.ts` before issuing upload/download URLs or deleting objects. For `veicoli/` keys, reads and deletes require an exact persisted reference in `vehicle_media`, `vehicle_documents`, or a job's `dettagli`; vehicle media references are also checked against the matching vehicle ID. Uploads are restricted to recognized vehicle key formats. Job-media upload is allowed for an existing vehicle while a draft is being edited, but later reads/deletes require a saved reference.
+
+Known remaining limitation: `annunci/` keys are temporarily allowed for compatibility because the sales-ad data relationship/callers have not yet been mapped to a server-side authorization check. This remains a Production blocker.
 
 Before Production:
-- inventory existing `veicoli/` and `annunci/` key formats and all callers of both `/api/r2/file` and `/api/vision/r2/file`;
-- preserve current upload, download, delete, vehicle-media, job-PDF, and sales-ad workflows;
-- add route-specific key validation and, where a key corresponds to a stored record, verify the associated vehicle/document/job/ad on the server before signing a download or deleting an object;
-- test invalid prefixes, traversal-like segments, unknown record IDs, and cross-vehicle keys, as well as normal workflows.
+- finish mapping sales-ad callers and add per-record authorization for `annunci/`;
+- test valid and invalid uploads, downloads and deletes for vehicle media, libretto images and job PDFs, including cross-vehicle keys and unknown references;
+- verify cleanup behavior if an R2 upload succeeds but its database metadata save fails (an unreferenced object is intentionally not deletable through the normal record-authorized endpoint);
+- re-run the full Preview workflow checklist.
 
-Do not narrow the generic endpoint to vehicle-only keys until the sales-ad callers and their existing key conventions are confirmed.
+Do not run the Supabase lockdown SQL until the remaining sales-ad authorization and rollout gates are closed.
 
 ## Safe rollout gate
 
