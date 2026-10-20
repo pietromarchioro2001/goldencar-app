@@ -323,8 +323,8 @@ export default function RevisioniPage() {
 
     const testo =
       giorni !== null && giorni < 0
-        ? "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " è scaduta il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento."
-        : "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " scadrà il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento.";
+        ? "Buongiorno,\nti ricordiamo che la revisione di " + veicolo + targa + " è scaduta il " + formatDate(data) + "."
+        : "Buongiorno,\nti ricordiamo che la revisione di " + veicolo + targa + " scadrà il " + formatDate(data) + ".";
 
     window.open(
       `https://wa.me/${telefono}?text=${encodeURIComponent(testo)}`,
