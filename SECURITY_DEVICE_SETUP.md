@@ -45,7 +45,7 @@ The service-role key bypasses RLS, so every future server endpoint using it must
 
 The protected Orders API now verifies that a linked job belongs to the selected vehicle on order creation, and validates the final vehicle/job pair on order edits (including when only one of those fields changes). The protected vehicle-profile PATCH now also verifies that Client 1 is the selected vehicle's primary/legacy client and that Client 2 is linked as the secondary client before updating personal data. These checks prevent valid-but-unrelated IDs from being used to link orders or edit another vehicle's client through a profile request. These are source-level fixes; the latest build must pass and the existing Preview order/profile workflows should remain covered by the previously completed smoke tests.
 
-Remaining authorization gate: sales-announcement photos still lack server-side listing ownership because listing metadata is browser-local. Do not describe point 1 as fully production-ready until this is resolved or the feature is deliberately kept unavailable in Production.
+Scope decision (2026-10-20): sales-announcement photos do not require per-listing ownership checks for this project. Their protection is the dedicated R2 endpoint, device-session authorization, strict `annunci/` key validation, raster-only content types, and rejection by the generic vehicle-file endpoints. Do not migrate sales listings to server-side storage just for this security pass.
 
 
 ## Shared login throttling — required before Production
@@ -64,15 +64,14 @@ Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. The en
 
 The generic `/api/r2/file` and `/api/vision/r2/file` endpoints now call `lib/r2-access.ts` before issuing upload/download URLs or deleting objects. For `veicoli/` keys, reads and deletes require an exact persisted reference in `vehicle_media`, `vehicle_documents`, or a job's `dettagli`; vehicle media references are also checked against the matching vehicle ID. Uploads are restricted to recognized vehicle key formats. Job-media upload is allowed for an existing vehicle while a draft is being edited, but later reads/deletes require a saved reference.
 
-The sales screen uses a separate `/api/r2/announcement-file` endpoint that validates a narrow photo-key format and allows only raster image content types (JPEG, PNG, WebP, AVIF, GIF, BMP, HEIC and HEIF; SVG is rejected), while the generic R2 endpoints reject the `annunci/` namespace. Important limitation: sales listings still live in browser localStorage/IndexedDB, so this endpoint cannot verify that the requested photo belongs to the current listing. The dedicated endpoint prevents crossing into other R2 namespaces, but does not yet provide per-listing ownership and remains a Production blocker.
+The sales screen uses a separate `/api/r2/announcement-file` endpoint that validates a narrow photo-key format and allows only raster image content types (JPEG, PNG, WebP, AVIF, GIF, BMP, HEIC and HEIF; SVG is rejected), while the generic R2 endpoints reject the `annunci/` namespace. Scope decision (2026-10-20): per-listing ownership for sales photos is intentionally out of scope. For this app, the relevant boundary is R2 access: the dedicated endpoint requires an authorized device session, validates the `annunci/` photo-key format, accepts raster image types only, and is separate from generic vehicle/document endpoints.
 
 Before Production:
-- migrate sales listings to server-side records and bind each photo key to its saved listing before allowing per-listing reads/deletes in Production;
-- test valid and invalid uploads, downloads and deletes for vehicle media, libretto images and job PDFs, including cross-vehicle keys and unknown references;
-- verify cleanup behavior if an R2 upload succeeds but its database metadata save fails (an unreferenced object is intentionally not deletable through the normal record-authorized endpoint);
-- re-run the full Preview workflow checklist.
+- test vehicle-media, libretto-image and job-PDF upload/download/delete paths, including cross-vehicle keys and unknown references;
+- verify cleanup behavior if an R2 upload succeeds but its database metadata save fails;
+- confirm the protected code is ready for controlled rollout and keep the shared Supabase lockdown unapplied until Production no longer relies on direct browser-side table access.
 
-Do not run the Supabase lockdown SQL until the remaining sales-ad authorization and rollout gates are closed.
+Do not migrate sales listings or add per-listing authorization solely for this security pass.
 
 ## Safe rollout gate
 
