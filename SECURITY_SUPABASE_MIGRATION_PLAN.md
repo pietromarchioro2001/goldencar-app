@@ -12,7 +12,7 @@ Implemented on `security/device-registration`:
 
 Remaining blockers:
 1. Configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in Vercel server-side Production environment and test the shared limiter; without them Production login intentionally returns HTTP 503.
-2. Sales listings are stored in browser localStorage/IndexedDB. Their dedicated R2 endpoint narrows key scope but cannot prove a photo belongs to a persisted listing; migrate listings to server-side records before Production.
+2. Sales-photo per-listing ownership is intentionally out of scope. The dedicated R2 endpoint protects the `annunci/` namespace with device-session checks and raster-only content types. Do not migrate listings solely for this security pass.
 3. Review multi-step profile writes and order/job/payment mutations for consistency and cross-record validation.
 4. Confirm Vercel Production branch/promotion settings and prepare rollback.
 5. Do not run `supabase/security_lockdown.sql` while Production still uses the same Supabase project and may run legacy browser-side table operations. No lockdown SQL has been executed.
@@ -120,7 +120,7 @@ Latest checked branch commit `b4b6ffc6ee7648e257ded15325917c0978660498` has pass
 - The Vehicle aggregate endpoint now fails explicitly if loading `vehicle_clients` relations fails, instead of silently returning profiles without their client links.
 
 - OCR endpoints `/api/vision` and `/api/vision/plate` require the device session and reject empty/oversized images before invoking Google Vision. Current limits are 15 MiB per image and 30 MiB aggregate for the multi-image vehicle-document request. These are application-level checks; verify real Android photos and cropped images in Preview, and remember that the hosting platform may parse/limit request bodies before the route handler runs.
-- The R2 signing/deletion endpoints validate key prefixes (`veicoli/`, `annunci/`) and reject traversal-like `..`, but authorization is at the shared-device level rather than per record/object. Any holder of the device session can request a signed download or deletion for any key in those prefixes. Before production rollout, inspect all existing key conventions and decide whether route-specific prefix constraints or record-ownership checks are feasible without breaking existing vehicle media and sales-ad workflows.
+- R2 signing/deletion endpoints apply route-specific key validation. Vehicle/document/job files require persisted references for reads/deletes; sales photos use a dedicated `annunci/` endpoint with an authorized device session and raster-only content types. For this project, per-listing ownership for sales photos is intentionally out of scope; do not add listing storage or per-listing permissions solely for this security pass.
 - `/api/vehicles/media` validates the media key prefix against the supplied vehicle ID and caps declared metadata size at 50 MiB; however, declared size is client-supplied and does not itself enforce the actual R2 upload size. Confirm upload constraints and consistency between R2 objects and metadata in Preview tests.
 
 - The Jobs API allowlists the columns accepted by POST/PATCH before passing values to the service-role Supabase client. This reduces the risk of callers setting unreviewed columns such as ownership/admin-like fields through arbitrary JSON properties. The latest branch build at commit `4231d4afc002ae365de9749e49ee8fa3d67161f9` passed; this confirms compilation only, not Preview runtime/database compatibility.
