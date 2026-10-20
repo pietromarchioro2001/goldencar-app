@@ -35,10 +35,41 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ ok: false, error: "Corpo della richiesta non valido." }, { status: 400 });
     const { id, vehicleId, name, mimeType, size, key } = body;
-    if (!validId(id) || !validId(vehicleId) || typeof name !== "string" || !name.trim() || name.length > 255 || typeof mimeType !== "string" || mimeType.length > 150 || !Number.isSafeInteger(size) || size < 0 || size > 50 * 1024 * 1024 || typeof key !== "string" || !key.startsWith("veicoli/" + vehicleId + "/media/") || key.length > 1024) {
+    if (
+      !validId(id) ||
+      !validId(vehicleId) ||
+      typeof name !== "string" ||
+      !name.trim() ||
+      name.length > 255 ||
+      typeof mimeType !== "string" ||
+      mimeType.length > 150 ||
+      !Number.isSafeInteger(size) ||
+      size < 0 ||
+      size > 50 * 1024 * 1024 ||
+      typeof key !== "string" ||
+      key.length > 1024 ||
+      !key.startsWith("veicoli/" + vehicleId + "/media/") ||
+      key.includes("..") ||
+      key.includes("\\\\") ||
+      key.split("/").some((part: string) => !part || part === "." || !/^[a-zA-Z0-9._ -]+$/.test(part))
+    ) {
       return NextResponse.json({ ok: false, error: "Metadati del file non validi." }, { status: 400 });
     }
-    const { data, error } = await db().from("vehicle_media").insert({ id, vehicle_id: vehicleId, name: name.trim(), mime_type: mimeType || "application/octet-stream", size, r2_key: key }).select("id, vehicle_id, name, mime_type, size, r2_key, created_at").single();
+
+    const client = db();
+    const { data: vehicle, error: vehicleError } = await client
+      .from("vehicles")
+      .select("id")
+      .eq("id", vehicleId)
+      .maybeSingle();
+    if (vehicleError) throw vehicleError;
+    if (!vehicle) return NextResponse.json({ ok: false, error: "Veicolo non trovato." }, { status: 404 });
+
+    const { data, error } = await client
+      .from("vehicle_media")
+      .insert({ id, vehicle_id: vehicleId, name: name.trim(), mime_type: mimeType || "application/octet-stream", size, r2_key: key })
+      .select("id, vehicle_id, name, mime_type, size, r2_key, created_at")
+      .single();
     if (error) throw error;
     return NextResponse.json({ ok: true, media: data }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) { return fail(error); }
