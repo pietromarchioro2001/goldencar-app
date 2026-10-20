@@ -31,10 +31,35 @@ async function validSession(token: string | undefined, secret: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/accesso" || pathname === "/api/auth/device") return NextResponse.next();
+  if (pathname === "/api/auth/device") return NextResponse.next();
 
   const secret = process.env.GOLDENCAR_SESSION_SECRET;
-  if (secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret)) return NextResponse.next();
+  const authenticated = Boolean(secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret));
+
+  if (pathname === "/accesso") {
+    if (authenticated) {
+      const home = request.nextUrl.clone();
+      home.pathname = "/home";
+      home.search = "";
+      return NextResponse.redirect(home);
+    }
+    return NextResponse.next();
+  }
+
+  if (authenticated) {
+    // A real browser reload/full-page open should always land on Home.
+    // Next.js client-side navigations are RSC requests and are left untouched.
+    const isDocumentNavigation =
+      request.headers.get("sec-fetch-mode") === "navigate" &&
+      (request.headers.get("accept") || "").includes("text/html");
+    if (pathname !== "/home" && isDocumentNavigation) {
+      const home = request.nextUrl.clone();
+      home.pathname = "/home";
+      home.search = "";
+      return NextResponse.redirect(home);
+    }
+    return NextResponse.next();
+  }
 
   // API endpoints are always checked, even if a path happens to end with a file extension.
   if (pathname.startsWith("/api/")) return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
