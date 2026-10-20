@@ -2,46 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
+import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
 
-type ApiCacheEntry = { value: any; savedAt: number };
-const apiCache = new Map<string, ApiCacheEntry>();
-const apiRequests = new Map<string, Promise<any>>();
 
-async function fetchJsonCached(url: string): Promise<any> {
-  const now = Date.now();
-  const cached = apiCache.get(url);
-  if (cached && now - cached.savedAt < 1500) return cached.value;
-  const pending = apiRequests.get(url);
-  if (pending) return pending;
-
-  const request = (async () => {
-    let rejectStaleCache = false;
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      const result = await response.json().catch(() => null);
-      if (!response.ok || !result?.ok) {
-        if (response.status === 401 || response.status === 403) {
-          rejectStaleCache = true;
-          apiCache.delete(url);
-          throw new Error(result?.error || "Sessione non valida.");
-        }
-        if (!cached || Date.now() - cached.savedAt > 30000) {
-          throw new Error(result?.error || `Richiesta fallita (${response.status})`);
-        }
-        return cached.value;
-      }
-      apiCache.set(url, { value: result, savedAt: Date.now() });
-      return result;
-    } catch (error) {
-      if (!rejectStaleCache && cached && Date.now() - cached.savedAt <= 30000) return cached.value;
-      throw error;
-    } finally {
-      apiRequests.delete(url);
-    }
-  })();
-  apiRequests.set(url, request);
-  return request;
-}
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
