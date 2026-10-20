@@ -69,9 +69,9 @@ async function isSharedRateLimited(ip: string): Promise<boolean | null> {
     "local n = redis.call('INCR', KEYS[1])",
     "if n == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end",
     "return n",
-  ].join("\\n");
+  ].join("\n");
 
-  const response = await fetch(redisUrl.replace(/\\/$/, ""), {
+  const response = await fetch(redisUrl.replace(/\/$/, ""), {
     method: "POST",
     headers: {
       Authorization: "Bearer " + redisToken,
