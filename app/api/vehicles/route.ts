@@ -217,7 +217,7 @@ export async function PATCH(request: Request) {
     const { data: relations, error: relationsError } = await db.from("vehicle_clients").select("client_id, ruolo").eq("vehicle_id", vehicleId);
     if (relationsError) throw relationsError;
     const client1Linked = String(existingVehicle.client_id ?? "") === client1Id ||
-      (relations ?? []).some((relation) => String(relation.client_id) === client1Id);
+      (relations ?? []).some((relation) => String(relation.client_id) === client1Id && relation.ruolo !== "SECONDO");
     if (!client1Linked) return NextResponse.json({ ok: false, error: "Cliente 1 non associato al veicolo selezionato." }, { status: 400 });
 
     if (client2Id) {
