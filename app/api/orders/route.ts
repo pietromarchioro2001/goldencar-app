@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     if(vehicle.error) throw vehicle.error;
     if(!vehicle.data) return NextResponse.json({ok:false,error:"Veicolo non trovato."},{status:404});
     if(supplierId){const supplier=await client!.from("suppliers").select("id").eq("id",supplierId).maybeSingle();if(supplier.error)throw supplier.error;if(!supplier.data)return NextResponse.json({ok:false,error:"Fornitore non trovato."},{status:404});}
-    if(jobId){const job=await client!.from("jobs").select("id").eq("id",jobId).maybeSingle();if(job.error)throw job.error;if(!job.data)return NextResponse.json({ok:false,error:"Scheda lavoro non trovata."},{status:404});}
+    if(jobId){const job=await client!.from("jobs").select("id, vehicle_id").eq("id",jobId).maybeSingle();if(job.error)throw job.error;if(!job.data)return NextResponse.json({ok:false,error:"Scheda lavoro non trovata."},{status:404});if(job.data.vehicle_id!==vehicleId)return NextResponse.json({ok:false,error:"La scheda lavoro non appartiene al veicolo selezionato."},{status:400});}
     const {data,error}=await client!.from("orders").insert({
       id, numero:textField(body.numero,80) || String(Date.now()), job_id:jobId || null, vehicle_id:vehicleId, supplier_id:supplierId || null,
       cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti: products, stato:"DA_INVIARE"
@@ -140,6 +140,18 @@ export async function PATCH(request: Request) {
   }
   if (!Object.keys(update).length) return NextResponse.json({ok:false,error:"Nessuna modifica valida."},{status:400});
   try {
+    // Validate the final vehicle/job pair, including fields inherited from the existing order.
+    const {data:currentOrder,error:currentOrderError}=await client!.from("orders").select("id, vehicle_id, job_id").eq("id",body.id).maybeSingle();
+    if(currentOrderError)throw currentOrderError;
+    if(!currentOrder)return NextResponse.json({ok:false,error:"Ordine non trovato."},{status:404});
+    const finalVehicleId=typeof update.vehicle_id==="string"?update.vehicle_id:currentOrder.vehicle_id;
+    const finalJobId=Object.prototype.hasOwnProperty.call(update,"job_id")?update.job_id:currentOrder.job_id;
+    if(finalJobId){
+      const {data:job,error:jobError}=await client!.from("jobs").select("id, vehicle_id").eq("id",finalJobId).maybeSingle();
+      if(jobError)throw jobError;
+      if(!job)return NextResponse.json({ok:false,error:"Scheda lavoro non trovata."},{status:404});
+      if(job.vehicle_id!==finalVehicleId)return NextResponse.json({ok:false,error:"La scheda lavoro non appartiene al veicolo selezionato."},{status:400});
+    }
     const {data,error}=await client!.from("orders").update(update).eq("id",body.id).select("*").maybeSingle();
     if(error)throw error;if(!data)return NextResponse.json({ok:false,error:"Ordine non trovato."},{status:404});
     return NextResponse.json({ok:true,order:data});
