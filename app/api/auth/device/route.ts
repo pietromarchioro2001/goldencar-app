@@ -21,11 +21,12 @@ function equal(a: string, b: string) {
   return x.length === y.length && timingSafeEqual(x, y);
 }
 function clientIp(request: Request) {
-  // Use a single proxy-provided address rather than trusting arbitrary forwarded
-  // lists. Vercel sets x-forwarded-for; deployments should keep this endpoint
-  // behind a trusted proxy.
+  // Prefer the platform-provided single-IP header. If only X-Forwarded-For is
+  // available, use the final hop appended by the trusted proxy, not a
+  // client-supplied first entry. Keep this route behind the deployment proxy.
+  const direct = request.headers.get("x-real-ip")?.trim();
   const forwarded = request.headers.get("x-forwarded-for");
-  const candidate = forwarded?.split(",")[0]?.trim();
+  const candidate = direct || forwarded?.split(",").at(-1)?.trim();
   return candidate && candidate.length <= 80 ? candidate : "unknown";
 }
 function isRateLimited(ip: string, now: number) {
