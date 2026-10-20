@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       (clients.data ?? []).map((row: any) => [String(row.id), {
         nome: String(row.nome ?? "").trim() || "Cliente",
         telefono: String(row.telefono ?? ""),
-      }])
+      }] as [string, { nome: string; telefono: string }])
     );
     const primaryClientByVehicle = new Map<string, string>();
     for (const relation of relations.data ?? []) {
