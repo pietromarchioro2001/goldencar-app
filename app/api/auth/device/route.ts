@@ -56,13 +56,53 @@ function clearFailures(ip: string) {
   attemptsByIp.delete(ip);
 }
 
+// Optional shared limiter backed by Upstash Redis REST. Configure both
+// variables in Vercel to enforce the limit across serverless instances.
+// If configured but unavailable, fail closed rather than silently bypass it.
+async function isSharedRateLimited(ip: string): Promise<boolean | null> {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (!redisUrl || !redisToken) return null;
+
+  const key = "goldencar:device-login:" + ip;
+  const script = [
+    "local n = redis.call('INCR', KEYS[1])",
+    "if n == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end",
+    "return n",
+  ].join("\\n");
+
+  const response = await fetch(redisUrl.replace(/\\/$/, ""), {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + redisToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(["EVAL", script, "1", key, String(Math.ceil(WINDOW_MS / 1000))]),
+    cache: "no-store",
+    signal: AbortSignal.timeout(2500),
+  });
+  if (!response.ok) throw new Error("Shared login limiter unavailable");
+  const result = await response.json();
+  if (typeof result?.result !== "number") throw new Error("Invalid shared login limiter response");
+  return result.result > MAX_ATTEMPTS;
+}
+
 export async function POST(request: Request) {
   const now = Date.now();
   const ip = clientIp(request);
-  if (isRateLimited(ip, now)) {
+  try {
+    const sharedLimited = await isSharedRateLimited(ip);
+    if (sharedLimited === true || (sharedLimited === null && isRateLimited(ip, now))) {
     return NextResponse.json(
       { ok: false, error: "Troppi tentativi. Riprova tra qualche minuto." },
       { status: 429, headers: { "Retry-After": String(Math.ceil(WINDOW_MS / 1000)) } }
+      );
+    }
+  } catch (error) {
+    console.error("Shared login limiter error:", error);
+    return NextResponse.json(
+      { ok: false, error: "Accesso temporaneamente non disponibile. Riprova tra poco." },
+      { status: 503, headers: { "Retry-After": "60" } }
     );
   }
 
