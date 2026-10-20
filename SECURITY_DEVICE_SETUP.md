@@ -43,7 +43,7 @@ The service-role key bypasses RLS, so every future server endpoint using it must
 
 ### Relationship validation pass (2026-10-20)
 
-The protected Orders API now verifies that a linked job belongs to the selected vehicle on order creation, and validates the final vehicle/job pair on order edits (including when only one of those fields changes). This prevents an authenticated caller from linking an order to an unrelated vehicle's job by supplying valid but mismatched IDs. This is a source-level fix; the new build must pass and the existing Preview order workflows should remain covered by the previously completed smoke tests.
+The protected Orders API now verifies that a linked job belongs to the selected vehicle on order creation, and validates the final vehicle/job pair on order edits (including when only one of those fields changes). The protected vehicle-profile PATCH now also verifies that Client 1 is the selected vehicle's primary/legacy client and that Client 2 is linked as the secondary client before updating personal data. These checks prevent valid-but-unrelated IDs from being used to link orders or edit another vehicle's client through a profile request. These are source-level fixes; the latest build must pass and the existing Preview order/profile workflows should remain covered by the previously completed smoke tests.
 
 Remaining authorization gate: sales-announcement photos still lack server-side listing ownership because listing metadata is browser-local. Do not describe point 1 as fully production-ready until this is resolved or the feature is deliberately kept unavailable in Production.
 
