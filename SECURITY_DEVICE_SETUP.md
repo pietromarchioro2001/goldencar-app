@@ -52,7 +52,7 @@ The login endpoint now supports a deployment-wide Upstash Redis limiter. Configu
 
 With both variables absent, only the best-effort per-instance fallback runs; that is not sufficient for Production. If only one variable is set, or Redis is configured but unavailable, login fails closed with HTTP 503 rather than bypassing the shared limiter. Alternatively, an edge/WAF rule scoped to `POST /api/auth/device` can provide deployment-wide throttling.
 
-Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. After configuring Redis or the edge rule, test repeated login requests across separate requests/instances, verify HTTP 429 after the threshold, and confirm a correct password works again after the limit expires. The current Redis limiter counts login requests (not only failed passwords), so tune the threshold/window deliberately and verify expected legitimate usage.
+Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. The endpoint prefers `x-real-ip` and otherwise uses the final address appended to `x-forwarded-for`; keep it behind the trusted Vercel proxy. After configuring Redis or the edge rule, test repeated login requests across separate requests/instances, verify HTTP 429 after the threshold, and confirm a correct password works again after the limit expires. The current Redis limiter counts login requests (not only failed passwords), so tune the threshold/window deliberately and verify expected legitimate usage.
 
 ## R2 authorization boundary — required before Production
 
