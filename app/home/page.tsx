@@ -867,14 +867,42 @@ export default function Home() {
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
   };
   const inviaOrdineHome = async (ordine: Ordine) => {
-    const supplier = fornitori.find(s => s.id === ordine.supplierId);
-    if (!supplier?.whatsapp) { alert("Il fornitore non ha un numero WhatsApp."); return; }
-    const numero = supplier.whatsapp.replace(/\D/g,"");
-    const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordine.id, stato: "INVIATO" }) });
-    const result = await response.json();
-    if (!response.ok || !result?.ok) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: " + (result?.error || "Errore sconosciuto.")); return; }
+    // Usa il fornitore attualmente selezionato nel modale, non quello salvato
+    // in precedenza sull'ordine: l'utente può averlo appena cambiato.
+    const supplierId = String(ordineFornitoreId || ordine.supplierId || "").trim();
+    const supplier = fornitori.find((item) => String(item.id).trim() === supplierId);
+    if (!supplierId || !supplier) {
+      alert("Seleziona un fornitore prima di inviare l'ordine.");
+      return;
+    }
+    const numero = String(supplier.whatsapp || "").replace(/\D/g, "");
+    if (!numero) {
+      alert(`Il fornitore "${supplier.nome}" non ha un numero WhatsApp valido nella rubrica. Apri la rubrica fornitori e verifica il numero.`);
+      return;
+    }
+
+    const descrizione = ordineDescrizione.trim() || ordine.descrizione || "";
+    const testo = `Ciao, ordine ${ordine.numero || ""}: ${descrizione} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (!whatsappWindow) {
+      alert("Il browser ha bloccato l'apertura di WhatsApp. Consenti i popup e riprova.");
+      return;
+    }
+    whatsappWindow.opener = null;
+    whatsappWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(testo)}`;
+
+    // Salva nello stesso aggiornamento fornitore scelto, descrizione e stato ordine.
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordine.id, supplierId, description: descrizione, stato: "INVIATO" }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      alert("WhatsApp è stato aperto, ma non ho potuto aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
+      return;
+    }
+    setOrdineAperto(null);
     await caricaDati();
   };
   const salvaFornitoreHome = async () => {
