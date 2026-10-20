@@ -1061,6 +1061,7 @@ export default function Veicolo() {
     try {
       const response = await fetch('/api/vehicles/media?vehicleId=' + encodeURIComponent(profiloVeicolo?.id || ''), { cache: 'no-store' });
       const mediaResult = await response.json();
+      if (mediaLoadIdRef.current !== loadId) return;
       if (!response.ok || !mediaResult?.ok) throw new Error(mediaResult?.error || 'Errore caricamento documenti.');
 
       const vehicleMedia = Array.isArray(mediaResult.media) ? mediaResult.media : [];
@@ -1088,41 +1089,36 @@ export default function Veicolo() {
       setMediaItems([...vehicleItems, ...jobItems]);
       setMediaCaricamento(false);
 
-      void Promise.all([
-        ...vehicleItems.map(async (item) => {
+      const aggiornaAnteprima = (id: string, url: string) => {
+        if (mediaLoadIdRef.current !== loadId) {
+          if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+          return;
+        }
+        setMediaItems((current) => current.map((item) => item.id === id ? { ...item, url } : item));
+      };
+
+      // Ogni anteprima appare appena pronta, senza aspettare il file più lento.
+      for (const item of vehicleItems) {
+        void (async () => {
           try {
             const response = await fetch('/api/r2/file?key=' + encodeURIComponent(item.r2Key || ''), { cache: 'no-store' });
             const data = await response.json();
-            return response.ok && data?.downloadUrl
-              ? { id: item.id, url: String(data.downloadUrl) }
-              : null;
-          } catch {
-            return null;
+            if (response.ok && data?.downloadUrl) aggiornaAnteprima(item.id, String(data.downloadUrl));
+          } catch (error) {
+            console.error('Errore caricamento anteprima media:', error);
           }
-        }),
-        ...jobItems.map(async (item) => {
+        })();
+      }
+      for (const item of jobItems) {
+        void (async () => {
           try {
             const blob = await loadMediaBlob(item.id);
-            return blob ? { id: item.id, url: URL.createObjectURL(blob) } : null;
-          } catch {
-            return null;
+            if (blob) aggiornaAnteprima(item.id, URL.createObjectURL(blob));
+          } catch (error) {
+            console.error('Errore caricamento anteprima locale:', error);
           }
-        }),
-      ]).then((resolved) => {
-        if (mediaLoadIdRef.current !== loadId) {
-          resolved.forEach((entry) => {
-            if (entry?.url.startsWith('blob:')) URL.revokeObjectURL(entry.url);
-          });
-          return;
-        }
-        const urls = new Map(resolved.filter((entry): entry is { id: string; url: string } => Boolean(entry)).map((entry) => [entry.id, entry.url]));
-        setMediaItems((current) => current.map((item) => {
-          const url = urls.get(item.id);
-          return url ? { ...item, url } : item;
-        }));
-      }).catch((error) => {
-        console.error('Errore caricamento anteprime media:', error);
-      });
+        })();
+      }
     } catch (error) {
       console.error('Errore caricamento media veicolo:', error);
       setMediaItems([]);
