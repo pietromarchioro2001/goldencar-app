@@ -41,6 +41,12 @@ Preview status: the user has confirmed the latest Preview is green and the teste
 
 The service-role key bypasses RLS, so every future server endpoint using it must perform its own device-session check and input/record validation.
 
+### Relationship validation pass (2026-10-20)
+
+The protected Orders API now verifies that a linked job belongs to the selected vehicle on order creation, and validates the final vehicle/job pair on order edits (including when only one of those fields changes). This prevents an authenticated caller from linking an order to an unrelated vehicle's job by supplying valid but mismatched IDs. This is a source-level fix; the new build must pass and the existing Preview order workflows should remain covered by the previously completed smoke tests.
+
+Remaining authorization gate: sales-announcement photos still lack server-side listing ownership because listing metadata is browser-local. Do not describe point 1 as fully production-ready until this is resolved or the feature is deliberately kept unavailable in Production.
+
 
 ## Shared login throttling — required before Production
 
