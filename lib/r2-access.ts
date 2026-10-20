@@ -92,9 +92,9 @@ export async function isR2KeyAuthorized(key: string, operation: R2Operation): Pr
   }
 
   const { data: vehicleMedia, error: mediaError } = await client
-    .from("vehicle_media").select("id").eq("r2_key", key).maybeSingle();
+    .from("vehicle_media").select("id, vehicle_id").eq("r2_key", key).maybeSingle();
   if (mediaError) throw mediaError;
-  if (vehicleMedia) return true;
+  if (vehicleMedia && vehicleMedia.vehicle_id === vehicleId) return true;
 
   const { data: vehicleDocument, error: documentError } = await client
     .from("vehicle_documents").select("id").eq("vehicle_id", vehicleId).eq("r2_key", key).maybeSingle();
