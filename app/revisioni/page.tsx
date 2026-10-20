@@ -168,7 +168,7 @@ function whatsappIcon() {
 
 export default function RevisioniPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<"REVISIONI" | "LAVORI">("REVISIONI");
+  const [tab, setTab] = useState<"REVISIONI" | "LAVORI">("LAVORI");
   const [lavori, setLavori] = useState<Lavoro[]>([]);
   const [pdfLoading, setPdfLoading] = useState<number | null>(null);
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
@@ -234,7 +234,7 @@ export default function RevisioniPage() {
   };
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
-    setTab(requestedTab === "lavori" ? "LAVORI" : "REVISIONI");
+    setTab(requestedTab === "revisioni" ? "REVISIONI" : "LAVORI");
     void caricaDatiProtetti();
     const refresh = () => { void caricaDatiProtetti(); };
     window.addEventListener("storage", refresh);
