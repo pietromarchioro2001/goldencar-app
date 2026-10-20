@@ -147,7 +147,9 @@ export async function POST(request: Request) {
   const plate=clean(vehicle?.targa,24).replace(/[^A-Z0-9]/g,"").toUpperCase();
   if(!validId(vehicleId)||!client1||!cf1||!vehicle||!plate||!clean(vehicle.veicolo,160))return NextResponse.json({ok:false,error:"Dati del profilo incompleti o non validi."},{status:400});
   if(client2&&(!clean(client2.cf,32)||!clean(client2.cf,32).trim()))return NextResponse.json({ok:false,error:"Codice fiscale Cliente 2 mancante."},{status:400});
-  if(!documents||!clean(documents.cliente,500)||!clean(documents.veicolo,500))return NextResponse.json({ok:false,error:"Documenti del libretto mancanti."},{status:400});
+  const expectedClientDocumentKey=`veicoli/${vehicleId}/libretto-cliente.jpg`;
+  const expectedVehicleDocumentKey=`veicoli/${vehicleId}/libretto-veicolo.jpg`;
+  if(!documents||clean(documents.cliente,500)!==expectedClientDocumentKey||clean(documents.veicolo,500)!==expectedVehicleDocumentKey)return NextResponse.json({ok:false,error:"Chiavi dei documenti del libretto non valide."},{status:400});
   try{
     const client=supabase();
     const clientFields=(value:Record<string,unknown>)=>({nome:[clean(value.nome,120),clean(value.cognome,120)].filter(Boolean).join(" "),indirizzo:clean(value.indirizzo,300),telefono:clean(value.telefono,60),data_nascita:clean(value.nascita,30)||null,codice_fiscale:clean(value.cf,32).toUpperCase()});
