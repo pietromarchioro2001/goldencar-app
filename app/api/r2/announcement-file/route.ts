@@ -26,8 +26,12 @@ export async function POST(request: Request) {
     const contentType = typeof body.contentType === "string" && body.contentType.trim()
       ? body.contentType.trim()
       : "image/jpeg";
-    if (contentType.length > 200 || /[\r\n]/.test(contentType) || !contentType.toLowerCase().startsWith("image/")) {
-      return NextResponse.json({ ok: false, error: "Tipo immagine non valido." }, { status: 400 });
+    const allowedImageTypes = new Set([
+      "image/jpeg", "image/png", "image/webp", "image/avif",
+      "image/gif", "image/bmp", "image/heic", "image/heif",
+    ]);
+    if (contentType.length > 200 || /[\r\n]/.test(contentType) || !allowedImageTypes.has(contentType.toLowerCase())) {
+      return NextResponse.json({ ok: false, error: "Formato immagine non consentito." }, { status: 400 });
     }
     const uploadUrl = await createUploadUrl(body.key, contentType);
     return NextResponse.json({ ok: true, uploadUrl, key: body.key });
