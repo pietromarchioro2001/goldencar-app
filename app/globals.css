@@ -479,3 +479,10 @@ textarea {
     overscroll-behavior: contain;
   }
 }
+
+@media (min-width: 601px) {
+  .bottom-navigation a {
+    flex: 1 1 0;
+    width: auto !important;
+  }
+}
