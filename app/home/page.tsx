@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
-import { fetchJsonCached } from "@/lib/client-api-cache";
+import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
 
 
 type Lavoro = {
@@ -229,6 +229,8 @@ export default function Home() {
   const conteggiRequestRef = useRef(0);
 
   const caricaConteggiRapidi = async () => {
+    // I conteggi devono leggere lo stato appena scritto, non la cache breve della Home.
+    invalidateApiCache("/api/home/counts");
     const requestId = ++conteggiRequestRef.current;
     const oggi = new Date();
     const inizio = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
@@ -278,10 +280,23 @@ export default function Home() {
         sessionStorage.removeItem("goldencar_nuovo_ordine");
       }
     }
-    const refresh = () => { void caricaDati(false); void caricaConteggiRapidi(); };
+    const refresh = () => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+      void caricaConteggiRapidi();
+    };
+    // Allinea le altre postazioni senza richiedere un aggiornamento manuale:
+    // conteggi ogni 5 s, dati completi ogni 10 s.
+    const countsTimer = window.setInterval(() => { void caricaConteggiRapidi(); }, 5000);
+    const dataTimer = window.setInterval(() => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+    }, 10000);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
+      window.clearInterval(countsTimer);
+      window.clearInterval(dataTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("focus", refresh);
     };
@@ -891,19 +906,32 @@ export default function Home() {
     whatsappWindow.opener = null;
     whatsappWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(testo)}`;
 
-    // Salva nello stesso aggiornamento fornitore scelto, descrizione e stato ordine.
+    // Aggiornamento ottimistico: la UI riflette subito l'invio, senza attendere Supabase.
+    const statoPrecedente = ordine.stato;
+    setOrdini((current) => current.map((item) =>
+      item.id === ordine.id ? { ...item, stato: "INVIATO", supplierId, descrizione } : item
+    ));
+    setOrdineAperto({ ...ordine, stato: "INVIATO", supplierId, descrizione });
+
     const response = await fetch("/api/orders", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: ordine.id, supplierId, description: descrizione, stato: "INVIATO" }),
+      cache: "no-store",
     });
     const result = await response.json().catch(() => null);
     if (!response.ok || !result?.ok) {
+      setOrdini((current) => current.map((item) =>
+        item.id === ordine.id ? { ...item, stato: statoPrecedente } : item
+      ));
+      setOrdineAperto({ ...ordine, stato: statoPrecedente });
       alert("WhatsApp è stato aperto, ma non ho potuto aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
       return;
     }
+    invalidateApiCache("/api/home");
     setOrdineAperto(null);
-    await caricaDati();
+    void caricaDati(false);
+    void caricaConteggiRapidi();
   };
   const salvaFornitoreHome = async () => {
     const nome = fornitoreEditNome.trim();
