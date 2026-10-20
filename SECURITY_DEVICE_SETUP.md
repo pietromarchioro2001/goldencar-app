@@ -48,17 +48,11 @@ The protected Orders API now verifies that a linked job belongs to the selected 
 Scope decision (2026-10-20): sales-announcement photos do not require per-listing ownership checks for this project. Their protection is the dedicated R2 endpoint, device-session authorization, strict `annunci/` key validation, raster-only content types, and rejection by the generic vehicle-file endpoints. Do not migrate sales listings to server-side storage just for this security pass.
 
 
-## Shared login throttling — required before Production
+## Login attempt throttling
 
-The in-memory counter in `app/api/auth/device/route.ts` is only best-effort. It is not shared between Vercel serverless instances and must not be treated as production brute-force protection.
+The device-password endpoint uses a best-effort in-memory counter: after 8 failed attempts from the same detected IP within a 15-minute window, further attempts are temporarily rejected. This requires no external service or additional environment variables.
 
-The login endpoint now supports a deployment-wide Upstash Redis limiter. Configure both of these server-side Vercel environment variables to activate it:
-- `UPSTASH_REDIS_REST_URL`
-- `UPSTASH_REDIS_REST_TOKEN`
-
-In Vercel Production, both variables are mandatory: if they are absent or incomplete, login fails closed with HTTP 503 rather than falling back to the per-instance counter. In Preview/development, both variables may be absent and the local best-effort fallback remains available for testing. If Redis is configured but unavailable, login fails closed with HTTP 503. Alternatively, an edge/WAF rule scoped to `POST /api/auth/device` can provide deployment-wide throttling.
-
-Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. The endpoint prefers `x-real-ip` and otherwise uses the final address appended to `x-forwarded-for`; keep it behind the trusted Vercel proxy. After configuring Redis or the edge rule, test repeated login requests across separate requests/instances, verify HTTP 429 after the threshold, and confirm a correct password works again after the limit expires. The Redis counter increments on each attempt and is reset after a successful login. Tune the threshold/window deliberately and verify expected legitimate usage.
+Important limitation: Vercel serverless instances do not share memory, so this is a basic deterrent, not a deployment-wide brute-force limit. Keep the endpoint behind the trusted Vercel proxy, and do not treat this control as a substitute for the device password, signed HttpOnly session cookie, or authorization checks inside protected API handlers.
 
 ## R2 authorization boundary — required before Production
 
