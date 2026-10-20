@@ -25,8 +25,7 @@ export default function AccessoPage() {
         setError(result.error || "Accesso non riuscito.");
         return;
       }
-      const next = new URLSearchParams(window.location.search).get("next");
-      router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/home");
+      router.replace("/home");
       router.refresh();
     } catch {
       setError("Connessione non disponibile. Riprova.");
