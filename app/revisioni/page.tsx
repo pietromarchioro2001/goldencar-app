@@ -13,7 +13,7 @@ const apiRequests = new Map<string, Promise<any>>();
 async function fetchJsonCached(url: string): Promise<any> {
   const now = Date.now();
   const cached = apiCache.get(url);
-  if (cached && now - cached.savedAt < 4000) return cached.value;
+  if (cached && now - cached.savedAt < 1500) return cached.value;
   const pending = apiRequests.get(url);
   if (pending) return pending;
 
