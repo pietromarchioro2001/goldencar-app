@@ -224,7 +224,7 @@ async function photos(e:ChangeEvent<HTMLInputElement>){
 
 
 
-  return <main style={S.page}><div style={S.wrap}>
+  return <main className="responsive-page" style={S.page}><div className="responsive-content" style={S.wrap}>
 
     {view==="list"&&<><div style={S.pageHeader}>
 
