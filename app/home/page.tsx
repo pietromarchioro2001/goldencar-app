@@ -15,12 +15,17 @@ async function fetchJsonCached(url: string): Promise<any> {
   if (pending) return pending;
 
   const request = (async () => {
+    let rejectStaleCache = false;
     try {
       const response = await fetch(url, { cache: "no-store" });
       const result = await response.json().catch(() => null);
       if (!response.ok || !result?.ok) {
-        // Never hide an expired/invalid session behind cached private data.
-        if ((response.status === 401 || response.status === 403) || !cached || Date.now() - cached.savedAt > 30000) {
+        if (response.status === 401 || response.status === 403) {
+          rejectStaleCache = true;
+          apiCache.delete(url);
+          throw new Error(result?.error || "Sessione non valida.");
+        }
+        if (!cached || Date.now() - cached.savedAt > 30000) {
           throw new Error(result?.error || `Richiesta fallita (${response.status})`);
         }
         return cached.value;
@@ -28,7 +33,7 @@ async function fetchJsonCached(url: string): Promise<any> {
       apiCache.set(url, { value: result, savedAt: Date.now() });
       return result;
     } catch (error) {
-      if (cached && Date.now() - cached.savedAt <= 30000) return cached.value;
+      if (!rejectStaleCache && cached && Date.now() - cached.savedAt <= 30000) return cached.value;
       throw error;
     } finally {
       apiRequests.delete(url);
