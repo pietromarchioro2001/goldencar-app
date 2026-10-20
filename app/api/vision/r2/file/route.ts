@@ -1,4 +1,5 @@
 import { isDeviceRequestAuthorized } from "@/lib/device-auth";
+import { isR2KeyAuthorized } from "@/lib/r2-access";
 import { NextResponse } from "next/server";
 import {
   createDownloadUrl,
@@ -27,6 +28,9 @@ export async function POST(request: Request) {
     const contentType = body?.contentType == null ? "application/octet-stream" : body.contentType;
     if (!key || !validContentType(contentType)) return NextResponse.json({ ok: false, error: "Chiave R2 o Content-Type non valido." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "upload"))) {
+      return NextResponse.json({ ok: false, error: "La chiave non è autorizzata per questo file." }, { status: 403 });
+    }
     const uploadUrl = await createUploadUrl(key, contentType);
 
     return NextResponse.json({
@@ -59,6 +63,9 @@ export async function GET(request: Request) {
     const key = cleanKey(searchParams.get("key"));
     if (!key) return NextResponse.json({ ok: false, error: "Chiave R2 mancante." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "read"))) {
+      return NextResponse.json({ ok: false, error: "File non associato a un record autorizzato." }, { status: 403 });
+    }
     const downloadUrl = await createDownloadUrl(key);
 
     return NextResponse.json({
@@ -91,6 +98,9 @@ export async function DELETE(request: Request) {
     const key = cleanKey(body?.key);
     if (!key) return NextResponse.json({ ok: false, error: "Chiave R2 mancante." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "delete"))) {
+      return NextResponse.json({ ok: false, error: "Eliminazione non autorizzata per questo file." }, { status: 403 });
+    }
     await deleteR2Object(key);
 
     return NextResponse.json({
