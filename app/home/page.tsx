@@ -2,6 +2,41 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
+
+type ApiCacheEntry = { value: any; savedAt: number };
+const apiCache = new Map<string, ApiCacheEntry>();
+const apiRequests = new Map<string, Promise<any>>();
+
+async function fetchJsonCached(url: string): Promise<any> {
+  const now = Date.now();
+  const cached = apiCache.get(url);
+  if (cached && now - cached.savedAt < 4000) return cached.value;
+  const pending = apiRequests.get(url);
+  if (pending) return pending;
+
+  const request = (async () => {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.ok) {
+        // Never hide an expired/invalid session behind cached private data.
+        if ((response.status === 401 || response.status === 403) || !cached || Date.now() - cached.savedAt > 30000) {
+          throw new Error(result?.error || `Richiesta fallita (${response.status})`);
+        }
+        return cached.value;
+      }
+      apiCache.set(url, { value: result, savedAt: Date.now() });
+      return result;
+    } catch (error) {
+      if (cached && Date.now() - cached.savedAt <= 30000) return cached.value;
+      throw error;
+    } finally {
+      apiRequests.delete(url);
+    }
+  })();
+  apiRequests.set(url, request);
+  return request;
+}
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
@@ -239,20 +274,18 @@ export default function Home() {
     });
 
     // Conteggi essenziali indipendenti dal caricamento delle liste complete.
-    void fetch("/api/home/counts?" + params.toString(), { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setConteggiRapidi(result.counts);
+    void fetchJsonCached("/api/home/counts?" + params.toString())
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok && result.counts) setConteggiRapidi(result.counts);
       })
       .catch((error) => console.error("Errore conteggi rapidi Home:", error));
 
-    // I solleciti richiedono un'aggregazione distinta per cliente: non rallentano le altre card.
-    void fetch("/api/home/counts/reminders", { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setSollecitiRapido(Number(result.count) || 0);
+    // La risposta viene condivisa tra navigazioni ravvicinate e richieste simultanee.
+    void fetchJsonCached("/api/home/counts/reminders")
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok) setSollecitiRapido(Number(result.count) || 0);
       })
       .catch((error) => console.error("Errore conteggio solleciti Home:", error));
   };
@@ -406,19 +439,16 @@ export default function Home() {
 
   const caricaDati = async (aggiornaConteggi = true) => {
     if (typeof window === "undefined") return;
-    const response = await fetch("/api/home", { cache: "no-store" });
-    const result = await response.json().catch(() => null);
-    if (!response.ok || !result?.ok) {
-      console.error("Errore caricamento dati Home:", result?.error || response.status);
-      setLavori([]);
-      setPagamentiManuali([]);
-      setSolleciti([]);
-      setAppuntamenti([]);
-      setRevisioni([]);
-      setOrdini([]);
-      setFornitori([]);
-      setVeicoliOrdini([]);
-      setClientiAnagrafica([]);
+    let result: any;
+    try {
+      result = await fetchJsonCached("/api/home");
+    } catch (error) {
+      // Mantieni l'ultimo stato valido: un errore temporaneo non deve svuotare le card.
+      console.error("Errore caricamento dati Home:", error);
+      return;
+    }
+    if (!result?.ok) {
+      console.error("Errore caricamento dati Home:", result?.error || "Risposta non valida");
       return;
     }
     const jobRows = Array.isArray(result.jobs) ? result.jobs : [];
