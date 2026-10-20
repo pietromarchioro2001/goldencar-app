@@ -2,7 +2,7 @@
 
 
 
-import { useEffect, useState, type ReactNode, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
 
 
 
@@ -339,6 +339,7 @@ export default function Veicolo() {
 
 
   const [mediaCaricamento, setMediaCaricamento] = useState(false);
+  const mediaLoadIdRef = useRef(0);
 
 
 
@@ -987,7 +988,7 @@ export default function Veicolo() {
 
   const chiudiMedia = () => {
 
-
+    mediaLoadIdRef.current += 1;
 
     mediaItems.forEach((item) => {
 
@@ -1052,30 +1053,75 @@ export default function Veicolo() {
   };
 
   const apriMedia = async () => {
+    const loadId = ++mediaLoadIdRef.current;
     setMediaAperto(true);
     setMediaCaricamento(true);
     setMediaVisualizzato(null);
+
     try {
       const response = await fetch('/api/vehicles/media?vehicleId=' + encodeURIComponent(profiloVeicolo?.id || ''), { cache: 'no-store' });
       const mediaResult = await response.json();
+      if (mediaLoadIdRef.current !== loadId) return;
       if (!response.ok || !mediaResult?.ok) throw new Error(mediaResult?.error || 'Errore caricamento documenti.');
+
       const vehicleMedia = Array.isArray(mediaResult.media) ? mediaResult.media : [];
-      const vehicleItems = await Promise.all(vehicleMedia.map(async (item: any) => {
-        let url: string | undefined;
-        try {
-          const response = await fetch('/api/r2/file?key=' + encodeURIComponent(String(item.r2_key)));
-          const data = await response.json();
-          if (response.ok && data?.downloadUrl) url = data.downloadUrl;
-        } catch {}
-        return { id: String(item.id), name: String(item.name || 'File'), type: String(item.mime_type || 'application/octet-stream'), size: Number(item.size || 0), createdAt: String(item.created_at || ''), source: 'vehicle' as const, r2Key: String(item.r2_key || ''), jobNumber: 0, jobDate: String(item.created_at || ''), jobType: 'Documenti veicolo', url };
+      const vehicleItems = vehicleMedia.map((item: any) => ({
+        id: String(item.id),
+        name: String(item.name || 'File'),
+        type: String(item.mime_type || 'application/octet-stream'),
+        size: Number(item.size || 0),
+        createdAt: String(item.created_at || ''),
+        source: 'vehicle' as const,
+        r2Key: String(item.r2_key || ''),
+        jobNumber: 0,
+        jobDate: String(item.created_at || ''),
+        jobType: 'Documenti veicolo',
       }));
-      const jobItems = lavori.flatMap((lavoro) => (lavoro.media || []).map((media) => ({ ...media, source: 'job' as const, jobNumber: lavoro.jobNumber, jobDate: lavoro.createdAt, jobType: lavoro.types?.join(' · ') || lavoro.works?.trim() || 'Lavoro' })));
-      const loadedJobs = await Promise.all(jobItems.map(async (item) => { const blob = await loadMediaBlob(item.id); return { ...item, url: blob ? URL.createObjectURL(blob) : undefined }; }));
-      setMediaItems([...vehicleItems, ...loadedJobs]);
+      const jobItems = lavori.flatMap((lavoro) => (lavoro.media || []).map((media) => ({
+        ...media,
+        source: 'job' as const,
+        jobNumber: lavoro.jobNumber,
+        jobDate: lavoro.createdAt,
+        jobType: lavoro.types?.join(' · ') || lavoro.works?.trim() || 'Lavoro',
+      })));
+
+      // Mostra subito l'elenco: le anteprime vengono caricate in background.
+      setMediaItems([...vehicleItems, ...jobItems]);
+      setMediaCaricamento(false);
+
+      const aggiornaAnteprima = (id: string, url: string) => {
+        if (mediaLoadIdRef.current !== loadId) {
+          if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+          return;
+        }
+        setMediaItems((current) => current.map((item) => item.id === id ? { ...item, url } : item));
+      };
+
+      // Ogni anteprima appare appena pronta, senza aspettare il file più lento.
+      for (const item of vehicleItems) {
+        void (async () => {
+          try {
+            const response = await fetch('/api/r2/file?key=' + encodeURIComponent(item.r2Key || ''), { cache: 'no-store' });
+            const data = await response.json();
+            if (response.ok && data?.downloadUrl) aggiornaAnteprima(item.id, String(data.downloadUrl));
+          } catch (error) {
+            console.error('Errore caricamento anteprima media:', error);
+          }
+        })();
+      }
+      for (const item of jobItems) {
+        void (async () => {
+          try {
+            const blob = await loadMediaBlob(item.id);
+            if (blob) aggiornaAnteprima(item.id, URL.createObjectURL(blob));
+          } catch (error) {
+            console.error('Errore caricamento anteprima locale:', error);
+          }
+        })();
+      }
     } catch (error) {
       console.error('Errore caricamento media veicolo:', error);
       setMediaItems([]);
-    } finally {
       setMediaCaricamento(false);
     }
   };
@@ -1087,7 +1133,15 @@ export default function Veicolo() {
     try {
       if (item.source === 'vehicle') {
         if (item.r2Key) {
-          await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: item.r2Key }) });
+          const r2Response = await fetch('/api/r2/file', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: item.r2Key }),
+          });
+          const r2Result = await r2Response.json().catch(() => null);
+          if (!r2Response.ok || !r2Result?.ok) {
+            throw new Error(r2Result?.error || 'Impossibile eliminare il file da R2.');
+          }
         }
         const response = await fetch('/api/vehicles/media', {
           method: 'DELETE',
@@ -2774,66 +2828,93 @@ export default function Veicolo() {
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 9 }}>
                       {group.items.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => apriMediaInNuovaFinestra(item)}
-                          title={item.name}
-                          style={{
-                            border: "none",
-                            padding: 0,
-                            background: "#FFFFFF",
-                            borderRadius: 15,
-                            overflow: "hidden",
-                            minWidth: 0,
-                            cursor: "pointer",
-                            boxShadow: "0 3px 10px rgba(0,0,0,.07)",
-                          }}
-                        >
-                          {item.url && isImageMedia(item) ? (
-                            <img
-                              src={item.url}
-                              alt={item.name}
-                              style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover" }}
-                            />
-                          ) : item.url && isVideoMedia(item) ? (
-                            <video
-                              src={item.url}
-                              muted
-                              playsInline
-                              preload="metadata"
-                              style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover", background: "#E2E8F0" }}
-                            />
-                          ) : (
-                            <div
-                              style={{
-                                aspectRatio: "1 / 1",
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                padding: 8,
-                                color: "#475569",
-                                background: "#EEF1F5",
-                              }}
-                            >
-                              <div style={{ fontSize: 28 }}>▤</div>
+                        <div key={item.id} style={{ position: "relative", minWidth: 0 }}>
+                          <button
+                            type="button"
+                            onClick={() => apriMediaInNuovaFinestra(item)}
+                            title={item.name}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              border: "none",
+                              padding: 0,
+                              background: "#FFFFFF",
+                              borderRadius: 15,
+                              overflow: "hidden",
+                              minWidth: 0,
+                              cursor: "pointer",
+                              boxShadow: "0 3px 10px rgba(0,0,0,.07)",
+                            }}
+                          >
+                            {item.url && isImageMedia(item) ? (
+                              <img
+                                src={item.url}
+                                alt={item.name}
+                                style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover" }}
+                              />
+                            ) : item.url && isVideoMedia(item) ? (
+                              <video
+                                src={item.url}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                style={{ display: "block", width: "100%", aspectRatio: "1 / 1", objectFit: "cover", background: "#E2E8F0" }}
+                              />
+                            ) : (
                               <div
                                 style={{
-                                  marginTop: 7,
-                                  fontSize: 10,
-                                  fontWeight: 800,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                  width: "100%",
+                                  aspectRatio: "1 / 1",
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  padding: 8,
+                                  color: "#475569",
+                                  background: "#EEF1F5",
                                 }}
                               >
-                                {estensioneMedia(item)}
+                                <div style={{ fontSize: 28 }}>▤</div>
+                                <div
+                                  style={{
+                                    marginTop: 7,
+                                    fontSize: 10,
+                                    fontWeight: 800,
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    width: "100%",
+                                  }}
+                                >
+                                  {estensioneMedia(item)}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </button>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={'Elimina ' + item.name}
+                            title="Elimina file"
+                            onClick={() => void eliminaMedia(item)}
+                            style={{
+                              position: "absolute",
+                              top: 6,
+                              right: 6,
+                              width: 30,
+                              height: 30,
+                              border: "none",
+                              borderRadius: 9,
+                              background: "#DC2626",
+                              color: "#FFFFFF",
+                              fontSize: 20,
+                              lineHeight: 1,
+                              fontWeight: 900,
+                              cursor: "pointer",
+                              boxShadow: "0 2px 8px rgba(0,0,0,.25)",
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </section>
