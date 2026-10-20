@@ -31,7 +31,7 @@ The route returns HTTP 503 if this variable or the Supabase URL is missing. Unti
 
 ## Preview migration verification
 
-On the security Preview, verify:
+Preview status: the user has confirmed the latest Preview is green and the tested flows work. Keep the checks below as the final regression checklist before merge/Production:
 - unauthenticated requests to every protected database API return HTTP 401;
 - an authenticated session can load Home, Agenda, Orders, Revisions, vehicle/profile, and Job Sheet;
 - create, edit, and delete operations persist and remain correct after refreshing;
@@ -46,11 +46,13 @@ The service-role key bypasses RLS, so every future server endpoint using it must
 
 The in-memory counter in `app/api/auth/device/route.ts` is only best-effort. It is not shared between Vercel serverless instances and must not be treated as production brute-force protection.
 
-Choose and configure one deployment-wide mechanism before production rollout:
-- a Vercel/edge WAF rate-limit rule scoped to `POST /api/auth/device`, with a per-client-IP threshold and a temporary block response; or
-- a shared-store limiter such as Upstash Redis, configured only with server-side environment variables.
+The login endpoint now supports a deployment-wide Upstash Redis limiter. Configure both of these server-side Vercel environment variables to activate it:
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
 
-Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. After configuring the chosen mechanism, test that repeated failed login attempts from the same source are blocked across separate requests/instances and that a correct password still works after the limit expires. If the shared limiter is unavailable, fail closed or ensure the edge rule remains active; do not silently claim the local in-memory counter is equivalent.
+With both variables absent, only the best-effort per-instance fallback runs; that is not sufficient for Production. If only one variable is set, or Redis is configured but unavailable, login fails closed with HTTP 503 rather than bypassing the shared limiter. Alternatively, an edge/WAF rule scoped to `POST /api/auth/device` can provide deployment-wide throttling.
+
+Do not add credentials to the repository or use `NEXT_PUBLIC_` variables. After configuring Redis or the edge rule, test repeated login requests across separate requests/instances, verify HTTP 429 after the threshold, and confirm a correct password works again after the limit expires. The current Redis limiter counts login requests (not only failed passwords), so tune the threshold/window deliberately and verify expected legitimate usage.
 
 ## R2 authorization boundary — required before Production
 
