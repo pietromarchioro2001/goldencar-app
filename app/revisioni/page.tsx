@@ -80,7 +80,7 @@ function toPdfData(lavoro: Lavoro): SchedaLavoroPDFData {
     notes: lavoro.notes || "",
     invoiceNumber: lavoro.invoiceNumber || "",
     products: lavoro.products || [],
-    status: lavoro.status,
+    status: lavoro.status === "DA_DOCUMENTARE" ? "IN_LAVORAZIONE" : lavoro.status,
   };
 }
 
