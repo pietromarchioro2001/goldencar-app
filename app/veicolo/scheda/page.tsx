@@ -130,7 +130,7 @@ type JobDraft = VeicoloScheda & {
   paymentStatus: "DA_PAGARE" | "PAGATO";
   media: MediaAttachment[];
 
-  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  status: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
 
   pdfUrl?: string;
   pdfR2Key?: string;
@@ -383,7 +383,9 @@ function jobIdToNumber(id: string): number {
 
 function normalizeJobStatus(value: unknown): JobDraft["status"] {
   const stato = String(value || "").toUpperCase();
-  return stato === "CONCLUSO" || stato === "CHIUSO" ? "CONCLUSO" : "IN_LAVORAZIONE";
+  if (stato === "CONCLUSO" || stato === "CHIUSO") return "CONCLUSO";
+  if (stato === "DA_DOCUMENTARE") return "DA_DOCUMENTARE";
+  return "IN_LAVORAZIONE";
 }
 
 function parseJobDetails(value: unknown): Record<string, any> {
@@ -1243,31 +1245,36 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
+  const saveDraft = async (action: "save" | "conclude" | "document" = "save"): Promise<JobDraft | null> => {
     if (saving) return null;
     if (!draft) {
       alert("Scheda non ancora caricata. Attendi un momento e riprova.");
       return null;
     }
 
-    if (conclude) {
+    if (action === "conclude" || action === "document") {
+      const confirmed = window.confirm(
+        action === "conclude"
+          ? "Confermi che il lavoro è terminato e deve passare alla fase di documentazione? La scheda resterà modificabile."
+          : "Confermi la documentazione definitiva? La scheda verrà bloccata e verrà generato il PDF."
+      );
+      if (!confirmed) return null;
+    }
+
+    if (action === "document") {
       const missing: string[] = [];
       if (!draft.kilometers.trim()) missing.push("chilometri");
       if (!draft.labor.trim()) missing.push("manodopera");
       if (!draft.invoiceNumber.trim()) missing.push("numero di fattura");
       if (missing.length) {
-        alert(`Prima di concludere il lavoro devi inserire: ${missing.join(", ")}.`);
+        alert(`Prima di documentare il lavoro devi inserire: ${missing.join(", ")}.`);
         return null;
       }
-      const confirmed = window.confirm(
-        "Sei sicuro di voler concludere questo lavoro?\n\nUna volta concluso, la scheda verrà considerata definitiva."
-      );
-      if (!confirmed) return null;
     }
 
     setSaving(true);
     try {
-    const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
+    const next = { ...draft, status: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : draft.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "IN_LAVORAZIONE" } as JobDraft;
     if (!next.vehicleId) {
       alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
       return null;
@@ -1292,8 +1299,8 @@ export default function SchedaLavoroPage() {
       manodopera: next.labor.trim() || null,
       note: next.notes.trim() || null,
       fattura: next.invoiceNumber.trim() || null,
-      stato: conclude ? "CONCLUSO" : "APERTO",
-      closed_at: conclude ? new Date().toISOString() : null,
+      stato: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : next.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "APERTO",
+      closed_at: action === "document" ? new Date().toISOString() : null,
       payment_amount: Number.isFinite(parsedPayment as number) ? parsedPayment : null,
       payment_status: next.paymentAmount.trim() ? next.paymentStatus : null,
       dettagli: details,
@@ -1324,7 +1331,12 @@ export default function SchedaLavoroPage() {
       console.error("Errore sincronizzazione ordine:", orderError);
       alert(orderError instanceof Error ? orderError.message : "La scheda è stata salvata, ma l'ordine non è stato aggiornato.");
     }
-    if (conclude) await generateAndOpenPdf(savedDraft);
+    if (action === "document") {
+      await generateAndOpenPdf(savedDraft);
+      const refreshed = await fetch("/api/jobs?id=" + encodeURIComponent(savedDraft.jobId || ""), { cache: "no-store" });
+      const refreshedResult = await refreshed.json().catch(() => null);
+      if (refreshed.ok && refreshedResult?.ok && refreshedResult?.job) setDraft(rowToJobDraft(refreshedResult.job));
+    }
     return savedDraft;
     } catch (error) {
       console.error("Errore salvataggio scheda:", error);
@@ -1408,7 +1420,7 @@ export default function SchedaLavoroPage() {
 
   const openInvoicing = () => {
 
-    saveDraft(false);
+    void saveDraft("save");
 
 
 
@@ -3127,6 +3139,30 @@ export default function SchedaLavoroPage() {
 
           </div>
 
+        ) : draft.status === "DA_DOCUMENTARE" ? (
+
+          <div style={{ padding: "0 18px" }}>
+            <button
+              type="button"
+              onClick={() => { void saveDraft("document"); }}
+              disabled={saving}
+              style={{
+                width: "100%",
+                height: 46,
+                border: 0,
+                borderRadius: 14,
+                background: "#15803D",
+                color: "#FFFFFF",
+                fontSize: 14,
+                fontWeight: 900,
+                boxShadow: "0 4px 14px rgba(21,128,61,.18)",
+                opacity: saving ? 0.65 : 1,
+              }}
+            >
+              {saving ? "DOCUMENTAZIONE..." : "DOCUMENTA"}
+            </button>
+          </div>
+
         ) : (
 
           <div
@@ -3151,7 +3187,7 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={() => saveDraft(true)}
+              onClick={() => saveDraft("conclude")}
 
               style={{
 
@@ -3189,7 +3225,7 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={() => { void saveDraft(false); }}
+              onClick={() => { void saveDraft("save"); }}
               disabled={saving}
               aria-label="Salva scheda di lavoro"
 
