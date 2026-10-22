@@ -2174,7 +2174,7 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={() => addProduct("FRENI")}
+                  addProduct={() => addProduct("MANUTENZIONE")}
 
                   markUnsaved={() => setSaved(false)}
                   category="FRENI"
