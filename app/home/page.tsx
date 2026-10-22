@@ -17,7 +17,7 @@ type Lavoro = {
   paymentStatus?: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   types?: string[];
   works?: string[] | string;
-  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  status?: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
   pdfUrl?: string;
 };
 type Appuntamento = {
@@ -470,7 +470,7 @@ export default function Home() {
         paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : row.payment_status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
         types: Array.isArray(dettagli.types) ? dettagli.types : row.tipo ? [String(row.tipo)] : [],
         works: Array.isArray(dettagli.works) ? dettagli.works : String(row.lavori ?? ""),
-        status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
+        status: String(row.stato ?? "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
         pdfUrl: String(dettagli.pdfUrl ?? ""),
       };
     });
@@ -514,7 +514,7 @@ export default function Home() {
     () =>
       lavori.filter(
         (lavoro) =>
-          lavoro.status === "IN_LAVORAZIONE"
+          lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE"
       ),
     [lavori]
   );
@@ -1895,7 +1895,7 @@ function LavoroRow({
             fontWeight: 700,
           }}
         >
-          SCHEDA #{lavoro.jobNumber}
+          {lavoro.status === "DA_DOCUMENTARE" ? "LAVORO TERMINATO" : "LAVORO ATTIVO"}
         </div>
         <div
           style={{
@@ -1924,8 +1924,8 @@ function LavoroRow({
       </div>
       <div
         style={{
-          background: "#FFF1C2",
-          color: "#92400E",
+          background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : "#FFF1C2",
+          color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : "#92400E",
           borderRadius: 999,
           padding:
             "6px 9px",
@@ -1935,7 +1935,7 @@ function LavoroRow({
             "nowrap",
         }}
       >
-        IN LAVORAZIONE
+        {lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : "IN LAVORAZIONE"}
       </div>
     </button>
   );
