@@ -3682,7 +3682,7 @@ function ProductChecklist({
 
         const index = draft.products.findIndex(
 
-          (product) => product.name === name
+          (product) => product.name === name && (product.category || "MANUTENZIONE") === category
 
         );
 
