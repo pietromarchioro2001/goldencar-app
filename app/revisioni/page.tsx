@@ -29,7 +29,7 @@ type Lavoro = {
   invoiceNumber: string;
   paymentAmount?: string;
   paymentStatus?: "DA_PAGARE" | "PAGATO";
-  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  status: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
   jobId?: string;
   pdfR2Key?: string;
 };
@@ -216,7 +216,7 @@ export default function RevisioniPage() {
         const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
         let products: Product[] = Array.isArray(details.products) ? details.products : [];
         if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
-        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
+        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
       });
       setLavori(conclusi);
     } catch (error) {
@@ -392,9 +392,13 @@ export default function RevisioniPage() {
         <section style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
           {lavoriFiltrati.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>{ricerca.trim() ? "Nessun lavoro trovato." : "Nessun lavoro concluso."}</div> : lavoriFiltrati.map((lavoro) => (
             <div key={lavoro.jobId || String(lavoro.jobNumber)} onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
-              <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+              {lavoro.status === "CONCLUSO" ? (
+                <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+              ) : (
+                <div aria-label="Lavoro da documentare" title="Lavoro da documentare" style={{ width: 48, height: 48, borderRadius: 15, background: "#FEF3C7", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
+              )}
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}><div style={{ minWidth: 0, fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div><div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#64748B" }}>{formatJobDate(lavoro.createdAt)}</div></div>
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}><div style={{ minWidth: 0, fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div><div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : "#64748B" }}>{lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : formatJobDate(lavoro.createdAt)}</div></div>
                 <div style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.nomeCliente || "Cliente non indicato"}</div>
                 <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#64748B" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.veicolo || "Veicolo non indicato"}</span><span style={{ color: "#CBD5E1" }}>•</span><span style={{ flexShrink: 0, fontWeight: 800, letterSpacing: ".3px" }}>{lavoro.targa || "—"}</span></div>
               </div>
