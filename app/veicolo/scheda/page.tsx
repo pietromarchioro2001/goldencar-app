@@ -3626,7 +3626,7 @@ function ProductChecklist({
 }: {
 
   products: string[];
-  category: "TAGLIANDO" | "FRENI" | "RICAMBI";
+  category: "TAGLIANDO" | "MANUTENZIONE";
 
   draft: JobDraft;
 
