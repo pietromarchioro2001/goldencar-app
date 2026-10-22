@@ -115,7 +115,7 @@ type JobDraft = VeicoloScheda & {
 
   problems: string[];
 
-  products: { name: string; details: string; quantity?: string; orderRequested?: boolean; category?: "TAGLIANDO" | "FRENI" | "RICAMBI" }[];
+  products: { name: string; details: string; quantity?: string; orderRequested?: boolean; category?: "TAGLIANDO" | "MANUTENZIONE" }[];
 
   works: string[];
 
@@ -533,6 +533,7 @@ export default function SchedaLavoroPage() {
   const [saving, setSaving] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
   const [tagliandoCatalog, setTagliandoCatalog] = useState<string[]>([]);
+  const [manutenzioneCatalog, setManutenzioneCatalog] = useState<string[]>([]);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -555,6 +556,10 @@ export default function SchedaLavoroPage() {
       .then((response) => response.ok ? response.json() : null)
       .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setTagliandoCatalog(result.products.map((item: { name: string }) => item.name)); })
       .catch((error) => console.warn("Catalogo prodotti tagliando non disponibile:", error));
+    fetch("/api/product-catalog?category=MANUTENZIONE", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setManutenzioneCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti manutenzione non disponibile:", error));
     return () => { active = false; };
   }, []);
 
@@ -817,7 +822,7 @@ export default function SchedaLavoroPage() {
 
 
 
-  const addProduct = (category: "TAGLIANDO" | "FRENI" | "RICAMBI" = "RICAMBI") => {
+  const addProduct = (category: "TAGLIANDO" | "MANUTENZIONE" = "MANUTENZIONE") => {
 
     setDraft((previous) =>
 
@@ -1293,6 +1298,16 @@ export default function SchedaLavoroPage() {
         const catalogResult = await catalogResponse.json().catch(() => null);
         if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
         else setTagliandoCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
+    const newMaintenanceNames = Array.from(new Set(next.products.filter((item) => item.category === "MANUTENZIONE" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !manutenzioneCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    for (const name of newMaintenanceNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "MANUTENZIONE", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setManutenzioneCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
       } catch { catalogSaveFailed = true; }
     }
     if (!next.vehicleId) {
