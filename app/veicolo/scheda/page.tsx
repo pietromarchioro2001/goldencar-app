@@ -115,7 +115,7 @@ type JobDraft = VeicoloScheda & {
 
   problems: string[];
 
-  products: { name: string; details: string; quantity?: string; orderRequested?: boolean }[];
+  products: { name: string; details: string; quantity?: string; orderRequested?: boolean; category?: "TAGLIANDO" | "FRENI" | "RICAMBI" }[];
 
   works: string[];
 
@@ -532,6 +532,7 @@ export default function SchedaLavoroPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
+  const [tagliandoCatalog, setTagliandoCatalog] = useState<string[]>([]);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -547,6 +548,15 @@ export default function SchedaLavoroPage() {
   // e subito dopo sovrascritta da una nuova scheda vuota.
   const initializedRef = useRef(false);
   const productOrderKey = (name: string) => name.trim().toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/product-catalog?category=TAGLIANDO", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setTagliandoCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti tagliando non disponibile:", error));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -807,7 +817,7 @@ export default function SchedaLavoroPage() {
 
 
 
-  const addProduct = () => {
+  const addProduct = (category: "TAGLIANDO" | "FRENI" | "RICAMBI" = "RICAMBI") => {
 
     setDraft((previous) =>
 
@@ -824,11 +834,9 @@ export default function SchedaLavoroPage() {
               {
 
                 name: "",
-
                 details: "",
-
                 quantity: "1",
-
+                category,
               },
 
             ],
@@ -1275,6 +1283,18 @@ export default function SchedaLavoroPage() {
     setSaving(true);
     try {
     const next = { ...draft, status: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : draft.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "IN_LAVORAZIONE" } as JobDraft;
+    const fixedTagliandoNames = ["Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo", "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri"];
+    const newCatalogNames = Array.from(new Set(next.products.filter((item) => item.category === "TAGLIANDO" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !fixedTagliandoNames.some((item) => productOrderKey(item) === productOrderKey(name)) && !tagliandoCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    let catalogSaveFailed = false;
+    for (const name of newCatalogNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "TAGLIANDO", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setTagliandoCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
     if (!next.vehicleId) {
       alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
       return null;
@@ -1325,6 +1345,7 @@ export default function SchedaLavoroPage() {
     setSaved(true);
     setSaveConfirmed(true);
     window.setTimeout(() => setSaveConfirmed(false), 1200);
+    if (catalogSaveFailed) alert("La scheda è stata salvata, ma non è stato possibile aggiornare il catalogo condiviso dei prodotti. Verifica che la migrazione product_catalog sia stata applicata.");
     try {
       await syncOrderForJob(savedDraft);
     } catch (orderError) {
@@ -2072,25 +2093,11 @@ export default function SchedaLavoroPage() {
 
                 <ProductChecklist
 
-                  products={[
-
-                    "Olio motore",
-
-                    "Filtro olio",
-
-                    "Filtro aria",
-
-                    "Filtro abitacolo",
-
-                    "Filtro carburante",
-
-                    "Candele",
-
-                    "Liquido refrigerante",
-
-                    "Lavavetri",
-
-                  ]}
+                  products={Array.from(new Set([
+                    "Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo",
+                    "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri",
+                    ...tagliandoCatalog,
+                  ]))}
 
                   draft={draft}
 
@@ -2098,9 +2105,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("TAGLIANDO")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="TAGLIANDO"
                 />
 
               </section>
@@ -2151,9 +2159,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("FRENI")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="FRENI"
                 />
 
               </section>
@@ -2568,9 +2577,10 @@ export default function SchedaLavoroPage() {
 
                     updateProduct={updateProduct}
 
-                    addProduct={addProduct}
+                    addProduct={() => addProduct("RICAMBI")}
 
                     markUnsaved={() => setSaved(false)}
+                    category="RICAMBI"
                 />
 
                 </section>
@@ -3595,10 +3605,12 @@ function ProductChecklist({
   addProduct,
 
   markUnsaved,
+  category,
 
 }: {
 
   products: string[];
+  category: "TAGLIANDO" | "FRENI" | "RICAMBI";
 
   draft: JobDraft;
 
@@ -3994,7 +4006,7 @@ function ProductChecklist({
 
         .filter(
 
-          (product) => !products.includes(product.name)
+          (product) => !products.includes(product.name) && product.category === category && product.name.trim()
 
         )
 
