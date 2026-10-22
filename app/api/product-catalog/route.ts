@@ -5,8 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Category = "TAGLIANDO" | "FRENI" | "RICAMBI";
-const categories = new Set<Category>(["TAGLIANDO", "FRENI", "RICAMBI"]);
+type Category = "TAGLIANDO" | "MANUTENZIONE";
+const categories = new Set<Category>(["TAGLIANDO", "MANUTENZIONE"]);
 
 function db() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
