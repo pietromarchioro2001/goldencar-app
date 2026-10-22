@@ -2593,10 +2593,10 @@ export default function SchedaLavoroPage() {
 
                     updateProduct={updateProduct}
 
-                    addProduct={() => addProduct("RICAMBI")}
+                    addProduct={() => addProduct("MANUTENZIONE")}
 
                     markUnsaved={() => setSaved(false)}
-                    category="RICAMBI"
+                    category="MANUTENZIONE"
                 />
 
                 </section>
