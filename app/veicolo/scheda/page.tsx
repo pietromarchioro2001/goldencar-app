@@ -1141,7 +1141,7 @@ export default function SchedaLavoroPage() {
         products: lavoro.products,
         notes: lavoro.notes,
         invoiceNumber: lavoro.invoiceNumber,
-        status: lavoro.status,
+        status: lavoro.status === "DA_DOCUMENTARE" ? "IN_LAVORAZIONE" : lavoro.status,
       };
 
       const blob = await pdf(<SchedaLavoroPDF lavoro={pdfData} />).toBlob();
