@@ -2568,6 +2568,7 @@ export default function SchedaLavoroPage() {
                       "Spazzole tergicristallo",
 
                       "Pneumatici",
+                      ...manutenzioneCatalog,
 
                     ]}
 
