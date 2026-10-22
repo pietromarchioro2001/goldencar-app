@@ -2177,7 +2177,7 @@ export default function SchedaLavoroPage() {
                   addProduct={() => addProduct("MANUTENZIONE")}
 
                   markUnsaved={() => setSaved(false)}
-                  category="FRENI"
+                  category="MANUTENZIONE"
                 />
 
               </section>
