@@ -4006,7 +4006,7 @@ function ProductChecklist({
 
         .filter(
 
-          (product) => !products.includes(product.name) && product.category === category && product.name.trim()
+          (product) => !products.includes(product.name) && (product.category ?? "RICAMBI") === category && product.name.trim()
 
         )
 
