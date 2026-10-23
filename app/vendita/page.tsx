@@ -226,7 +226,7 @@ async function photos(e:ChangeEvent<HTMLInputElement>){
 
   return <main className="responsive-page" style={S.page}><div className="responsive-content" style={S.wrap}>
 
-    {view==="list"&&<><div style={S.pageHeader}>
+    {view==="list"&&<><div className="desktop-page-header" style={S.pageHeader}>
 
       <div style={S.logoBox}><img src="/logo.png" alt="Goldencar" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: "inherit" }} /></div>
 
