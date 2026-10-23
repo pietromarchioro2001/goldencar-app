@@ -1919,12 +1919,12 @@ export default function Veicolo() {
             <InfoCard
               icon={<LocationIcon />}
               label="Indirizzo"
-              className="customer-info-card"
+              className="customer-info-card customer-address-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).indirizzo}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "indirizzo", e.target.value)}
                   placeholder="Indirizzo" style={cardEditInputStyle} />
-              ) : (clienteVisualizzato.indirizzo || "—")}
+              ) : (clienteVisualizzato.indirizzo ? clienteVisualizzato.indirizzo.toLocaleLowerCase("it-IT").replace(/(^|[\s,])([a-zà-ÿ])/g, (_, separatore, lettera) => separatore + lettera.toLocaleUpperCase("it-IT")).replace(/\(Tn\)/g, "(TN)") : "—")}
               iconColor="#374151"
               href={modificaProfilo ? undefined : indirizzoMaps}
               valueFontSize={14}
@@ -1932,7 +1932,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<PhoneIcon />}
               label="Telefono"
-              className="customer-info-card"
+              className="customer-info-card customer-phone-card"
               value={modificaProfilo && profiloEdit ? (
                 <input type="tel" value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).telefono}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "telefono", e.target.value)}
@@ -1945,7 +1945,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<PersonIcon />}
               label="Nascita"
-              className="customer-info-card"
+              className="customer-info-card customer-birth-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).nascita}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "nascita", e.target.value)}
@@ -1957,7 +1957,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<CardIcon />}
               label="Cod. Fiscale"
-              className="customer-info-card"
+              className="customer-info-card customer-cf-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).cf}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "cf", e.target.value.toUpperCase())}
