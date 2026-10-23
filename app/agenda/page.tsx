@@ -354,6 +354,7 @@ export default function Agenda() {
 
           {/* Celle */}
           <div
+            className="calendar-days-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(7,1fr)",
@@ -374,6 +375,7 @@ export default function Agenda() {
               return (
                 <button
                   key={i}
+                  className="calendar-day-cell"
                   disabled={!day}
                   onClick={() => day && setSelectedDay(day)}
                   style={{
