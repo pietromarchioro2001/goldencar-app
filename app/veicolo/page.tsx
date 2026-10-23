@@ -1959,7 +1959,7 @@ export default function Veicolo() {
                   placeholder="Codice fiscale" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.cf || "—")}
               iconColor="#64748B"
-              valueFontSize={13}
+              valueFontSize={16}
             />
           </div>
 
