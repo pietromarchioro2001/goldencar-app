@@ -265,7 +265,7 @@ export default function Agenda() {
       }}
     >
       {/* HEADER */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+      <div className="desktop-page-header" style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
         <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
@@ -285,6 +285,7 @@ export default function Agenda() {
 
       {/* TITOLO MESE */}
       <div
+        className="calendar-month-navigation"
         style={{
           display: "flex",
           alignItems: "center",
@@ -572,6 +573,7 @@ export default function Agenda() {
 
       {showModal && (
         <div
+          className="appointment-modal-overlay"
           style={{
             position: "fixed",
             inset: 0,
@@ -584,6 +586,7 @@ export default function Agenda() {
           onClick={closeModal}
         >
           <div
+            className="appointment-modal"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: "100%",
