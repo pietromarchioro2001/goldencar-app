@@ -763,3 +763,24 @@ textarea {
     box-sizing: border-box !important;
   }
 }
+
+
+/* Explicitly align the job summary and vehicle profile cards with their inset content. */
+@media (min-width: 601px) {
+  .app > section {
+    width: calc(100% - 36px) !important;
+    max-width: none !important;
+    margin-left: 18px !important;
+    margin-right: 18px !important;
+    box-sizing: border-box !important;
+  }
+
+  .app > div[style*="margin: 22px 18px 0"],
+  .app > div[style*="margin: 22px 18px"] {
+    width: calc(100% - 72px) !important;
+    max-width: none !important;
+    margin-left: 36px !important;
+    margin-right: 36px !important;
+    box-sizing: border-box !important;
+  }
+}
