@@ -1924,7 +1924,7 @@ export default function Veicolo() {
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).indirizzo}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "indirizzo", e.target.value)}
                   placeholder="Indirizzo" style={cardEditInputStyle} />
-              ) : (clienteVisualizzato.indirizzo ? clienteVisualizzato.indirizzo.toLocaleLowerCase("it-IT").replace(/(^|[\s,])([a-zà-ÿ])/g, (_, separatore, lettera) => separatore + lettera.toLocaleUpperCase("it-IT")).replace(/\(Tn\)/g, "(TN)") : "—")}
+              ) : (clienteVisualizzato.indirizzo ? clienteVisualizzato.indirizzo.toLocaleUpperCase("it-IT") : "—")}
               iconColor="#374151"
               href={modificaProfilo ? undefined : indirizzoMaps}
               valueFontSize={14}
