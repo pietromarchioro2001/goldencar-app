@@ -804,15 +804,11 @@ export default function NuovoProfiloPage() {
 
 
         <div
-
+          className="new-profile-overlay"
           style={{
-
             position: "fixed",
-
             inset: 0,
-
             background: "rgba(0,0,0,.45)",
-
             display: "flex",
 
             justifyContent: "center",
@@ -836,7 +832,7 @@ export default function NuovoProfiloPage() {
         >
 
           <div
-            className="scrollbar-hide"
+            className="scrollbar-hide new-profile-dialog"
 
             style={{
 
