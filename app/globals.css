@@ -739,110 +739,21 @@ textarea {
 }
 
 
-/* Match outer vehicle/job summary cards to the inset cards beneath them on desktop. */
+/* Definitive desktop alignment for the two outer cards.
+   The inline margins are overridden here with selectors at equal/higher specificity,
+   so both cards align to the same content column as the cards below. */
 @media (min-width: 601px) {
-  .app > section[style*="margin: 0 18px 14px"],
-  .app fieldset > section[style*="margin: 0 18px 14px"] {
-    width: calc(100% - 36px) !important;
-    max-width: none !important;
-    margin-left: 18px !important;
-    margin-right: 18px !important;
-  }
-
-  .app > div[style*="margin: 22px 18px 0"] {
-    width: calc(100% - 36px) !important;
-    max-width: none !important;
-    margin-left: 18px !important;
-    margin-right: 18px !important;
-    box-sizing: border-box !important;
-  }
-
-  .app > div[style*="padding: \"18px\""] {
+  .app > div.vehicle-profile-card[style] {
     width: 100% !important;
-    max-width: none !important;
-    box-sizing: border-box !important;
-  }
-}
-
-
-/* Explicitly align the job summary and vehicle profile cards with their inset content. */
-@media (min-width: 601px) {
-  .app > section {
-    width: calc(100% - 36px) !important;
-    max-width: none !important;
-    margin-left: 18px !important;
-    margin-right: 18px !important;
+    max-width: 1240px !important;
+    margin: 22px auto 0 !important;
     box-sizing: border-box !important;
   }
 
-  .app > div[style*="margin: 22px 18px 0"],
-  .app > div[style*="margin: 22px 18px"] {
-    width: calc(100% - 72px) !important;
-    max-width: none !important;
-    margin-left: 36px !important;
-    margin-right: 36px !important;
-    box-sizing: border-box !important;
-  }
-}
-
-
-/* Target the exact two outer cards: align their edges with the inset cards below. */
-@media (min-width: 601px) {
-  .app .job-summary-card {
-    width: auto !important;
-    max-width: none !important;
-    margin-left: 36px !important;
-    margin-right: 36px !important;
-    box-sizing: border-box !important;
-  }
-
-  .app .vehicle-profile-card {
-    width: auto !important;
-    max-width: none !important;
-    margin-left: 36px !important;
-    margin-right: 36px !important;
-    box-sizing: border-box !important;
-  }
-}
-
-
-/* Final precise alignment: outer summary cards match the actual content-card edges. */
-@media (min-width: 601px) {
-  /* Vehicle info cards are inside a grid with 18px padding on each side. */
-  .app .vehicle-profile-card {
-    width: auto !important;
-    max-width: none !important;
-    margin-left: 18px !important;
-    margin-right: 18px !important;
-    box-sizing: border-box !important;
-  }
-
-  /* The job sheet's inner cards are inset 18px inside its main content column. */
-  .app .job-summary-card {
-    width: auto !important;
-    max-width: none !important;
-    margin-left: 36px !important;
-    margin-right: 36px !important;
-    box-sizing: border-box !important;
-  }
-}
-
-
-/* Definitive widths for the two named cards, matching the page content columns. */
-@media (min-width: 601px) {
-  .app > .vehicle-profile-card {
-    display: block !important;
-    width: calc(100% - 36px) !important;
-    max-width: none !important;
-    margin: 22px 18px 0 !important;
-    box-sizing: border-box !important;
-  }
-
-  .app > section.job-summary-card {
-    display: block !important;
-    width: calc(100% - 72px) !important;
-    max-width: none !important;
-    margin: 0 36px 14px !important;
+  .app > section.job-summary-card[style] {
+    width: 100% !important;
+    max-width: 1240px !important;
+    margin: 0 auto 14px !important;
     box-sizing: border-box !important;
   }
 }
