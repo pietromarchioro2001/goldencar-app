@@ -598,6 +598,7 @@ export default function Agenda() {
             }}
           >
             <div
+              className="appointment-modal-handle"
               style={{
                 width: 48,
                 height: 5,
