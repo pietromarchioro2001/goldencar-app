@@ -757,3 +757,28 @@ textarea {
     box-sizing: border-box !important;
   }
 }
+
+
+/* Responsive polish requested for desktop and smartphone. */
+@media (min-width: 601px) {
+  .new-profile-overlay { align-items: center !important; padding: 28px !important; box-sizing: border-box !important; }
+  .new-profile-dialog {
+    width: min(100%, 980px) !important; max-width: 980px !important; max-height: 90vh !important;
+    border-radius: 26px !important; padding: 30px 32px 34px !important;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, .28) !important;
+  }
+  .job-status-badge { font-size: 15px !important; padding: 9px 13px !important; }
+}
+@media (max-width: 600px) {
+  .app .customer-info-card { min-width: 0 !important; min-height: 76px !important; padding: 14px 13px !important; display: flex !important; align-items: center !important; border-radius: 20px !important; }
+  .app .customer-info-card > div:first-child { display: none !important; }
+  .app .customer-info-card > div:nth-child(2) { font-size: 15px !important; line-height: 1.35 !important; font-weight: 600 !important; letter-spacing: -0.15px !important; color: #263449 !important; overflow-wrap: anywhere !important; }
+  .app .customer-info-card > div:nth-child(2) input { font-size: 15px !important; }
+  .app .revision-card { padding: 10px 9px !important; gap: 7px !important; border-radius: 17px !important; }
+  .app .revision-card > button:first-child { width: 36px !important; height: 36px !important; flex-basis: 36px !important; border-radius: 11px !important; }
+  .app .revision-customer-name { font-size: 12px !important; font-weight: 800 !important; line-height: 1.2 !important; }
+  .app .revision-vehicle-details { font-size: 10px !important; line-height: 1.25 !important; margin-top: 2px !important; }
+  .app .revision-date { min-width: 62px !important; }
+  .app .revision-date > div { font-size: 11px !important; font-weight: 800 !important; line-height: 1.15 !important; }
+  .app .revision-card > button:last-child { padding: 8px 8px !important; font-size: 9px !important; gap: 4px !important; }
+}
