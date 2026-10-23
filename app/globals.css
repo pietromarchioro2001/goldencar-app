@@ -776,11 +776,11 @@ textarea {
     min-height: 92px !important;
     height: 92px !important;
     box-sizing: border-box !important;
-    padding: 8px 13px 10px !important;
+    padding: 16px 13px 10px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: flex-start !important;
-    justify-content: flex-start !important;
+    justify-content: center !important;
     gap: 7px !important;
     border-radius: 20px !important;
     overflow: hidden !important;
