@@ -604,6 +604,61 @@ textarea {
 }
 
 
+/* Shared page-header alignment across all sections and screen sizes. */
+.desktop-page-header {
+  display: flex;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 16px !important;
+  box-sizing: border-box !important;
+  padding-top: 24px !important;
+  padding-bottom: 24px !important;
+  min-height: 118px;
+}
+.desktop-page-header h1 {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  line-height: 1.1 !important;
+  align-self: center !important;
+}
+.desktop-page-header img {
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+}
+.home-page-header > div:first-child,
+.home-page-header img {
+  width: 140px !important;
+  height: 110px !important;
+}
+@media (max-width: 600px) {
+  .desktop-page-header {
+    min-height: 118px !important;
+    padding-top: 18px !important;
+    padding-bottom: 18px !important;
+    gap: 12px !important;
+  }
+  .desktop-page-header h1 {
+    line-height: 1.05 !important;
+  }
+  .home-page-header > div:first-child,
+  .home-page-header img {
+    width: 140px !important;
+    height: 110px !important;
+  }
+}
+@media (min-width: 601px) {
+  .desktop-page-header {
+    min-height: 134px !important;
+    padding-top: 22px !important;
+    padding-bottom: 22px !important;
+  }
+  .home-page-header > div:first-child,
+  .home-page-header img {
+    width: 140px !important;
+    height: 110px !important;
+  }
+}
+
 /* Desktop polish: centered branding, compact month controls, centered appointment dialog. */
 @media (min-width: 601px) {
   .desktop-page-header {
