@@ -1775,15 +1775,11 @@ export default function SchedaLavoroPage() {
 
 
         <section
-
+          className="job-summary-card"
           style={{
-
             ...sectionStyle,
-
             margin: "0 18px 14px",
-
           }}
-
         >
 
 
