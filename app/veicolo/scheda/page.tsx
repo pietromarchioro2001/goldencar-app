@@ -1703,10 +1703,8 @@ export default function SchedaLavoroPage() {
 
 
             <span
-
-              style={{
-
-                fontSize: 8,
+              className="job-status-badge"
+              style={{ fontSize: 8,
 
                 lineHeight: 1,
 
