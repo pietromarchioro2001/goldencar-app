@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -43,6 +44,9 @@ function findPlate(text: string) {
 }
 
 export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
 
@@ -64,6 +68,14 @@ export async function POST(request: Request) {
           error: "Manca la foto della targa.",
         },
         { status: 400 }
+      );
+    }
+
+    const maxImageBytes = 15 * 1024 * 1024;
+    if (file.size <= 0 || file.size > maxImageBytes) {
+      return NextResponse.json(
+        { error: "La foto della targa deve essere maggiore di zero e non superare 15 MB." },
+        { status: 413 }
       );
     }
 

@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 
 
 
@@ -475,14 +474,14 @@ export default function Veicolo() {
     if (typeof window === "undefined") return;
     if (!profiloVeicolo?.id) { setLavori([]); return; }
 
-    const { data, error } = await supabase
-      .from("jobs")
-      .select("*")
-      .eq("vehicle_id", profiloVeicolo.id)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Errore caricamento lavori Supabase:", error);
+    let data: any[] = [];
+    try {
+      const response = await fetch("/api/vehicles/jobs?vehicleId=" + encodeURIComponent(profiloVeicolo.id), { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento lavori.");
+      data = Array.isArray(result.jobs) ? result.jobs : [];
+    } catch (error) {
+      console.error("Errore caricamento lavori:", error);
       setLavori([]);
       return;
     }
@@ -630,102 +629,29 @@ export default function Veicolo() {
 
   const caricaProfiliSupabase = async () => {
     try {
-      // Carichiamo prima i veicoli: la ricerca deve funzionare anche se
-      // una delle tabelle collegate ha un problema di RLS.
-      const { data: vehicles, error: vehiclesError } = await supabase
-        .from("vehicles")
-        .select("id, client_id, veicolo, motore, targa, immatricolazione, revisione");
+      const response = await fetch("/api/vehicles", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento veicoli.");
+      const mapped: ProfiloVeicolo[] = (result.profiles ?? []).map((profile: any) => ({
+        id: String(profile.id),
+        cliente1: normalizzaCliente(profile.cliente1),
+        cliente1Id: profile.cliente1?.id ? String(profile.cliente1.id) : undefined,
+        cliente2: profile.cliente2 ? normalizzaCliente(profile.cliente2) : null,
+        cliente2Id: profile.cliente2?.id ? String(profile.cliente2.id) : undefined,
+        veicolo: {
+          veicolo: String(profile.veicolo?.veicolo ?? ""),
+          motore: String(profile.veicolo?.motore ?? ""),
+          targa: String(profile.veicolo?.targa ?? ""),
+          immatricolazione: String(profile.veicolo?.immatricolazione ?? ""),
+          revisione: String(profile.veicolo?.revisione ?? ""),
+        },
+      }));
 
-      if (vehiclesError) {
-        console.error("Errore Supabase vehicles:", vehiclesError);
-        throw vehiclesError;
-      }
-
-      // Clienti e relazioni vengono caricati separatamente.
-      // Se una delle due query fallisce, manteniamo comunque i veicoli.
-      const { data: clients, error: clientsError } = await supabase
-        .from("clients")
-        .select("*");
-
-      if (clientsError) {
-        console.error("Errore Supabase clients:", clientsError);
-      }
-
-      const clientsById = new Map(
-        (clients ?? []).map((client: any) => [String(client.id), client])
-      );
-
-      const { data: relations, error: relationsError } = await supabase
-        .from("vehicle_clients")
-        .select("vehicle_id, client_id, ruolo");
-
-      if (relationsError) {
-        console.error("Errore Supabase vehicle_clients:", relationsError);
-      }
-
-      const relationsByVehicle = new Map<string, any[]>();
-
-      for (const relation of relations ?? []) {
-        const key = String(relation.vehicle_id);
-        const list = relationsByVehicle.get(key) ?? [];
-        list.push(relation);
-        relationsByVehicle.set(key, list);
-      }
-
-      const mapped: ProfiloVeicolo[] = (vehicles ?? []).map((vehicle: any) => {
-        const relationsForVehicle =
-          relationsByVehicle.get(String(vehicle.id)) ?? [];
-
-        const primaryRelation =
-          relationsForVehicle.find(
-            (item) => item.ruolo === "PRINCIPALE"
-          ) ?? relationsForVehicle[0];
-
-        const primaryClientId =
-          primaryRelation?.client_id ?? vehicle.client_id ?? null;
-
-        const secondRelation = relationsForVehicle.find(
-          (item) =>
-            item.ruolo === "SECONDO" &&
-            String(item.client_id) !== String(primaryClientId)
-        );
-
-        return {
-          id: String(vehicle.id),
-
-          cliente1: normalizzaCliente(
-            clientsById.get(String(primaryClientId))
-          ),
-          cliente1Id: primaryClientId ? String(primaryClientId) : undefined,
-
-          cliente2: secondRelation
-            ? normalizzaCliente(
-                clientsById.get(String(secondRelation.client_id))
-              )
-            : null,
-          cliente2Id: secondRelation?.client_id
-            ? String(secondRelation.client_id)
-            : undefined,
-
-          veicolo: {
-            veicolo: String(vehicle.veicolo ?? ""),
-            motore: String(vehicle.motore ?? ""),
-            targa: String(vehicle.targa ?? ""),
-            immatricolazione: String(vehicle.immatricolazione ?? ""),
-            revisione: String(vehicle.revisione ?? ""),
-          },
-        };
-      });
-
-      console.log(
-        "GOLDENCAR Supabase: veicoli caricati:",
-        mapped.length
-      );
-
+      console.log("GOLDENCAR API: veicoli caricati:", mapped.length);
       setProfiliArchivio(mapped);
       return mapped;
     } catch (error) {
-      console.error("Errore caricamento veicoli da Supabase:", error);
+      console.error("Errore caricamento veicoli:", error);
       setProfiliArchivio([]);
       return [];
     }
@@ -836,41 +762,22 @@ export default function Veicolo() {
 
     setSalvataggioProfilo(true);
     try {
-      const cliente1 = profiloEdit.cliente1;
-      const cliente2 = profiloEdit.cliente2;
-
-      const { error: client1Error } = await supabase.from("clients").update({
-        nome: [cliente1.nome.trim(), cliente1.cognome.trim()].filter(Boolean).join(" "),
-        indirizzo: cliente1.indirizzo.trim(),
-        telefono: cliente1.telefono.trim(),
-        data_nascita: cliente1.nascita.trim() || null,
-        codice_fiscale: cliente1.cf.trim().toUpperCase(),
-      }).eq("id", profiloEdit.cliente1Id);
-
-      if (client1Error) throw new Error("Salvataggio Cliente 1 fallito: " + client1Error.message);
-
-      if (cliente2 && profiloEdit.cliente2Id) {
-        const { error: client2Error } = await supabase.from("clients").update({
-          nome: [cliente2.nome.trim(), cliente2.cognome.trim()].filter(Boolean).join(" "),
-          indirizzo: cliente2.indirizzo.trim(),
-          telefono: cliente2.telefono.trim(),
-          data_nascita: cliente2.nascita.trim() || null,
-          codice_fiscale: cliente2.cf.trim().toUpperCase(),
-        }).eq("id", profiloEdit.cliente2Id);
-
-        if (client2Error) throw new Error("Salvataggio Cliente 2 fallito: " + client2Error.message);
+      const response = await fetch("/api/vehicles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vehicleId: profiloEdit.id,
+          client1Id: profiloEdit.cliente1Id,
+          client2Id: profiloEdit.cliente2Id || "",
+          client1: profiloEdit.cliente1,
+          client2: profiloEdit.cliente2,
+          vehicle: profiloEdit.veicolo,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Non è stato possibile salvare il profilo.");
       }
-
-      const { error: vehicleError } = await supabase.from("vehicles").update({
-        veicolo: profiloEdit.veicolo.veicolo.trim(),
-        motore: profiloEdit.veicolo.motore.trim(),
-        targa: profiloEdit.veicolo.targa.trim().toUpperCase(),
-        immatricolazione: profiloEdit.veicolo.immatricolazione.trim() || null,
-        revisione: profiloEdit.veicolo.revisione.trim() || null,
-      }).eq("id", profiloEdit.id);
-
-      if (vehicleError) throw new Error("Salvataggio veicolo fallito: " + vehicleError.message);
-
       const aggiornato = JSON.parse(JSON.stringify(profiloEdit)) as ProfiloVeicolo;
       setProfiloVeicolo(aggiornato);
       setProfiliArchivio((previous) => previous.map((item) => item.id === aggiornato.id ? aggiornato : item));
@@ -1067,11 +974,12 @@ export default function Veicolo() {
         veicolo: veicoloProfilo.veicolo,
         targa: veicoloProfilo.targa,
         vehicleId: profiloVeicolo?.id,
+        returnTo: "/veicolo",
       })
 
     );
 
-    router.push("/ordini");
+    router.push("/home");
 
   };
 
@@ -1123,10 +1031,15 @@ export default function Veicolo() {
         if (!response.ok || !data?.ok || !data?.uploadUrl) throw new Error(data?.error || 'Impossibile preparare il caricamento.');
         const upload = await fetch(data.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file });
         if (!upload.ok) throw new Error('Caricamento di ' + file.name + ' fallito.');
-        const { error } = await supabase.from('vehicle_media').insert({ id, vehicle_id: profiloVeicolo.id, name: file.name, mime_type: file.type || 'application/octet-stream', size: file.size, r2_key: key });
-        if (error) {
+        const metadataResponse = await fetch('/api/vehicles/media', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, vehicleId: profiloVeicolo.id, name: file.name, mimeType: file.type || 'application/octet-stream', size: file.size, key }),
+        });
+        const metadataResult = await metadataResponse.json();
+        if (!metadataResponse.ok || !metadataResult?.ok) {
           await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) }).catch(() => undefined);
-          throw error;
+          throw new Error(metadataResult?.error || 'Impossibile salvare i dati del file.');
         }
       }
       await apriMedia();
@@ -1143,9 +1056,11 @@ export default function Veicolo() {
     setMediaCaricamento(true);
     setMediaVisualizzato(null);
     try {
-      const { data: vehicleMedia, error: vehicleError } = await supabase.from('vehicle_media').select('id, name, mime_type, size, r2_key, created_at').eq('vehicle_id', profiloVeicolo?.id || '').order('created_at', { ascending: false });
-      if (vehicleError) throw vehicleError;
-      const vehicleItems = await Promise.all((vehicleMedia ?? []).map(async (item: any) => {
+      const response = await fetch('/api/vehicles/media?vehicleId=' + encodeURIComponent(profiloVeicolo?.id || ''), { cache: 'no-store' });
+      const mediaResult = await response.json();
+      if (!response.ok || !mediaResult?.ok) throw new Error(mediaResult?.error || 'Errore caricamento documenti.');
+      const vehicleMedia = Array.isArray(mediaResult.media) ? mediaResult.media : [];
+      const vehicleItems = await Promise.all(vehicleMedia.map(async (item: any) => {
         let url: string | undefined;
         try {
           const response = await fetch('/api/r2/file?key=' + encodeURIComponent(String(item.r2_key)));
@@ -1174,8 +1089,13 @@ export default function Veicolo() {
         if (item.r2Key) {
           await fetch('/api/r2/file', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: item.r2Key }) });
         }
-        const { error } = await supabase.from('vehicle_media').delete().eq('id', item.id);
-        if (error) throw error;
+        const response = await fetch('/api/vehicles/media', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: item.id }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || 'Impossibile eliminare il documento.');
       } else {
         const key = 'goldencar_job_' + item.jobNumber;
         const raw = localStorage.getItem(key);

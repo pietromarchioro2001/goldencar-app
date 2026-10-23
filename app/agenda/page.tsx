@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
 import BottomBar from "@/components/BottomBar";
 
 const MONTHS = [
@@ -78,17 +77,16 @@ export default function Agenda() {
   }, []);
 
   async function loadAppointments() {
-    const { data, error } = await supabase
-      .from("appointments")
-      .select("id, vehicle_id, titolo, descrizione, data_ora")
-      .order("data_ora", { ascending: true });
-
-    if (error) {
+    try {
+      const response = await fetch("/api/appointments", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Errore caricamento appuntamenti.");
+      }
+      setAppointments((result.appointments ?? []).map(mapAppointment));
+    } catch (error) {
       console.error("Errore caricamento appuntamenti:", error);
-      return;
     }
-
-    setAppointments((data ?? []).map(mapAppointment));
   }
 
 
@@ -139,25 +137,24 @@ export default function Agenda() {
     );
 
     if (editingAppointment) {
-      const { data, error } = await supabase
-        .from("appointments")
-        .update({
-          titolo: description.trim(),
-          descrizione: description.trim(),
-          data_ora: dataOra,
-        })
-        .eq("id", editingAppointment.id)
-        .select("id, vehicle_id, titolo, descrizione, data_ora")
-        .single();
-
-      if (error) {
+      let updatedAppointment: Appointment;
+      try {
+        const response = await fetch("/api/appointments", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editingAppointment.id, description: description.trim(), dateTime: dataOra }),
+        });
+        const result = await response.json();
+        if (!response.ok || !result?.ok || !result?.appointment) {
+          throw new Error(result?.error || "Impossibile modificare l'appuntamento.");
+        }
+        updatedAppointment = mapAppointment(result.appointment);
+      } catch (error) {
         console.error("Errore modifica appuntamento:", error);
-        alert("Impossibile modificare l'appuntamento.");
+        alert(error instanceof Error ? error.message : "Impossibile modificare l'appuntamento.");
         setSaving(false);
         return;
       }
-
-      const updatedAppointment = mapAppointment(data);
 
       setAppointments((current) =>
         current
@@ -172,39 +169,27 @@ export default function Agenda() {
           )
       );
     } else {
-      const { data, error } = await supabase
-        .from("appointments")
-        .insert({
-          id: crypto.randomUUID(),
-          titolo: description.trim(),
-          descrizione: description.trim(),
-          data_ora: dataOra,
-        })
-        .select("id, vehicle_id, titolo, descrizione, data_ora")
-        .single();
-
-      if (error) {
-        console.error("Errore salvataggio appuntamento:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          status: (error as any).status,
-          statusCode: (error as any).statusCode,
+      try {
+        const response = await fetch("/api/appointments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: crypto.randomUUID(), description: description.trim(), dateTime: dataOra }),
         });
-        alert(
-          `Impossibile salvare l'appuntamento.\\n\\n${error.message || "Errore Supabase"}`
+        const result = await response.json();
+        if (!response.ok || !result?.ok || !result?.appointment) {
+          throw new Error(result?.error || "Errore salvataggio appuntamento.");
+        }
+        setAppointments((current) =>
+          [...current, mapAppointment(result.appointment)].sort(
+            (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
+          )
         );
+      } catch (error) {
+        console.error("Errore salvataggio appuntamento:", error);
+        alert(error instanceof Error ? error.message : "Impossibile salvare l'appuntamento.");
         setSaving(false);
         return;
       }
-
-      setAppointments((current) =>
-        [...current, mapAppointment(data)].sort(
-          (a, b) =>
-            a.date.localeCompare(b.date) || a.time.localeCompare(b.time)
-        )
-      );
     }
 
     setDescription("");
@@ -220,14 +205,19 @@ export default function Agenda() {
 
     setDeleting(true);
 
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", editingAppointment.id);
-
-    if (error) {
+    try {
+      const response = await fetch("/api/appointments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editingAppointment.id }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Impossibile eliminare l'appuntamento.");
+      }
+    } catch (error) {
       console.error("Errore eliminazione appuntamento:", error);
-      alert("Impossibile eliminare l'appuntamento.");
+      alert(error instanceof Error ? error.message : "Impossibile eliminare l'appuntamento.");
       setDeleting(false);
       return;
     }

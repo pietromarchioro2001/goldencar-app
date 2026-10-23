@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -6,10 +7,10 @@ type RawVehicle = Record<string, unknown>;
 
 function supabase() {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error("Configurazione Supabase mancante.");
+    throw new Error("Configurazione server Supabase mancante.");
   }
 
   return createClient(url, key, {
@@ -56,7 +57,10 @@ function mapVehicle(vehicle: RawVehicle, clientsById: Map<string, RawClient>) {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const db = supabase();
 
@@ -68,11 +72,12 @@ export async function GET() {
 
     if (vehiclesResult.error) throw vehiclesResult.error;
     if (clientsResult.error) throw clientsResult.error;
+    if (relationsResult.error) throw relationsResult.error;
 
     const clients = (clientsResult.data ?? []) as RawClient[];
     const clientsById = new Map(clients.map((client) => [text(client.id), client]));
 
-    const relations = relationsResult.error ? [] : relationsResult.data ?? [];
+    const relations = relationsResult.data ?? [];
 
     const profiles = (vehiclesResult.data ?? []).map((vehicle) => {
       const profile = mapVehicle(vehicle as RawVehicle, clientsById);
@@ -117,11 +122,138 @@ export async function GET() {
       {
         ok: false,
         error:
-          error instanceof Error
+          error instanceof Error && error.message === "Configurazione server Supabase mancante."
             ? error.message
             : "Errore caricamento veicoli.",
       },
       { status: 500 }
     );
+  }
+}
+
+
+export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) return NextResponse.json({ok:false,error:"Accesso non autorizzato."},{status:401});
+  const body=await request.json().catch(()=>null);
+  if(!body||typeof body!=="object"||Array.isArray(body))return NextResponse.json({ok:false,error:"Corpo della richiesta non valido."},{status:400});
+  const vehicleId=typeof body.vehicleId==="string"?body.vehicleId.trim():"";
+  const client1=body.client1&&typeof body.client1==="object"&&!Array.isArray(body.client1)?body.client1:null;
+  const client2=body.client2&&typeof body.client2==="object"&&!Array.isArray(body.client2)?body.client2:null;
+  const vehicle=body.vehicle&&typeof body.vehicle==="object"&&!Array.isArray(body.vehicle)?body.vehicle:null;
+  const documents=body.documents&&typeof body.documents==="object"&&!Array.isArray(body.documents)?body.documents:null;
+  const validId=(id:string)=>Boolean(id&&id.length<=128&&/^[a-zA-Z0-9_-]+$/.test(id));
+  const clean=(value:unknown,max=500)=>typeof value==="string"?value.trim().slice(0,max):"";
+  const cf1=clean(client1?.cf,32).toUpperCase();
+  const plate=clean(vehicle?.targa,24).replace(/[^A-Z0-9]/g,"").toUpperCase();
+  if(!validId(vehicleId)||!client1||!cf1||!vehicle||!plate||!clean(vehicle.veicolo,160))return NextResponse.json({ok:false,error:"Dati del profilo incompleti o non validi."},{status:400});
+  if(client2&&(!clean(client2.cf,32)||!clean(client2.cf,32).trim()))return NextResponse.json({ok:false,error:"Codice fiscale Cliente 2 mancante."},{status:400});
+  const expectedClientDocumentKey=`veicoli/${vehicleId}/libretto-cliente.jpg`;
+  const expectedVehicleDocumentKey=`veicoli/${vehicleId}/libretto-veicolo.jpg`;
+  if(!documents||clean(documents.cliente,500)!==expectedClientDocumentKey||clean(documents.veicolo,500)!==expectedVehicleDocumentKey)return NextResponse.json({ok:false,error:"Chiavi dei documenti del libretto non valide."},{status:400});
+  try{
+    const client=supabase();
+    const clientFields=(value:Record<string,unknown>)=>({nome:[clean(value.nome,120),clean(value.cognome,120)].filter(Boolean).join(" "),indirizzo:clean(value.indirizzo,300),telefono:clean(value.telefono,60),data_nascita:clean(value.nascita,30)||null,codice_fiscale:clean(value.cf,32).toUpperCase()});
+    const saveClient=async(value:Record<string,unknown>)=>{const payload=clientFields(value);const cf=payload.codice_fiscale;const existing=await client.from("clients").select("id").eq("codice_fiscale",cf).limit(1).maybeSingle();if(existing.error)throw existing.error;if(existing.data?.id){const {data,error}=await client.from("clients").update(payload).eq("id",existing.data.id).select("id").single();if(error)throw error;if(!data?.id)throw new Error("ID cliente non restituito.");return String(data.id);}const {data,error}=await client.from("clients").insert(payload).select("id").single();if(error)throw error;if(!data?.id)throw new Error("ID cliente non restituito.");return String(data.id);};
+    const client1Id=await saveClient(client1);
+    const client2Id=client2?await saveClient(client2):null;
+    const {error:vehicleError}=await client.from("vehicles").upsert({id:vehicleId,client_id:client1Id,veicolo:clean(vehicle.veicolo,160),motore:clean(vehicle.motore,160),targa:plate,immatricolazione:clean(vehicle.immatricolazione,30)||null,revisione:clean(vehicle.revisione,30)||null},{onConflict:"id"});
+    if(vehicleError)throw vehicleError;
+    const {error:deleteError}=await client.from("vehicle_clients").delete().eq("vehicle_id",vehicleId);
+    if(deleteError)throw deleteError;
+    const relations=[{vehicle_id:vehicleId,client_id:client1Id,ruolo:"PRINCIPALE"},...(client2Id?[{vehicle_id:vehicleId,client_id:client2Id,ruolo:"SECONDO"}]:[])];
+    const {error:relationError}=await client.from("vehicle_clients").insert(relations);
+    if(relationError)throw relationError;
+    const {error:documentsError}=await client.from("vehicle_documents").upsert([{id:vehicleId+"-libretto-cliente",vehicle_id:vehicleId,tipo:"LIBRETTO_CLIENTE",nome:"libretto-cliente.jpg",r2_key:clean(documents.cliente,500)},{id:vehicleId+"-libretto-veicolo",vehicle_id:vehicleId,tipo:"LIBRETTO_VEICOLO",nome:"libretto-veicolo.jpg",r2_key:clean(documents.veicolo,500)}],{onConflict:"id"});
+    if(documentsError)throw documentsError;
+    return NextResponse.json({ok:true,vehicleId,client1Id,client2Id});
+  }catch(error){const config=error instanceof Error&&error.message==="Configurazione server Supabase mancante.";if(!config)console.error("POST /api/vehicles:",error);return NextResponse.json({ok:false,error:config?"Configurazione server Supabase mancante.":"Errore salvataggio profilo veicolo."},{status:config?503:500});}
+}
+
+export async function PATCH(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
+
+  try {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ ok: false, error: "Corpo della richiesta non valido." }, { status: 400 });
+    }
+
+    const vehicleId = typeof body.vehicleId === "string" ? body.vehicleId.trim() : "";
+    const client1Id = typeof body.client1Id === "string" ? body.client1Id.trim() : "";
+    const client2Id = typeof body.client2Id === "string" ? body.client2Id.trim() : "";
+    const client1 = body.client1 && typeof body.client1 === "object" && !Array.isArray(body.client1) ? body.client1 : null;
+    const client2 = body.client2 && typeof body.client2 === "object" && !Array.isArray(body.client2) ? body.client2 : null;
+    const vehicle = body.vehicle && typeof body.vehicle === "object" && !Array.isArray(body.vehicle) ? body.vehicle : null;
+
+    const validId = (id: string) => Boolean(id && id.length <= 128 && /^[a-zA-Z0-9_-]+$/.test(id));
+    const clean = (value: unknown, max = 500) => typeof value === "string" ? value.trim().slice(0, max) : "";
+    if (!validId(vehicleId) || !validId(client1Id) || !client1 || !vehicle) {
+      return NextResponse.json({ ok: false, error: "Dati del profilo incompleti o non validi." }, { status: 400 });
+    }
+    if (client2Id && !validId(client2Id)) {
+      return NextResponse.json({ ok: false, error: "ID Cliente 2 non valido." }, { status: 400 });
+    }
+
+    const db = supabase();
+    const clientFields = (value: Record<string, unknown>) => ({
+      nome: [clean(value.nome, 120), clean(value.cognome, 120)].filter(Boolean).join(" "),
+      indirizzo: clean(value.indirizzo, 300),
+      telefono: clean(value.telefono, 60),
+      data_nascita: clean(value.nascita, 30) || null,
+      codice_fiscale: clean(value.cf, 32).toUpperCase(),
+    });
+
+    const { data: existingVehicle, error: vehicleCheckError } = await db.from("vehicles").select("id, client_id").eq("id", vehicleId).maybeSingle();
+    if (vehicleCheckError) throw vehicleCheckError;
+    if (!existingVehicle) return NextResponse.json({ ok: false, error: "Veicolo non trovato." }, { status: 404 });
+
+    const { data: existingClient, error: clientCheckError } = await db.from("clients").select("id").eq("id", client1Id).maybeSingle();
+    if (clientCheckError) throw clientCheckError;
+    if (!existingClient) return NextResponse.json({ ok: false, error: "Cliente 1 non trovato." }, { status: 404 });
+
+    // A valid vehicle ID and client ID are not enough: the client must belong to this vehicle.
+    const { data: relations, error: relationsError } = await db.from("vehicle_clients").select("client_id, ruolo").eq("vehicle_id", vehicleId);
+    if (relationsError) throw relationsError;
+    const client1Linked = String(existingVehicle.client_id ?? "") === client1Id ||
+      (relations ?? []).some((relation) => String(relation.client_id) === client1Id && relation.ruolo !== "SECONDO");
+    if (!client1Linked) return NextResponse.json({ ok: false, error: "Cliente 1 non associato al veicolo selezionato." }, { status: 400 });
+
+    if (client2Id) {
+      const { data: existingClient2, error: client2CheckError } = await db.from("clients").select("id").eq("id", client2Id).maybeSingle();
+      if (client2CheckError) throw client2CheckError;
+      if (!existingClient2) return NextResponse.json({ ok: false, error: "Cliente 2 non trovato." }, { status: 404 });
+      const client2Linked = (relations ?? []).some((relation) => String(relation.client_id) === client2Id && relation.ruolo === "SECONDO");
+      if (!client2Linked) return NextResponse.json({ ok: false, error: "Cliente 2 non associato al veicolo selezionato." }, { status: 400 });
+    }
+
+    const { error: client1Error } = await db.from("clients").update(clientFields(client1)).eq("id", client1Id);
+    if (client1Error) throw client1Error;
+
+    if (client2 && client2Id) {
+      const { data: existingClient2, error: client2CheckError } = await db.from("clients").select("id").eq("id", client2Id).maybeSingle();
+      if (client2CheckError) throw client2CheckError;
+      if (!existingClient2) return NextResponse.json({ ok: false, error: "Cliente 2 non trovato." }, { status: 404 });
+      const { error: client2Error } = await db.from("clients").update(clientFields(client2)).eq("id", client2Id);
+      if (client2Error) throw client2Error;
+    }
+
+    const { error: updateVehicleError } = await db.from("vehicles").update({
+      veicolo: clean(vehicle.veicolo, 160),
+      motore: clean(vehicle.motore, 160),
+      targa: clean(vehicle.targa, 24).toUpperCase(),
+      immatricolazione: clean(vehicle.immatricolazione, 30) || null,
+      revisione: clean(vehicle.revisione, 30) || null,
+    }).eq("id", vehicleId);
+    if (updateVehicleError) throw updateVehicleError;
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "Configurazione server Supabase mancante.") {
+      return NextResponse.json({ ok: false, error: message }, { status: 503 });
+    }
+    console.error("Errore PATCH /api/vehicles:", error);
+    return NextResponse.json({ ok: false, error: "Errore salvataggio profilo veicolo." }, { status: 500 });
   }
 }

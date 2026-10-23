@@ -23,7 +23,6 @@ import {
 import { useRouter } from "next/navigation";
 
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 import { pdf } from "@react-pdf/renderer";
 import SchedaLavoroPDF, {
   type SchedaLavoroPDFData,
@@ -556,9 +555,10 @@ export default function SchedaLavoroPage() {
         const existingJobId = sessionStorage.getItem("goldencar_apri_scheda");
 
         if (existingJobId) {
-          const { data, error } = await supabase.from("jobs").select("*").eq("id", existingJobId).maybeSingle();
-          if (!error && data) {
-            const normalized = rowToJobDraft(data);
+          const response = await fetch("/api/jobs?id=" + encodeURIComponent(existingJobId), { cache: "no-store" });
+          const result = await response.json();
+          if (response.ok && result?.ok && result?.job) {
+            const normalized = rowToJobDraft(result.job);
             setDraft(normalized); setSaved(true);
             loadMediaBlobs(normalized.media.map((item) => item.id)).then((urls) => {
               const nextUrls: Record<string, string> = {}; urls.forEach((url, id) => { nextUrls[id] = url; }); setMediaUrls(nextUrls);
@@ -1166,12 +1166,9 @@ export default function SchedaLavoroPage() {
         pdfR2Key,
       };
 
-      const { error } = await supabase
-        .from("jobs")
-        .update({ dettagli: currentDetails })
-        .eq("id", lavoro.jobId);
-
-      if (error) throw new Error("PDF salvato su R2, ma non è stato possibile collegarlo alla scheda su Supabase: " + error.message);
+      const response = await fetch("/api/jobs", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lavoro.jobId, dettagli: currentDetails }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error("PDF salvato su R2, ma non è stato possibile collegarlo alla scheda: " + (result?.error || "Errore sconosciuto."));
 
       const next = { ...lavoro, pdfR2Key, pdfUrl: "" };
       setDraft(next);
@@ -1195,29 +1192,20 @@ export default function SchedaLavoroPage() {
         details: product.details.trim(),
       }));
 
-    const { data: existingOrders, error: loadError } = await supabase
-      .from("orders")
-      .select("*")
-      .eq("job_id", savedDraft.jobId)
-      .order("created_at", { ascending: true });
-
-    if (loadError) {
-      console.error("Errore lettura ordine collegato alla scheda:", loadError);
-      throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + loadError.message);
-    }
+    const response = await fetch("/api/orders?jobId=" + encodeURIComponent(savedDraft.jobId), { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
+    const existingOrders = Array.isArray(result.orders) ? result.orders : [];
 
     const existing = existingOrders?.[0];
 
     // Nessun prodotto selezionato: rimuove l'ordine collegato alla scheda.
     if (productsToOrder.length === 0) {
       if (existingOrders?.length) {
-        const { error } = await supabase
-          .from("orders")
-          .delete()
-          .eq("job_id", savedDraft.jobId);
-        if (error) {
-          console.error("Errore rimozione ordine collegato alla scheda:", error);
-          throw new Error("La scheda è stata salvata, ma non è stato possibile rimuovere l'ordine: " + error.message);
+        const response = await fetch("/api/orders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: savedDraft.jobId }) });
+        const result = await response.json();
+        if (!response.ok && response.status !== 404 || (!result?.ok && response.status !== 404)) {
+          throw new Error("La scheda è stata salvata, ma non è stato possibile rimuovere l'ordine: " + (result?.error || "Errore sconosciuto."));
         }
       }
       return;
@@ -1236,32 +1224,22 @@ export default function SchedaLavoroPage() {
 
     if (existing) {
       // Aggiorna l'ordine esistente senza duplicarlo e conserva l'eventuale fornitore assegnato.
-      const { error } = await supabase
-        .from("orders")
-        .update({ ...orderValues, stato: existing.stato || "DA_INVIARE" })
-        .eq("id", existing.id);
-      if (error) {
-        console.error("Errore aggiornamento ordine collegato alla scheda:", error);
-        throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + error.message);
-      }
+      const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: existing.id, jobId: savedDraft.jobId, vehicleId: savedDraft.vehicleId, cliente: savedDraft.nomeCliente, telefono: savedDraft.telefono, veicolo: savedDraft.veicolo, targa: savedDraft.targa, prodotti: productsToOrder, stato: existing.stato || "DA_INVIARE" }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error("La scheda è stata salvata, ma non è stato possibile aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
 
       // Se esistono duplicati creati dal vecchio flusso, ne mantiene uno solo.
       if ((existingOrders?.length || 0) > 1) {
         const duplicateIds = existingOrders!.slice(1).map((order: any) => String(order.id));
         for (const duplicateId of duplicateIds) {
-          const { error: deleteError } = await supabase.from("orders").delete().eq("id", duplicateId);
-          if (deleteError) console.error("Errore rimozione ordine duplicato:", deleteError);
+          const response = await fetch("/api/orders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: duplicateId }) });
+          if (!response.ok) console.error("Errore rimozione ordine duplicato:", await response.text());
         }
       }
     } else {
-      const { error } = await supabase.from("orders").insert({
-        id: "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
-        ...orderValues,
-      });
-      if (error) {
-        console.error("Errore creazione ordine dalla scheda:", error);
-        throw new Error("La scheda è stata salvata, ma non è stato possibile creare l'ordine: " + error.message);
-      }
+      const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: "ordine-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8), vehicleId: savedDraft.vehicleId, jobId: savedDraft.jobId, cliente: savedDraft.nomeCliente, telefono: savedDraft.telefono, veicolo: savedDraft.veicolo, targa: savedDraft.targa, prodotti: productsToOrder }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error("La scheda è stata salvata, ma non è stato possibile creare l'ordine: " + (result?.error || "Errore sconosciuto."));
     }
   };
 
@@ -1321,23 +1299,18 @@ export default function SchedaLavoroPage() {
       dettagli: details,
     };
 
-    let data: any = null;
-    let error: any = null;
-    if (next.jobId) {
-      const result = await supabase.from("jobs").update(values).eq("id", next.jobId).select("*").single();
-      data = result.data;
-      error = result.error;
-    } else {
-      const result = await supabase.from("jobs").insert(values).select("*").single();
-      data = result.data;
-      error = result.error;
-    }
-
-    if (error || !data) {
-      console.error("Errore salvataggio scheda Supabase:", error);
-      alert(`Impossibile salvare la scheda: ${error?.message || "nessun dato restituito"}`);
+    const response = await fetch("/api/jobs", {
+      method: next.jobId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(next.jobId ? { ...values, id: next.jobId } : values),
+    });
+    const result = await response.json();
+    if (!response.ok || !result?.ok || !result?.job) {
+      console.error("Errore salvataggio scheda:", result);
+      alert(`Impossibile salvare la scheda: ${result?.error || "errore sconosciuto"}`);
       return null;
     }
+    const data = result.job;
 
     const savedDraft = rowToJobDraft(data);
     sessionStorage.removeItem("goldencar_nuova_scheda_job_number");
@@ -1396,21 +1369,12 @@ export default function SchedaLavoroPage() {
       }
 
       if (draft.jobId) {
-        const { error: ordersError } = await supabase
-          .from("orders")
-          .delete()
-          .eq("job_id", draft.jobId);
-        if (ordersError) {
-          throw new Error("PDF rimosso, ma gli ordini collegati non sono stati rimossi e il lavoro è ancora presente: " + ordersError.message);
-        }
-
-        const { error: jobError } = await supabase
-          .from("jobs")
-          .delete()
-          .eq("id", draft.jobId);
-        if (jobError) {
-          throw new Error("PDF e ordini collegati rimossi, ma la scheda è ancora presente: " + jobError.message);
-        }
+        const orderResponse = await fetch("/api/orders", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: draft.jobId }) });
+        const orderResult = await orderResponse.json().catch(() => null);
+        if (!orderResponse.ok && orderResponse.status !== 404) throw new Error("PDF rimosso, ma gli ordini collegati non sono stati rimossi: " + (orderResult?.error || "errore sconosciuto"));
+        const jobResponse = await fetch("/api/jobs", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: draft.jobId }) });
+        const jobResult = await jobResponse.json().catch(() => null);
+        if (!jobResponse.ok || !jobResult?.ok) throw new Error("PDF e ordini collegati rimossi, ma la scheda è ancora presente: " + (jobResult?.error || "errore sconosciuto"));
       } else {
         localStorage.removeItem(`goldencar_job_${draft.jobNumber}`);
       }
