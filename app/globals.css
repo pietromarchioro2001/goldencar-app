@@ -602,3 +602,49 @@ textarea {
     border-radius: 24px 24px 0 0;
   }
 }
+
+
+/* Desktop polish: centered branding, compact month controls, centered appointment dialog. */
+@media (min-width: 601px) {
+  .desktop-page-header {
+    justify-content: center !important;
+    text-align: center;
+    gap: 16px !important;
+    padding-top: 22px !important;
+    padding-bottom: 22px !important;
+  }
+
+  .desktop-page-header h1 {
+    text-align: center;
+  }
+
+  .calendar-month-navigation {
+    justify-content: center !important;
+    gap: 18px !important;
+    padding-inline: 0 !important;
+  }
+
+  .calendar-month-navigation > button {
+    flex: 0 0 auto;
+  }
+
+  .appointment-modal-overlay {
+    align-items: center !important;
+    padding: 24px !important;
+  }
+
+  .appointment-modal {
+    width: min(600px, calc(100vw - 48px)) !important;
+    max-width: 600px !important;
+    border-radius: 24px !important;
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+  }
+
+  .appointment-modal-handle {
+    display: none !important;
+  }
+}
