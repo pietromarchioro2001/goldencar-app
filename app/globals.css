@@ -826,3 +826,23 @@ textarea {
     box-sizing: border-box !important;
   }
 }
+
+
+/* Definitive widths for the two named cards, matching the page content columns. */
+@media (min-width: 601px) {
+  .app > .vehicle-profile-card {
+    display: block !important;
+    width: calc(100% - 36px) !important;
+    max-width: none !important;
+    margin: 22px 18px 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .app > section.job-summary-card {
+    display: block !important;
+    width: calc(100% - 72px) !important;
+    max-width: none !important;
+    margin: 0 36px 14px !important;
+    box-sizing: border-box !important;
+  }
+}
