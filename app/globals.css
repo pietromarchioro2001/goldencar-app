@@ -744,15 +744,15 @@ textarea {
    so both cards align to the same content column as the cards below. */
 @media (min-width: 601px) {
   .app .vehicle-profile-card[style] {
-    width: 100% !important;
-    max-width: 1240px !important;
+    width: calc(100% - 36px) !important;
+    max-width: 1204px !important;
     margin: 22px auto 0 !important;
     box-sizing: border-box !important;
   }
 
   .app .job-summary-card[style] {
-    width: 100% !important;
-    max-width: 1240px !important;
+    width: calc(100% - 36px) !important;
+    max-width: 1204px !important;
     margin: 0 auto 14px !important;
     box-sizing: border-box !important;
   }
