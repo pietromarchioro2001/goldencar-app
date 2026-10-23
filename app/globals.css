@@ -784,3 +784,23 @@ textarea {
     box-sizing: border-box !important;
   }
 }
+
+
+/* Target the exact two outer cards: align their edges with the inset cards below. */
+@media (min-width: 601px) {
+  .app .job-summary-card {
+    width: auto !important;
+    max-width: none !important;
+    margin-left: 36px !important;
+    margin-right: 36px !important;
+    box-sizing: border-box !important;
+  }
+
+  .app .vehicle-profile-card {
+    width: auto !important;
+    max-width: none !important;
+    margin-left: 36px !important;
+    margin-right: 36px !important;
+    box-sizing: border-box !important;
+  }
+}
