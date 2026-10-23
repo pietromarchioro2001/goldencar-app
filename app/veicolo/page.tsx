@@ -462,13 +462,8 @@ export default function Veicolo() {
 
 
 
-  const whatsappHref = clienteVisualizzato.telefono
-    ? (() => {
-        let numero = clienteVisualizzato.telefono.replace(/\D/g, "");
-        if (numero.startsWith("00")) numero = numero.slice(2);
-        if (!numero.startsWith("39")) numero = "39" + numero.replace(/^0+/, "");
-        return numero.length >= 10 ? `https://wa.me/${numero}` : undefined;
-      })()
+  const telefonoHref = clienteVisualizzato.telefono
+    ? `tel:${clienteVisualizzato.telefono.trim().replace(/[^+\d]/g, "")}`
     : undefined;
 
   const aggiornaLavori = async () => {
@@ -1941,7 +1936,7 @@ export default function Veicolo() {
                   placeholder="Telefono" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.telefono || "—")}
               iconColor="#16A34A"
-              href={modificaProfilo ? undefined : whatsappHref}
+              href={modificaProfilo ? undefined : telefonoHref}
               valueFontSize={16}
             />
             <InfoCard
