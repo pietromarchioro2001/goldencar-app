@@ -958,3 +958,32 @@ textarea {
     margin: 0 !important;
   }
 }
+
+
+/* Mobile: align every page heading to the left; lower only the values slightly. */
+@media (max-width: 600px) {
+  .desktop-page-header,
+  .responsive-page > .desktop-page-header,
+  .responsive-page > .responsive-content > .desktop-page-header {
+    justify-content: flex-start !important;
+    text-align: left !important;
+    padding-left: 20px !important;
+    padding-right: 20px !important;
+  }
+
+  .desktop-page-header h1 {
+    text-align: left !important;
+  }
+
+  .app .customer-info-card > div:nth-child(2),
+  .app .vehicle-info-card > div:nth-child(2) {
+    padding-top: 22px !important;
+    padding-bottom: 0 !important;
+    align-items: center !important;
+  }
+
+  .app .customer-info-card > div:nth-child(2) input,
+  .app .vehicle-info-card > div:nth-child(2) input {
+    transform: translateY(5px);
+  }
+}
