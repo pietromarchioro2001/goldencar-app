@@ -801,19 +801,21 @@ textarea {
     font-weight: 500 !important;
   }
   .app .customer-info-card > div:nth-child(2) {
-    font-size: 16px !important;
+    font-size: 14px !important;
     line-height: 1.3 !important;
     font-family: inherit !important;
-    font-weight: 700 !important;
-    letter-spacing: -0.25px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.1px !important;
     color: #000000 !important;
+    text-transform: uppercase !important;
     overflow-wrap: anywhere !important;
   }
   .app .customer-info-card > div:nth-child(2) input {
-    font-size: 16px !important;
+    font-size: 14px !important;
     color: #000000 !important;
+    text-transform: uppercase !important;
   }
-  .app .customer-address-card > div:nth-child(2) { text-transform: none !important; }
+  .app .customer-address-card > div:nth-child(2) { text-transform: uppercase !important; }
   .app .customer-phone-card > div:nth-child(2),
   .app .customer-birth-card > div:nth-child(2) { font-variant-numeric: tabular-nums; }
   .app .customer-cf-card > div:nth-child(2) {
