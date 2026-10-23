@@ -1885,6 +1885,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<RevisionIcon />}
               label="Revisione"
+              className="vehicle-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input
                   type="date"
@@ -1905,6 +1906,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<KeyIcon />}
               label="Immatric."
+              className="vehicle-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input
                   type="date"
