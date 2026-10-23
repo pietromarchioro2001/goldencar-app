@@ -1919,6 +1919,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<LocationIcon />}
               label="Indirizzo"
+              className="customer-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).indirizzo}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "indirizzo", e.target.value)}
@@ -1931,6 +1932,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<PhoneIcon />}
               label="Telefono"
+              className="customer-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input type="tel" value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).telefono}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "telefono", e.target.value)}
@@ -1943,6 +1945,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<PersonIcon />}
               label="Nascita"
+              className="customer-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).nascita}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "nascita", e.target.value)}
@@ -1954,6 +1957,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<CardIcon />}
               label="Cod. Fiscale"
+              className="customer-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).cf}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "cf", e.target.value.toUpperCase())}
@@ -3338,9 +3342,7 @@ function CloseIcon() {
 }
 
 function InfoCard({
-
-
-
+  className,
   icon,
 
 
@@ -3384,6 +3386,7 @@ function InfoCard({
 
 
   href?: string;
+  className?: string;
 
   valueFontSize?: number;
 
@@ -3578,7 +3581,7 @@ function InfoCard({
 
 
 
-      <a href={href} style={style}>
+      <a href={href} className={className} style={style}>
 
 
 
@@ -3598,7 +3601,7 @@ function InfoCard({
 
 
 
-  return <div style={style}>{content}</div>;
+  return <div className={className} style={style}>{content}</div>;
 
 
 
