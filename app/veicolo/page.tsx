@@ -462,13 +462,8 @@ export default function Veicolo() {
 
 
 
-  const whatsappHref = clienteVisualizzato.telefono
-    ? (() => {
-        let numero = clienteVisualizzato.telefono.replace(/\D/g, "");
-        if (numero.startsWith("00")) numero = numero.slice(2);
-        if (!numero.startsWith("39")) numero = "39" + numero.replace(/^0+/, "");
-        return numero.length >= 10 ? `https://wa.me/${numero}` : undefined;
-      })()
+  const telefonoHref = clienteVisualizzato.telefono
+    ? `tel:${clienteVisualizzato.telefono.trim().replace(/[^+\d]/g, "")}`
     : undefined;
 
   const aggiornaLavori = async () => {
@@ -1337,7 +1332,7 @@ export default function Veicolo() {
 
 
 
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+      <div className="desktop-page-header" style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
         <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
           <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
         </div>
@@ -1729,6 +1724,7 @@ export default function Veicolo() {
 
 
           <div
+            className="vehicle-profile-card"
             style={{
               margin: "22px 18px 0",
               background: "#FFFFFF",
@@ -1884,6 +1880,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<RevisionIcon />}
               label="Revisione"
+              className="vehicle-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input
                   type="date"
@@ -1904,6 +1901,7 @@ export default function Veicolo() {
             <InfoCard
               icon={<KeyIcon />}
               label="Immatric."
+              className="vehicle-info-card"
               value={modificaProfilo && profiloEdit ? (
                 <input
                   type="date"
@@ -1918,11 +1916,12 @@ export default function Veicolo() {
             <InfoCard
               icon={<LocationIcon />}
               label="Indirizzo"
+              className="customer-info-card customer-address-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).indirizzo}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "indirizzo", e.target.value)}
                   placeholder="Indirizzo" style={cardEditInputStyle} />
-              ) : (clienteVisualizzato.indirizzo || "—")}
+              ) : (clienteVisualizzato.indirizzo ? clienteVisualizzato.indirizzo.toLocaleUpperCase("it-IT") : "—")}
               iconColor="#374151"
               href={modificaProfilo ? undefined : indirizzoMaps}
               valueFontSize={14}
@@ -1930,18 +1929,20 @@ export default function Veicolo() {
             <InfoCard
               icon={<PhoneIcon />}
               label="Telefono"
+              className="customer-info-card customer-phone-card"
               value={modificaProfilo && profiloEdit ? (
                 <input type="tel" value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).telefono}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "telefono", e.target.value)}
                   placeholder="Telefono" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.telefono || "—")}
               iconColor="#16A34A"
-              href={modificaProfilo ? undefined : whatsappHref}
+              href={modificaProfilo ? undefined : telefonoHref}
               valueFontSize={16}
             />
             <InfoCard
               icon={<PersonIcon />}
               label="Nascita"
+              className="customer-info-card customer-birth-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).nascita}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "nascita", e.target.value)}
@@ -1953,13 +1954,14 @@ export default function Veicolo() {
             <InfoCard
               icon={<CardIcon />}
               label="Cod. Fiscale"
+              className="customer-info-card customer-cf-card"
               value={modificaProfilo && profiloEdit ? (
                 <input value={(clienteSelezionato === 2 && profiloEdit.cliente2 ? profiloEdit.cliente2 : profiloEdit.cliente1).cf}
                   onChange={(e) => aggiornaClienteEdit(clienteSelezionato, "cf", e.target.value.toUpperCase())}
                   placeholder="Codice fiscale" style={cardEditInputStyle} />
               ) : (clienteVisualizzato.cf || "—")}
               iconColor="#64748B"
-              valueFontSize={13}
+              valueFontSize={16}
             />
           </div>
 
@@ -3337,9 +3339,7 @@ function CloseIcon() {
 }
 
 function InfoCard({
-
-
-
+  className,
   icon,
 
 
@@ -3383,6 +3383,7 @@ function InfoCard({
 
 
   href?: string;
+  className?: string;
 
   valueFontSize?: number;
 
@@ -3577,7 +3578,7 @@ function InfoCard({
 
 
 
-      <a href={href} style={style}>
+      <a href={href} className={className} style={style}>
 
 
 
@@ -3597,7 +3598,7 @@ function InfoCard({
 
 
 
-  return <div style={style}>{content}</div>;
+  return <div className={className} style={style}>{content}</div>;
 
 
 
