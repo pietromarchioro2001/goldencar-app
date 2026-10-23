@@ -584,3 +584,21 @@ textarea {
     padding-inline: clamp(40px, 4vw, 80px) !important;
   }
 }
+
+
+/* Keep the fixed bottom navigation aligned to the viewport on desktop. */
+@media (min-width: 601px) {
+  nav[aria-label="Navigazione principale"],
+  .bottom-navigation {
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  nav[aria-label="Navigazione principale"] > div,
+  .bottom-navigation > div {
+    border-radius: 24px 24px 0 0;
+  }
+}
