@@ -776,11 +776,11 @@ textarea {
     min-height: 92px !important;
     height: 92px !important;
     box-sizing: border-box !important;
-    padding: 12px 13px !important;
+    padding: 8px 13px 10px !important;
     display: flex !important;
     flex-direction: column !important;
     align-items: flex-start !important;
-    justify-content: center !important;
+    justify-content: flex-start !important;
     gap: 7px !important;
     border-radius: 20px !important;
     overflow: hidden !important;
@@ -835,14 +835,17 @@ textarea {
     color: #000000 !important;
     text-transform: uppercase !important;
   }
-  .app .customer-address-card > div:nth-child(2) { text-transform: uppercase !important; }
-  .app .customer-phone-card > div:nth-child(2),
-  .app .customer-birth-card > div:nth-child(2),
-  .app .vehicle-info-card > div:nth-child(2) { font-variant-numeric: tabular-nums; }
+  .app .customer-address-card > div:nth-child(2),
   .app .customer-cf-card > div:nth-child(2) {
+    font-size: 12px !important;
+    line-height: 16px !important;
+    font-weight: 600 !important;
     text-transform: uppercase !important;
     overflow-wrap: anywhere !important;
   }
+  .app .customer-phone-card > div:nth-child(2),
+  .app .customer-birth-card > div:nth-child(2),
+  .app .vehicle-info-card > div:nth-child(2) { font-variant-numeric: tabular-nums; }
   .app .revision-card { padding: 10px 9px !important; gap: 7px !important; border-radius: 17px !important; }
   .app .revision-card > button:first-child { width: 36px !important; height: 36px !important; flex-basis: 36px !important; border-radius: 11px !important; }
   .app .revision-customer-name { font-size: 12px !important; font-weight: 800 !important; line-height: 1.2 !important; }
