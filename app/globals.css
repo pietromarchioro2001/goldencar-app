@@ -987,3 +987,33 @@ textarea {
     transform: translateY(5px);
   }
 }
+
+
+/* Mobile home: keep the check-in action visible without crowding the statistics. */
+@media (max-width: 600px) {
+  .app .home-stats-grid {
+    margin-top: 20px !important;
+    gap: 12px !important;
+  }
+
+  .app .home-checkin-container {
+    margin-top: 26px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .app .home-checkin-container > button {
+    width: min(58%, 280px) !important;
+    height: 104px !important;
+    border-radius: 24px !important;
+  }
+
+  .app .home-checkin-container > button > svg {
+    width: 38px !important;
+    height: 38px !important;
+  }
+
+  .app .home-checkin-container > button > span {
+    margin-top: 6px !important;
+    font-size: 17px !important;
+  }
+}
