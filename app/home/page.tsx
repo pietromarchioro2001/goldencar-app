@@ -1004,6 +1004,7 @@ export default function Home() {
             STATISTICHE
         ========================= */}
         <div
+          className="home-stats-grid"
           style={{
             display: "grid",
             gridTemplateColumns:
@@ -1076,6 +1077,7 @@ export default function Home() {
             CHECK IN / OUT
         ========================= */}
           <div
+            className="home-checkin-container"
             style={{
               display: "flex",
               justifyContent: "center",
