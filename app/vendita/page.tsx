@@ -224,7 +224,7 @@ async function photos(e:ChangeEvent<HTMLInputElement>){
 
 
 
-  return <main style={S.page}><div style={S.wrap}>
+  return <main className="responsive-page" style={S.page}><div className="responsive-content" style={S.wrap}>
 
     {view==="list"&&<><div style={S.pageHeader}>
 
@@ -616,9 +616,9 @@ const S:any={
 
  wrap:{maxWidth:1120,margin:"0 auto",padding:"0 0 35px"},header:{display:"flex",alignItems:"center",gap:10,marginBottom:20,padding:"28px 22px 18px"},formHeader:{display:"flex",alignItems:"center",gap:14,marginBottom:20,padding:"28px 22px 12px"},
 
-pageHeader:{display:"flex",alignItems:"center",gap:18,padding:"28px 22px 18px"},
+pageHeader:{display:"flex",alignItems:"center",gap:18,padding:"28px 20px 24px"},
 
-logoBox:{width:74,height:74,borderRadius:22,background:"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(0,0,0,.08)",fontSize:13,fontWeight:700,color:"#9CA3AF",flexShrink:0},
+logoBox:{width:110,height:90,borderRadius:0,background:"transparent",display:"flex",alignItems:"center",justifyContent:"flex-start",boxShadow:"none",fontSize:13,fontWeight:700,color:"#9CA3AF",flexShrink:0},
 
 pageTitle:{fontSize:31,fontWeight:800,color:"#041E49",letterSpacing:"-0.7px",margin:"3px 0 0"},
 

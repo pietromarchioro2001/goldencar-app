@@ -115,7 +115,7 @@ type JobDraft = VeicoloScheda & {
 
   problems: string[];
 
-  products: { name: string; details: string; quantity?: string; orderRequested?: boolean }[];
+  products: { name: string; details: string; quantity?: string; orderRequested?: boolean; category?: "TAGLIANDO" | "MANUTENZIONE" }[];
 
   works: string[];
 
@@ -130,7 +130,7 @@ type JobDraft = VeicoloScheda & {
   paymentStatus: "DA_PAGARE" | "PAGATO";
   media: MediaAttachment[];
 
-  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  status: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
 
   pdfUrl?: string;
   pdfR2Key?: string;
@@ -383,7 +383,9 @@ function jobIdToNumber(id: string): number {
 
 function normalizeJobStatus(value: unknown): JobDraft["status"] {
   const stato = String(value || "").toUpperCase();
-  return stato === "CONCLUSO" || stato === "CHIUSO" ? "CONCLUSO" : "IN_LAVORAZIONE";
+  if (stato === "CONCLUSO" || stato === "CHIUSO") return "CONCLUSO";
+  if (stato === "DA_DOCUMENTARE") return "DA_DOCUMENTARE";
+  return "IN_LAVORAZIONE";
 }
 
 function parseJobDetails(value: unknown): Record<string, any> {
@@ -530,6 +532,8 @@ export default function SchedaLavoroPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
+  const [tagliandoCatalog, setTagliandoCatalog] = useState<string[]>([]);
+  const [manutenzioneCatalog, setManutenzioneCatalog] = useState<string[]>([]);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -545,6 +549,19 @@ export default function SchedaLavoroPage() {
   // e subito dopo sovrascritta da una nuova scheda vuota.
   const initializedRef = useRef(false);
   const productOrderKey = (name: string) => name.trim().toLowerCase();
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/product-catalog?category=TAGLIANDO", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setTagliandoCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti tagliando non disponibile:", error));
+    fetch("/api/product-catalog?category=MANUTENZIONE", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setManutenzioneCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti manutenzione non disponibile:", error));
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -805,7 +822,7 @@ export default function SchedaLavoroPage() {
 
 
 
-  const addProduct = () => {
+  const addProduct = (category: "TAGLIANDO" | "MANUTENZIONE" = "MANUTENZIONE") => {
 
     setDraft((previous) =>
 
@@ -822,11 +839,9 @@ export default function SchedaLavoroPage() {
               {
 
                 name: "",
-
                 details: "",
-
                 quantity: "1",
-
+                category,
               },
 
             ],
@@ -1139,7 +1154,7 @@ export default function SchedaLavoroPage() {
         products: lavoro.products,
         notes: lavoro.notes,
         invoiceNumber: lavoro.invoiceNumber,
-        status: lavoro.status,
+        status: lavoro.status === "DA_DOCUMENTARE" ? "IN_LAVORAZIONE" : lavoro.status,
       };
 
       const blob = await pdf(<SchedaLavoroPDF lavoro={pdfData} />).toBlob();
@@ -1243,31 +1258,58 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
+  const saveDraft = async (action: "save" | "conclude" | "document" = "save"): Promise<JobDraft | null> => {
     if (saving) return null;
     if (!draft) {
       alert("Scheda non ancora caricata. Attendi un momento e riprova.");
       return null;
     }
 
-    if (conclude) {
+    if (action === "conclude" || action === "document") {
+      const confirmed = window.confirm(
+        action === "conclude"
+          ? "Confermi che il lavoro è terminato e deve passare alla fase di documentazione? La scheda resterà modificabile."
+          : "Confermi la documentazione definitiva? La scheda verrà bloccata e verrà generato il PDF."
+      );
+      if (!confirmed) return null;
+    }
+
+    if (action === "document") {
       const missing: string[] = [];
       if (!draft.kilometers.trim()) missing.push("chilometri");
       if (!draft.labor.trim()) missing.push("manodopera");
       if (!draft.invoiceNumber.trim()) missing.push("numero di fattura");
       if (missing.length) {
-        alert(`Prima di concludere il lavoro devi inserire: ${missing.join(", ")}.`);
+        alert(`Prima di documentare il lavoro devi inserire: ${missing.join(", ")}.`);
         return null;
       }
-      const confirmed = window.confirm(
-        "Sei sicuro di voler concludere questo lavoro?\n\nUna volta concluso, la scheda verrà considerata definitiva."
-      );
-      if (!confirmed) return null;
     }
 
     setSaving(true);
     try {
-    const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
+    const next = { ...draft, status: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : draft.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "IN_LAVORAZIONE" } as JobDraft;
+    const fixedTagliandoNames = ["Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo", "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri"];
+    const newCatalogNames = Array.from(new Set(next.products.filter((item) => item.category === "TAGLIANDO" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !fixedTagliandoNames.some((item) => productOrderKey(item) === productOrderKey(name)) && !tagliandoCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    let catalogSaveFailed = false;
+    for (const name of newCatalogNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "TAGLIANDO", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setTagliandoCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
+    const newMaintenanceNames = Array.from(new Set(next.products.filter((item) => item.category === "MANUTENZIONE" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !manutenzioneCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    for (const name of newMaintenanceNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "MANUTENZIONE", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setManutenzioneCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
     if (!next.vehicleId) {
       alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
       return null;
@@ -1292,8 +1334,8 @@ export default function SchedaLavoroPage() {
       manodopera: next.labor.trim() || null,
       note: next.notes.trim() || null,
       fattura: next.invoiceNumber.trim() || null,
-      stato: conclude ? "CONCLUSO" : "APERTO",
-      closed_at: conclude ? new Date().toISOString() : null,
+      stato: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : next.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "APERTO",
+      closed_at: action === "document" ? new Date().toISOString() : null,
       payment_amount: Number.isFinite(parsedPayment as number) ? parsedPayment : null,
       payment_status: next.paymentAmount.trim() ? next.paymentStatus : null,
       dettagli: details,
@@ -1318,13 +1360,19 @@ export default function SchedaLavoroPage() {
     setSaved(true);
     setSaveConfirmed(true);
     window.setTimeout(() => setSaveConfirmed(false), 1200);
+    if (catalogSaveFailed) alert("La scheda è stata salvata, ma non è stato possibile aggiornare il catalogo condiviso dei prodotti. Verifica che la migrazione product_catalog sia stata applicata.");
     try {
       await syncOrderForJob(savedDraft);
     } catch (orderError) {
       console.error("Errore sincronizzazione ordine:", orderError);
       alert(orderError instanceof Error ? orderError.message : "La scheda è stata salvata, ma l'ordine non è stato aggiornato.");
     }
-    if (conclude) await generateAndOpenPdf(savedDraft);
+    if (action === "document") {
+      await generateAndOpenPdf(savedDraft);
+      const refreshed = await fetch("/api/jobs?id=" + encodeURIComponent(savedDraft.jobId || ""), { cache: "no-store" });
+      const refreshedResult = await refreshed.json().catch(() => null);
+      if (refreshed.ok && refreshedResult?.ok && refreshedResult?.job) setDraft(rowToJobDraft(refreshedResult.job));
+    }
     return savedDraft;
     } catch (error) {
       console.error("Errore salvataggio scheda:", error);
@@ -1408,7 +1456,7 @@ export default function SchedaLavoroPage() {
 
   const openInvoicing = () => {
 
-    saveDraft(false);
+    void saveDraft("save");
 
 
 
@@ -2060,25 +2108,11 @@ export default function SchedaLavoroPage() {
 
                 <ProductChecklist
 
-                  products={[
-
-                    "Olio motore",
-
-                    "Filtro olio",
-
-                    "Filtro aria",
-
-                    "Filtro abitacolo",
-
-                    "Filtro carburante",
-
-                    "Candele",
-
-                    "Liquido refrigerante",
-
-                    "Lavavetri",
-
-                  ]}
+                  products={Array.from(new Set([
+                    "Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo",
+                    "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri",
+                    ...tagliandoCatalog,
+                  ]))}
 
                   draft={draft}
 
@@ -2086,9 +2120,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("TAGLIANDO")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="TAGLIANDO"
                 />
 
               </section>
@@ -2139,9 +2174,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("MANUTENZIONE")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="MANUTENZIONE"
                 />
 
               </section>
@@ -2547,6 +2583,7 @@ export default function SchedaLavoroPage() {
                       "Spazzole tergicristallo",
 
                       "Pneumatici",
+                      ...manutenzioneCatalog,
 
                     ]}
 
@@ -2556,9 +2593,10 @@ export default function SchedaLavoroPage() {
 
                     updateProduct={updateProduct}
 
-                    addProduct={addProduct}
+                    addProduct={() => addProduct("MANUTENZIONE")}
 
                     markUnsaved={() => setSaved(false)}
+                    category="MANUTENZIONE"
                 />
 
                 </section>
@@ -3127,6 +3165,30 @@ export default function SchedaLavoroPage() {
 
           </div>
 
+        ) : draft.status === "DA_DOCUMENTARE" ? (
+
+          <div style={{ padding: "0 18px" }}>
+            <button
+              type="button"
+              onClick={() => { void saveDraft("document"); }}
+              disabled={saving}
+              style={{
+                width: "100%",
+                height: 46,
+                border: 0,
+                borderRadius: 14,
+                background: "#15803D",
+                color: "#FFFFFF",
+                fontSize: 14,
+                fontWeight: 900,
+                boxShadow: "0 4px 14px rgba(21,128,61,.18)",
+                opacity: saving ? 0.65 : 1,
+              }}
+            >
+              {saving ? "DOCUMENTAZIONE..." : "DOCUMENTA"}
+            </button>
+          </div>
+
         ) : (
 
           <div
@@ -3151,7 +3213,7 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={() => saveDraft(true)}
+              onClick={() => saveDraft("conclude")}
 
               style={{
 
@@ -3189,7 +3251,7 @@ export default function SchedaLavoroPage() {
 
               type="button"
 
-              onClick={() => { void saveDraft(false); }}
+              onClick={() => { void saveDraft("save"); }}
               disabled={saving}
               aria-label="Salva scheda di lavoro"
 
@@ -3559,10 +3621,12 @@ function ProductChecklist({
   addProduct,
 
   markUnsaved,
+  category,
 
 }: {
 
   products: string[];
+  category: "TAGLIANDO" | "MANUTENZIONE";
 
   draft: JobDraft;
 
@@ -3633,7 +3697,7 @@ function ProductChecklist({
 
         const index = draft.products.findIndex(
 
-          (product) => product.name === name
+          (product) => product.name === name && (product.category || "MANUTENZIONE") === category
 
         );
 
@@ -3958,7 +4022,7 @@ function ProductChecklist({
 
         .filter(
 
-          (product) => !products.includes(product.name)
+          (product) => !products.includes(product.name) && (product.category ?? "RICAMBI") === category && product.name.trim()
 
         )
 

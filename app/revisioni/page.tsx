@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { pdf } from "@react-pdf/renderer";
 import SchedaLavoroPDF, { type SchedaLavoroPDFData } from "@/app/pdf/SchedaLavoroPDF";
 import BottomBar from "@/components/BottomBar";
+import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
+
+
 
 type Product = { name: string; details: string; quantity?: string; orderRequested?: boolean };
 type Lavoro = {
@@ -26,7 +29,7 @@ type Lavoro = {
   invoiceNumber: string;
   paymentAmount?: string;
   paymentStatus?: "DA_PAGARE" | "PAGATO";
-  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  status: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
   jobId?: string;
   pdfR2Key?: string;
 };
@@ -77,7 +80,7 @@ function toPdfData(lavoro: Lavoro): SchedaLavoroPDFData {
     notes: lavoro.notes || "",
     invoiceNumber: lavoro.invoiceNumber || "",
     products: lavoro.products || [],
-    status: lavoro.status,
+    status: lavoro.status === "DA_DOCUMENTARE" ? "IN_LAVORAZIONE" : lavoro.status,
   };
 }
 
@@ -165,7 +168,7 @@ function whatsappIcon() {
 
 export default function RevisioniPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<"REVISIONI" | "LAVORI">("REVISIONI");
+  const [tab, setTab] = useState<"REVISIONI" | "LAVORI">("LAVORI");
   const [lavori, setLavori] = useState<Lavoro[]>([]);
   const [pdfLoading, setPdfLoading] = useState<number | null>(null);
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
@@ -175,9 +178,8 @@ export default function RevisioniPage() {
 
   const caricaDatiProtetti = async () => {
     try {
-      const response = await fetch("/api/revisioni", { cache: "no-store" });
-      const result = await response.json();
-      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore caricamento revisioni e lavori.");
+      const result = await fetchJsonCached("/api/revisioni");
+      if (!result?.ok) throw new Error(result?.error || "Errore caricamento revisioni e lavori.");
 
       const rows = Array.isArray(result.vehicles) ? result.vehicles : [];
       const clients = Array.isArray(result.clients) ? result.clients : [];
@@ -214,13 +216,12 @@ export default function RevisioniPage() {
         const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
         let products: Product[] = Array.isArray(details.products) ? details.products : [];
         if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
-        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
+        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
       });
       setLavori(conclusi);
     } catch (error) {
+      // Mantieni le liste già mostrate se la rete/API ha un errore temporaneo.
       console.error("Errore caricamento revisioni/lavori:", error);
-      setRevisioni([]);
-      setLavori([]);
     }
   };
   const apriPdf = async (lavoro: Lavoro) => {
@@ -233,7 +234,7 @@ export default function RevisioniPage() {
   };
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
-    setTab(requestedTab === "lavori" ? "LAVORI" : "REVISIONI");
+    setTab(requestedTab === "revisioni" ? "REVISIONI" : "LAVORI");
     void caricaDatiProtetti();
     const refresh = () => { void caricaDatiProtetti(); };
     window.addEventListener("storage", refresh);
@@ -287,6 +288,7 @@ export default function RevisioniPage() {
       return;
     }
 
+    invalidateApiCache("/api/revisioni");
     setRevisioni((current) => current.map((item) =>
       item.id === revisioneDaAggiornare.id
         ? { ...item, scadenza: nuovaData, revisione: nuovaData }
@@ -321,8 +323,8 @@ export default function RevisioniPage() {
 
     const testo =
       giorni !== null && giorni < 0
-        ? "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " è scaduta il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento."
-        : "Ciao " + nome + ", ti ricordiamo che la revisione di " + veicolo + targa + " scadrà il " + formatDate(data) + ". Ti invitiamo a contattarci per aggiornarla e fissare un appuntamento.";
+        ? "Buongiorno,\nti ricordiamo che la revisione di " + veicolo + targa + " è scaduta il " + formatDate(data) + "."
+        : "Buongiorno,\nti ricordiamo che la revisione di " + veicolo + targa + " scadrà il " + formatDate(data) + ".";
 
     window.open(
       `https://wa.me/${telefono}?text=${encodeURIComponent(testo)}`,
@@ -390,13 +392,17 @@ export default function RevisioniPage() {
         <section style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
           {lavoriFiltrati.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>{ricerca.trim() ? "Nessun lavoro trovato." : "Nessun lavoro concluso."}</div> : lavoriFiltrati.map((lavoro) => (
             <div key={lavoro.jobId || String(lavoro.jobNumber)} onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
-              <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+              {lavoro.status === "CONCLUSO" ? (
+                <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+              ) : (
+                <div aria-label="Lavoro da documentare" title="Lavoro da documentare" style={{ width: 48, height: 48, borderRadius: 15, background: "#FEF3C7", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
+              )}
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}><div style={{ minWidth: 0, fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div><div style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#64748B" }}>{formatJobDate(lavoro.createdAt)}</div></div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div>
                 <div style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.nomeCliente || "Cliente non indicato"}</div>
                 <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#64748B" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.veicolo || "Veicolo non indicato"}</span><span style={{ color: "#CBD5E1" }}>•</span><span style={{ flexShrink: 0, fontWeight: 800, letterSpacing: ".3px" }}>{lavoro.targa || "—"}</span></div>
               </div>
-              <div style={{ flexShrink: 0, alignSelf: "flex-start", marginTop: 2, fontSize: 11, fontWeight: 800, color: "#94A3B8" }}>#{formatJobNumber(lavoro.jobNumber)}</div>
+              <div style={{ flexShrink: 0, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 176, textAlign: "center", borderRadius: 999, padding: "10px 16px", fontSize: 13, fontWeight: 900, color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : lavoro.status === "CONCLUSO" ? "#166534" : "#1D4ED8", background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : lavoro.status === "CONCLUSO" ? "#DCFCE7" : "#DBEAFE" }}>{lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : lavoro.status === "CONCLUSO" ? "CONCLUSO" : "IN LAVORAZIONE"}</div>
             </div>
           ))}
         </section>

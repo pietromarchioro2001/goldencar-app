@@ -2,6 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
+import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
+
+
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
@@ -14,7 +17,7 @@ type Lavoro = {
   paymentStatus?: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   types?: string[];
   works?: string[] | string;
-  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  status?: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
   pdfUrl?: string;
 };
 type Appuntamento = {
@@ -226,6 +229,8 @@ export default function Home() {
   const conteggiRequestRef = useRef(0);
 
   const caricaConteggiRapidi = async () => {
+    // I conteggi devono leggere lo stato appena scritto, non la cache breve della Home.
+    invalidateApiCache("/api/home/counts");
     const requestId = ++conteggiRequestRef.current;
     const oggi = new Date();
     const inizio = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
@@ -239,20 +244,18 @@ export default function Home() {
     });
 
     // Conteggi essenziali indipendenti dal caricamento delle liste complete.
-    void fetch("/api/home/counts?" + params.toString(), { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setConteggiRapidi(result.counts);
+    void fetchJsonCached("/api/home/counts?" + params.toString())
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok && result.counts) setConteggiRapidi(result.counts);
       })
       .catch((error) => console.error("Errore conteggi rapidi Home:", error));
 
-    // I solleciti richiedono un'aggregazione distinta per cliente: non rallentano le altre card.
-    void fetch("/api/home/counts/reminders", { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setSollecitiRapido(Number(result.count) || 0);
+    // La risposta viene condivisa tra navigazioni ravvicinate e richieste simultanee.
+    void fetchJsonCached("/api/home/counts/reminders")
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok) setSollecitiRapido(Number(result.count) || 0);
       })
       .catch((error) => console.error("Errore conteggio solleciti Home:", error));
   };
@@ -277,10 +280,23 @@ export default function Home() {
         sessionStorage.removeItem("goldencar_nuovo_ordine");
       }
     }
-    const refresh = () => { void caricaDati(false); void caricaConteggiRapidi(); };
+    const refresh = () => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+      void caricaConteggiRapidi();
+    };
+    // Allinea le altre postazioni senza richiedere un aggiornamento manuale:
+    // conteggi ogni 5 s, dati completi ogni 10 s.
+    const countsTimer = window.setInterval(() => { void caricaConteggiRapidi(); }, 5000);
+    const dataTimer = window.setInterval(() => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+    }, 10000);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
+      window.clearInterval(countsTimer);
+      window.clearInterval(dataTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("focus", refresh);
     };
@@ -406,19 +422,16 @@ export default function Home() {
 
   const caricaDati = async (aggiornaConteggi = true) => {
     if (typeof window === "undefined") return;
-    const response = await fetch("/api/home", { cache: "no-store" });
-    const result = await response.json().catch(() => null);
-    if (!response.ok || !result?.ok) {
-      console.error("Errore caricamento dati Home:", result?.error || response.status);
-      setLavori([]);
-      setPagamentiManuali([]);
-      setSolleciti([]);
-      setAppuntamenti([]);
-      setRevisioni([]);
-      setOrdini([]);
-      setFornitori([]);
-      setVeicoliOrdini([]);
-      setClientiAnagrafica([]);
+    let result: any;
+    try {
+      result = await fetchJsonCached("/api/home");
+    } catch (error) {
+      // Mantieni l'ultimo stato valido: un errore temporaneo non deve svuotare le card.
+      console.error("Errore caricamento dati Home:", error);
+      return;
+    }
+    if (!result?.ok) {
+      console.error("Errore caricamento dati Home:", result?.error || "Risposta non valida");
       return;
     }
     const jobRows = Array.isArray(result.jobs) ? result.jobs : [];
@@ -457,7 +470,7 @@ export default function Home() {
         paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : row.payment_status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
         types: Array.isArray(dettagli.types) ? dettagli.types : row.tipo ? [String(row.tipo)] : [],
         works: Array.isArray(dettagli.works) ? dettagli.works : String(row.lavori ?? ""),
-        status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
+        status: String(row.stato ?? "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
         pdfUrl: String(dettagli.pdfUrl ?? ""),
       };
     });
@@ -501,7 +514,7 @@ export default function Home() {
     () =>
       lavori.filter(
         (lavoro) =>
-          lavoro.status === "IN_LAVORAZIONE"
+          lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE"
       ),
     [lavori]
   );
@@ -869,15 +882,62 @@ export default function Home() {
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
   };
   const inviaOrdineHome = async (ordine: Ordine) => {
-    const supplier = fornitori.find(s => s.id === ordine.supplierId);
-    if (!supplier?.whatsapp) { alert("Il fornitore non ha un numero WhatsApp."); return; }
-    const numero = supplier.whatsapp.replace(/\D/g,"");
-    const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordine.id, stato: "INVIATO" }) });
-    const result = await response.json();
-    if (!response.ok || !result?.ok) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: " + (result?.error || "Errore sconosciuto.")); return; }
-    await caricaDati();
+    // Usa il fornitore attualmente selezionato nel modale, non quello salvato
+    // in precedenza sull'ordine: l'utente può averlo appena cambiato.
+    const supplierId = String(ordineFornitoreId || ordine.supplierId || "").trim();
+    const supplier = fornitori.find((item) => String(item.id).trim() === supplierId);
+    if (!supplierId || !supplier) {
+      alert("Seleziona un fornitore prima di inviare l'ordine.");
+      return;
+    }
+    const numero = String(supplier.whatsapp || "").replace(/\D/g, "");
+    if (!numero) {
+      alert(`Il fornitore "${supplier.nome}" non ha un numero WhatsApp valido nella rubrica. Apri la rubrica fornitori e verifica il numero.`);
+      return;
+    }
+
+    const descrizione = ordineDescrizione.trim() || ordine.descrizione || "";
+    const targa = String(veicoliOrdini.find((vehicle) => String(vehicle.id) === String(ordine.vehicleId))?.targa || "").trim();
+    if (!targa) {
+      alert("Non trovo la targa del veicolo associato all'ordine. Verifica il veicolo prima di inviare.");
+      return;
+    }
+    const elenco = descrizione.split(/\s·\s/).map((voce) => voce.trim()).filter(Boolean).map((voce) => "• " + voce).join("\n");
+    const testo = "Buongiorno,\nMi servirebbe per la targa " + targa + ":" + (elenco ? "\n" + elenco : "");
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (!whatsappWindow) {
+      alert("Il browser ha bloccato l'apertura di WhatsApp. Consenti i popup e riprova.");
+      return;
+    }
+    whatsappWindow.opener = null;
+    whatsappWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(testo)}`;
+
+    // Aggiornamento ottimistico: la UI riflette subito l'invio, senza attendere Supabase.
+    const statoPrecedente = ordine.stato;
+    setOrdini((current) => current.map((item) =>
+      item.id === ordine.id ? { ...item, stato: "INVIATO", supplierId, descrizione } : item
+    ));
+    setOrdineAperto({ ...ordine, stato: "INVIATO", supplierId, descrizione });
+
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordine.id, supplierId, description: descrizione, stato: "INVIATO" }),
+      cache: "no-store",
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      setOrdini((current) => current.map((item) =>
+        item.id === ordine.id ? { ...item, stato: statoPrecedente } : item
+      ));
+      setOrdineAperto({ ...ordine, stato: statoPrecedente });
+      alert("WhatsApp è stato aperto, ma non ho potuto aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
+      return;
+    }
+    invalidateApiCache("/api/home");
+    setOrdineAperto(null);
+    void caricaDati(false);
+    void caricaConteggiRapidi();
   };
   const salvaFornitoreHome = async () => {
     const nome = fornitoreEditNome.trim();
@@ -1501,7 +1561,7 @@ export default function Home() {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginTop:16}}>
             <button type="button" onClick={()=>void aggiornaOrdineHome()} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,fontSize:13,cursor:"pointer"}}>SALVA</button>
             {ordineAperto.stato !== "INVIATO" ? (
-              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#D4AF37",color:"#111827",fontWeight:900,fontSize:13,cursor:"pointer"}}>INVIA</button>
+              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#25D366",color:"#FFFFFF",fontWeight:900,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><span aria-hidden="true" style={{fontSize:17,lineHeight:1}}>◉</span> WHATSAPP</button>
             ) : (
               <div style={{fontSize:11,fontWeight:800,color:"#64748B",textAlign:"right"}}>INVIATO</div>
             )}
@@ -1835,7 +1895,7 @@ function LavoroRow({
             fontWeight: 700,
           }}
         >
-          SCHEDA #{lavoro.jobNumber}
+          {lavoro.status === "DA_DOCUMENTARE" ? "LAVORO TERMINATO" : "LAVORO ATTIVO"}
         </div>
         <div
           style={{
@@ -1864,8 +1924,8 @@ function LavoroRow({
       </div>
       <div
         style={{
-          background: "#FFF1C2",
-          color: "#92400E",
+          background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : "#FFF1C2",
+          color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : "#92400E",
           borderRadius: 999,
           padding:
             "6px 9px",
@@ -1875,7 +1935,7 @@ function LavoroRow({
             "nowrap",
         }}
       >
-        IN LAVORAZIONE
+        {lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : "IN LAVORAZIONE"}
       </div>
     </button>
   );
