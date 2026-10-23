@@ -984,9 +984,9 @@ export default function Home() {
         {/* =========================
             HEADER
         ========================= */}
-        <div className="desktop-page-header" style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
-        <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
-            <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
+        <div className="desktop-page-header home-page-header" style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+        <div style={{ width: 140, height: 110, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <img src="/logo.png" alt="Goldencar" style={{ width: "140px", height: "110px", objectFit: "contain" }} />
           </div>
           <h1
             style={{
