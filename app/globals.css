@@ -648,3 +648,47 @@ textarea {
     display: none !important;
   }
 }
+
+
+/* Desktop content width: keep the app full-screen, but avoid stretched, hard-to-scan layouts. */
+@media (min-width: 601px) {
+  .app > :not(.desktop-page-header):not(nav):not([style*="position: fixed"]) {
+    width: 100%;
+    max-width: 1240px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .responsive-page > :not(.desktop-page-header):not(nav):not(.appointment-modal-overlay):not([style*="position: fixed"]) {
+    width: 100%;
+    max-width: 1240px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .responsive-page > .responsive-content {
+    max-width: 1240px !important;
+    margin-inline: auto !important;
+  }
+
+  /* Agenda: keep month navigation and calendar aligned to one comfortable reading width. */
+  .responsive-page .calendar-month-navigation,
+  .responsive-page .calendar-days-grid {
+    max-width: 100%;
+  }
+
+  /* Work sheet/profile routes share .app and are included in the same desktop width limit. */
+  .app > section,
+  .app > .responsive-content {
+    max-width: 1240px !important;
+    margin-inline: auto !important;
+  }
+}
+
+@media (min-width: 1500px) {
+  .app > :not(.desktop-page-header):not(nav):not([style*="position: fixed"]),
+  .responsive-page > :not(.desktop-page-header):not(nav):not(.appointment-modal-overlay):not([style*="position: fixed"]),
+  .responsive-page > .responsive-content {
+    max-width: 1320px !important;
+  }
+}
