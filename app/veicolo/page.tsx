@@ -1729,6 +1729,7 @@ export default function Veicolo() {
 
 
           <div
+            className="vehicle-profile-card"
             style={{
               margin: "22px 18px 0",
               background: "#FFFFFF",
