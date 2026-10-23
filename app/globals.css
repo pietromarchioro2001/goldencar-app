@@ -692,3 +692,48 @@ textarea {
     max-width: 1320px !important;
   }
 }
+
+
+/* Final desktop alignment: consistent card edges and truly centered page headings. */
+@media (min-width: 601px) {
+  .app > :not(nav):not([style*="position: fixed"]),
+  .responsive-page > :not(nav):not(.appointment-modal-overlay):not([style*="position: fixed"]) {
+    box-sizing: border-box !important;
+  }
+
+  .app > .desktop-page-header,
+  .responsive-page > .desktop-page-header,
+  .responsive-page > .responsive-content > .desktop-page-header {
+    width: 100% !important;
+    max-width: 1240px !important;
+    margin-inline: auto !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  .responsive-page > .responsive-content {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* The sales screen has an inner wrap; center its header and content on the same axis. */
+  .responsive-page > .responsive-content > .desktop-page-header {
+    padding-inline: 20px !important;
+  }
+
+  /* Keep agenda's heading centered on the same vertical axis as the month/calendar. */
+  .responsive-page > .desktop-page-header {
+    position: relative;
+    left: auto;
+    transform: none;
+  }
+
+  /* Job sheets contain several inline-styled cards; box sizing prevents padded cards
+     from becoming a few pixels wider than their siblings. */
+  .app section,
+  .app article,
+  .app [style*="borderRadius"],
+  .app [style*="borderRadius:"] {
+    box-sizing: border-box;
+  }
+}
