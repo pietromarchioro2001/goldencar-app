@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const [vehicles, clients, jobs] = await Promise.all([
       client.from("vehicles").select("id, client_id, veicolo, targa, revisione").not("revisione", "is", null),
       client.from("clients").select("id, nome, telefono"),
-      client.from("jobs").select("*").in("stato", ["DA_DOCUMENTARE", "CONCLUSO", "CHIUSO"]).order("created_at", { ascending: false }),
+      client.from("jobs").select("*").in("stato", ["APERTO", "IN_LAVORAZIONE", "DA_DOCUMENTARE", "CONCLUSO", "CHIUSO"]).order("created_at", { ascending: false }),
     ]);
     if (vehicles.error) throw vehicles.error;
     if (clients.error) throw clients.error;
