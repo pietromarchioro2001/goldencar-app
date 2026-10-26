@@ -701,17 +701,15 @@ export default function Home() {
       const residuo = Math.max(0, totale - pagato);
       if (residuo <= 0) continue;
 
+      const worksText = Array.isArray(lavoro.works)
+        ? lavoro.works.filter(Boolean).join(" · ").trim()
+        : String(lavoro.works || "").trim();
       result.push({
         id: String(lavoro.jobNumber),
         clientKey: key,
         nomeCliente: nome,
         telefono: lavoro.telefono,
-        descrizione: `Scheda ${lavoro.jobNumber}${(() => {
-          const worksText = Array.isArray(lavoro.works)
-            ? lavoro.works.filter(Boolean).join(" · ").trim()
-            : String(lavoro.works || "").trim();
-          return worksText ? ` · ${worksText}` : "";
-        })()}`,
+        descrizione: worksText || "Lavoro effettuato",
         importo: residuo,
         totale,
         pagato,
@@ -1378,7 +1376,6 @@ export default function Home() {
             <span>TOTALE RESIDUO</span>
             <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum,p) => sum + p.importo, 0))}</span>
           </div>
-          <button type="button" onClick={() => pagaTuttoCliente(dettaglioSollecito)} style={primaryButtonStyle}>SEGNA TUTTO COME PAGATO</button>
         </Modal>
       )}
 
