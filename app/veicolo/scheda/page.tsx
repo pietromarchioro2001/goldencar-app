@@ -569,7 +569,9 @@ export default function SchedaLavoroPage() {
 
     const init = async () => {
       try {
-        const existingJobId = sessionStorage.getItem("goldencar_apri_scheda");
+        const requestedJobId = new URLSearchParams(window.location.search).get("jobId");
+        const existingJobId = sessionStorage.getItem("goldencar_apri_scheda") || requestedJobId;
+        if (requestedJobId) sessionStorage.setItem("goldencar_apri_scheda", requestedJobId);
 
         if (existingJobId) {
           const response = await fetch("/api/jobs?id=" + encodeURIComponent(existingJobId), { cache: "no-store" });
