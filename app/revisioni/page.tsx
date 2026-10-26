@@ -84,7 +84,7 @@ function toPdfData(lavoro: Lavoro): SchedaLavoroPDFData {
   };
 }
 
-function paperclipIcon() { return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><path d="M8.5 12.5 14.9 6.1a3.54 3.54 0 0 1 5 5L11 20a5 5 0 0 1-7.07-7.07l8.84-8.84a2.5 2.5 0 0 1 3.54 3.54L7.5 16.44a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /></svg>; }
+function paperclipIcon() { return <svg viewBox="0 0 512 512" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M466.904 68.854c-60.129-60.127-157.962-60.127-218.091 0L35.373 282.294c-47.166 47.167-47.161 123.497 0 170.659 47.053 47.051 123.609 47.049 170.659 0l213.441-213.442c33.973-33.973 33.973-89.254 0-123.228-33.974-33.974-89.254-33.974-123.228 0L114.204 298.327c-7.833 7.833-7.833 20.532 0 28.365 7.833 7.833 20.531 7.833 28.365 0L324.61 144.65c18.333-18.336 48.164-18.334 66.497 0 18.333 18.334 18.333 48.165 0 66.498l-213.44 213.441c-31.412 31.41-82.519 31.41-113.93 0-31.487-31.487-31.484-82.445 0-113.929L277.179 97.219c44.595-44.596 116.77-44.59 161.36 0 44.596 44.595 44.59 116.77 0 161.36l-94.863 94.863c-7.833 7.833-7.833 20.532 0 28.365 7.834 7.833 20.531 7.833 28.365 0l94.863-94.863c60.127-60.127 60.127-157.963 0-218.09Z"/></svg>; }
 function parseDateOnly(value: string) {
   const match = String(value || "").slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
@@ -216,7 +216,7 @@ export default function RevisioniPage() {
         const jobNumber = idMatch ? Number(idMatch[1]) * 1000 + Number(idMatch[2]) : 0;
         let products: Product[] = Array.isArray(details.products) ? details.products : [];
         if (!products.length && row.prodotti_utilizzati) { try { const parsed = JSON.parse(String(row.prodotti_utilizzati)); if (Array.isArray(parsed)) products = parsed; } catch {} }
-        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
+        return { jobId: String(row.id), nomeCliente: details.nomeCliente || "", indirizzo: details.indirizzo || "", telefono: details.telefono || "", codiceFiscale: details.codiceFiscale || "", veicolo: details.veicolo || "", targa: details.targa || "", kilometers: row.chilometri == null ? "" : String(row.chilometri), jobNumber, createdAt: row.created_at || "", labor: row.manodopera == null ? "" : String(row.manodopera), types: Array.isArray(details.types) ? details.types : row.tipo ? [String(row.tipo)] : [], problems: row.problemi ? String(row.problemi).split("\n").filter(Boolean) : [], works: row.lavori ? String(row.lavori).split("\n").filter(Boolean) : [], notes: row.note || "", invoiceNumber: row.fattura || "", products, status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato || "").toUpperCase()) ? "IN_LAVORAZIONE" : String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "CONCLUSO", pdfR2Key: details.pdfR2Key || "" } as Lavoro;
       });
       setLavori(conclusi);
     } catch (error) {
@@ -269,8 +269,13 @@ export default function RevisioniPage() {
 
   const lavoriFiltrati = useMemo(() => {
     const query = ricerca.trim().toLowerCase();
-    if (!query) return lavori;
-    return lavori.filter((lavoro) => [lavoro.veicolo, lavoro.targa, lavoro.nomeCliente].some((value) => String(value || "").toLowerCase().includes(query)));
+    const filtrati = !query ? lavori : lavori.filter((lavoro) => [lavoro.types?.join(" "), lavoro.veicolo, lavoro.targa, lavoro.nomeCliente, formatJobDate(lavoro.createdAt)].some((value) => String(value || "").toLowerCase().includes(query)));
+    return [...filtrati].sort((a, b) => {
+      const activeA = a.status === "IN_LAVORAZIONE" || a.status === "DA_DOCUMENTARE";
+      const activeB = b.status === "IN_LAVORAZIONE" || b.status === "DA_DOCUMENTARE";
+      if (activeA !== activeB) return activeA ? -1 : 1;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
   }, [lavori, ricerca]);
 
   const aggiornaData = async () => {
@@ -389,24 +394,44 @@ export default function RevisioniPage() {
         {(["LAVORI", "REVISIONI"] as const).map((nomeTab) => <button key={nomeTab} type="button" onClick={() => setTab(nomeTab)} style={{ flex: 1, border: "none", borderRadius: 11, padding: "12px 8px", background: tab === nomeTab ? "#FFFFFF" : "transparent", color: tab === nomeTab ? "#041E49" : "#64748B", boxShadow: tab === nomeTab ? "0 2px 7px rgba(15,23,42,.08)" : "none", fontSize: 13, fontWeight: 900, cursor: "pointer" }}>{nomeTab}</button>)}
       </div>
       {tab === "LAVORI" ? (
-        <section style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-          {lavoriFiltrati.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>{ricerca.trim() ? "Nessun lavoro trovato." : "Nessun lavoro concluso."}</div> : lavoriFiltrati.map((lavoro) => (
-            <div key={lavoro.jobId || String(lavoro.jobNumber)} onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
-              {lavoro.status === "CONCLUSO" ? (
+        <section className="job-list" style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {lavoriFiltrati.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>{ricerca.trim() ? "Nessun lavoro trovato." : "Nessun lavoro presente."}</div> : lavoriFiltrati.map((lavoro) => {
+            const concluso = lavoro.status === "CONCLUSO";
+            const daDocumentare = lavoro.status === "DA_DOCUMENTARE";
+            const statusText = concluso ? "CONCLUSO" : daDocumentare ? "DA DOCUMENTARE" : "IN LAVORAZIONE";
+            const statusColor = concluso ? "#DCFCE7" : daDocumentare ? "#FEF3C7" : "#FFF1C2";
+            const statusTextColor = concluso ? "#166534" : "#92400E";
+            return <div key={lavoro.jobId || String(lavoro.jobNumber)} className="job-list-card" onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
+              {concluso ? (
                 <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
               ) : (
-                <div aria-label="Lavoro da documentare" title="Lavoro da documentare" style={{ width: 48, height: 48, borderRadius: 15, background: "#FEF3C7", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
+                <div aria-label={statusText} title={statusText} style={{ width: 48, height: 48, borderRadius: 15, background: daDocumentare ? "#FEF3C7" : "#FFF1C2", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
               )}
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div>
-                <div style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.nomeCliente || "Cliente non indicato"}</div>
-                <div style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#64748B" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.veicolo || "Veicolo non indicato"}</span><span style={{ color: "#CBD5E1" }}>•</span><span style={{ flexShrink: 0, fontWeight: 800, letterSpacing: ".3px" }}>{lavoro.targa || "—"}</span></div>
+              <div className="job-list-details" style={{ minWidth: 0, flex: 1 }}>
+                <div className="job-list-type" style={{ fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div>
+                <div className="job-list-client" style={{ marginTop: 5, fontSize: 14, fontWeight: 700, color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.nomeCliente || "Cliente non indicato"}</div>
+                <div className="job-list-meta" style={{ marginTop: 3, display: "flex", alignItems: "center", gap: 7, minWidth: 0, fontSize: 12, fontWeight: 600, color: "#64748B" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.veicolo || "Veicolo non indicato"}</span>
+                  <span style={{ color: "#CBD5E1", flexShrink: 0 }}>—</span>
+                  <span style={{ flexShrink: 0 }}>{formatJobDate(lavoro.createdAt)}</span>
+                </div>
               </div>
-              <div style={{ flexShrink: 0, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 176, textAlign: "center", borderRadius: 999, padding: "10px 16px", fontSize: 13, fontWeight: 900, color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : lavoro.status === "CONCLUSO" ? "#166534" : "#1D4ED8", background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : lavoro.status === "CONCLUSO" ? "#DCFCE7" : "#DBEAFE" }}>{lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : lavoro.status === "CONCLUSO" ? "CONCLUSO" : "IN LAVORAZIONE"}</div>
-            </div>
-          ))}
+              <div className="job-list-status" style={{ flexShrink: 0, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 176, textAlign: "center", borderRadius: 999, padding: "10px 16px", fontSize: 13, fontWeight: 900, color: statusTextColor, background: statusColor }}>{statusText}</div>
+            </div>;
+          })}
+          <style jsx>{`
+            .job-list-status-dot { display: none; }
+            @media (max-width: 640px) {
+              .job-list-card { gap: 10px !important; padding: 12px !important; min-height: 80px !important; }
+              .job-list-card > button, .job-list-card > div[aria-label] { width: 40px !important; height: 40px !important; flex: 0 0 40px !important; }
+              .job-list-type { font-size: 14px !important; }
+              .job-list-client { font-size: 13px !important; }
+              .job-list-meta { font-size: 11px !important; }
+              .job-list-status { min-width: 12px !important; width: 12px; height: 12px; padding: 0 !important; border-radius: 50% !important; font-size: 0 !important; overflow: hidden; }
+            }
+          `}</style>
         </section>
-      ) : (
+: (
         <div style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
           {revisioniFiltrate.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>Nessuna revisione trovata.</div> : revisioniFiltrate.map((revisione) => {
             const giorni = daysFromToday(getRevisionDate(revisione)); const scaduta = giorni !== null && giorni < 0; const entro30 = giorni !== null && giorni >= 0 && giorni <= 30;
