@@ -263,6 +263,7 @@ export default function Home() {
   useEffect(() => {
     void caricaDati(false);
     void caricaConteggiRapidi();
+    if (new URLSearchParams(window.location.search).get("open") === "ordini") setModal("ordini");
     const rawOrderContext = sessionStorage.getItem("goldencar_nuovo_ordine");
     if (rawOrderContext) {
       try {
