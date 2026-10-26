@@ -1717,7 +1717,7 @@ function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
-  const descrizione = (ordine.descrizione || "").replace(/\\s+/g, " ").trim();
+  const descrizione = (ordine.descrizione || "").replace(/\s+/g, " ").trim();
   return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", minWidth: 0 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#64748B", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span style={{fontWeight:900,color:"#111827"}}>{ordine.cliente || "Cliente"}</span>{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}{descrizione ? ` · ${descrizione}` : ""}</div></div>;
 }
 
