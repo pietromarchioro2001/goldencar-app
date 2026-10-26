@@ -1812,7 +1812,7 @@ export default function Veicolo() {
                       )}
                       <style jsx>{`
                         @media (max-width: 640px) {
-                          .profilo-veicolo-title-row { gap: 6px !important; padding-right: 44px !important; }
+                          .profilo-veicolo-title-row { gap: 6px !important; padding-right: 34px !important; }
                           .profilo-veicolo-title-row h2 { font-size: 17px !important; line-height: 1.2; overflow-wrap: anywhere; }
                           .profilo-veicolo-status { font-size: 9px !important; padding: 5px 7px !important; letter-spacing: .1px; }
                         }
