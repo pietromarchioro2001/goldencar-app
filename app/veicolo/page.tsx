@@ -1800,16 +1800,23 @@ export default function Veicolo() {
                   </>
                 ) : (
                   <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 50 }}>
-                      <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", margin: 0 }}>
+                    <div className="profilo-veicolo-title-row" style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 50, minWidth: 0 }}>
+                      <h2 style={{ flex: "1 1 auto", minWidth: 0, fontSize: 20, fontWeight: 800, color: "#111827", margin: 0 }}>
                         {veicoloProfilo.veicolo || "Nessun veicolo"}
                       </h2>
                       {veicoloAperto && (
-                        <div style={{
+                        <div className="profilo-veicolo-status" style={{
                           marginLeft: "auto", background: "#22C55E", color: "#FFFFFF", fontSize: 12,
-                          fontWeight: 700, padding: "6px 12px", borderRadius: 999, whiteSpace: "nowrap",
+                          fontWeight: 700, padding: "6px 12px", borderRadius: 999, whiteSpace: "nowrap", flexShrink: 0,
                         }}>APERTO</div>
                       )}
+                      <style jsx>{`
+                        @media (max-width: 640px) {
+                          .profilo-veicolo-title-row { gap: 6px !important; padding-right: 44px !important; }
+                          .profilo-veicolo-title-row h2 { font-size: 17px !important; line-height: 1.2; overflow-wrap: anywhere; }
+                          .profilo-veicolo-status { font-size: 9px !important; padding: 5px 7px !important; letter-spacing: .1px; }
+                        }
+                      `}</style>
                     </div>
                     <div style={{ color: "#6B7280", marginTop: 4, fontSize: 16 }}>
                       {veicoloProfilo.targa || "Nessuna targa"}
