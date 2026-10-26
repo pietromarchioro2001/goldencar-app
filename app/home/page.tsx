@@ -1935,8 +1935,8 @@ function LavoroRow({
         </div>
       </div>
       <div className="lavoro-row-status" style={{
-        background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : "#FFF1C2",
-        color: "#92400E",
+        background: lavoro.status === "DA_DOCUMENTARE" ? "#EDE9FE" : "#FFF1C2",
+        color: lavoro.status === "DA_DOCUMENTARE" ? "#6D28D9" : "#92400E",
         borderRadius: 999,
         padding: "6px 9px",
         fontSize: 10,
