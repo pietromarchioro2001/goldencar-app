@@ -3423,6 +3423,16 @@ function WorkTypeIcon({ type }: { type: string }) {
       return <svg {...common} viewBox="0 0 16 16"><path d="M12.28592,11.7143,6.49472,5.92372a2.50375,2.50375,0,0,0,.16958-.7544,2.14905,2.14905,0,0,0-.09474-.81438,2.11972,2.11972,0,0,0-.54871-.90431,2.32771,2.32771,0,0,0-1.76079-.68447H4.21515a2.104,2.104,0,0,0-.71829.15488L4.59925,4.02518l.31921.31976.24445.24481a1.864,1.864,0,0,1-.21948.85435,1.04314,1.04314,0,0,1-.11475.14488,1.64822,1.64822,0,0,1-1.00259.33474L2.609,4.70468,2.16005,4.255a2.07386,2.07386,0,0,0-.13469.54457l-.015.10493a2.33671,2.33671,0,0,0,.38407,1.51882,2.50928,2.50928,0,0,0,.29431.35975A2.20549,2.20549,0,0,0,4.265,7.43257a2.45325,2.45325,0,0,0,.89789-.17485L9.95648,12.054l1.20212,1.19909H11.827l.66343-.6645v-.6695Zm-6.53561-2.806,1.3662,1.3662L4.12892,13.2621H3.20558l-.45037-.45038V11.8959ZM14,5.90569,12.19094,7.71475,10.89232,6.49869,9.5111,7.87992,8.1449,6.51372,9.51861,5.13249,7.89717,3.5111l.68312-.7732,2.252.45042Z"/></svg>;
     case "CENTRALINA":
       return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5"/></svg>;
+    case "MANODOPERA":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V12L14.5 14.5"/><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/></svg>;
+    case "NOTE":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 8.25V18C20 21 18.21 22 16 22H8C5.79 22 4 21 4 18V8.25C4 5 5.79 4.25 8 4.25C8 4.87 8.24997 5.43 8.65997 5.84C9.06997 6.25 9.63 6.5 10.25 6.5H13.75C14.99 6.5 16 5.49 16 4.25C18.21 4.25 20 5 20 8.25Z"/><path d="M16 4.25C16 5.49 14.99 6.5 13.75 6.5H10.25C9.63 6.5 9.06997 6.25 8.65997 5.84C8.24997 5.43 8 4.87 8 4.25C8 3.01 9.01 2 10.25 2H13.75C14.37 2 14.93 2.25 15.34 2.66C15.75 3.07 16 3.63 16 4.25Z"/><path d="M8 13H12M8 17H16"/></svg>;
+    case "FATTURA":
+      return <svg {...common} viewBox="0 0 24 24"><path d="M15 8a1 1 0 0 1-1 1H6a1 1 0 0 1 0-2h8a1 1 0 0 1 1 1Zm-1 3H6a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2Zm-4 4H6a1 1 0 0 0 0 2h4a1 1 0 0 0 0-2Zm13-3v8a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V4a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h3a1 1 0 0 1 1 1ZM17 4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h13Zm4 9h-2v8h1a1 1 0 0 0 1-1Z"/></svg>;
+    case "MEDIA":
+      return <svg {...common} viewBox="0 -2 36.817 36.817"><circle cx="10" cy="12" r="4" transform="translate(6 8)"/><rect width="26.642" height="3.966" rx="1.983" transform="translate(5.179 30.017) rotate(-45)"/><rect width="3.943" height="15.337" rx="1.972" transform="translate(21.183 13.972) rotate(-45)"/><path d="M32 0H0A2 2 0 0 0-2 2V30a2 2 0 0 0 2 2H32a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2ZM30 27a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1H29a1 1 0 0 1 1 1Z"/></svg>;
+    case "PAGAMENTO":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 14C2 10.2288 2 8.34315 3.17157 7.17157C4.34315 6 6.22876 6 10 6H14C17.7712 6 19.6569 6 20.8284 7.17157C22 8.34315 22 10.2288 22 14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14Z"/><path d="M16 6C16 4.11438 16 3.17157 15.4142 2.58579C14.8284 2 13.8856 2 12 2C10.1144 2 9.17157 2 8.58579 2.58579C8 3.17157 8 4.11438 8 6"/><path d="M12 17.3333C13.1046 17.3333 14 16.5871 14 15.6667C14 14.7462 13.1046 14 12 14C10.8954 14 10 13.2538 10 12.3333C10 11.4129 10.8954 10.6667 12 10.6667M12 17.3333C10.8954 17.3333 10 16.5871 10 15.6667M12 17.3333V18M12 10V10.6667M12 10.6667C13.1046 10.6667 14 11.4129 14 12.3333"/></svg>;
     default:
       return <svg {...common} viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>;
   }
@@ -3446,6 +3456,12 @@ function SectionTitle({ title }: { title: string }) {
         return <WorkTypeIcon type="MANUTENZIONE" />;
       case "CENTRALINA":
         return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.8"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+      case "MANODOPERA":
+      case "NOTE":
+      case "FATTURA":
+      case "MEDIA":
+      case "PAGAMENTO":
+        return <WorkTypeIcon type={title.toUpperCase()} />;
       default:
         return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>;
     }
