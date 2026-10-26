@@ -4253,7 +4253,11 @@ function FieldHeader({
     >
 
       <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-        {title.toUpperCase() === "NOTE" && <WorkTypeIcon type="NOTE" />}
+        {(() => {
+          const iconTitle = title.toUpperCase().replace(/\\s*\\/\\s*/g, "/");
+          const iconTitles = ["MANODOPERA", "NOTE", "FATTURAZIONE", "FATTURA", "MEDIA", "PAGAMENTO", "PROBLEMI RISCONTRATI", "PRODOTTI/RICAMBI", "LAVORI EFFETTUATI"];
+          return iconTitles.includes(iconTitle) ? <WorkTypeIcon type={iconTitle} /> : null;
+        })()}
         <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", textTransform: "uppercase" }}>
           {title}
         </div>
