@@ -1002,6 +1002,50 @@ export default function Home() {
             GOLDENCAR
           </h1>
         </div>
+        <div style={{ display: "flex", justifyContent: "center", padding: "0 18px", marginTop: -10, marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+                  alert("Le notifiche push non sono supportate da questo browser.");
+                  return;
+                }
+                const permission = await Notification.requestPermission();
+                if (permission !== "granted") {
+                  alert("Per ricevere gli avvisi, consenti le notifiche nelle impostazioni del browser.");
+                  return;
+                }
+                const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+                const keyResult = await keyResponse.json().catch(() => null);
+                if (!keyResponse.ok || !keyResult?.publicKey) throw new Error(keyResult?.error || "Notifiche non configurate sul server.");
+                const registration = await navigator.serviceWorker.register("/sw.js");
+                await navigator.serviceWorker.ready;
+                const decodeKey = (value: string) => {
+                  const padded = value + "=".repeat((4 - value.length % 4) % 4);
+                  const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+                  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+                };
+                let subscription = await registration.pushManager.getSubscription();
+                if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(keyResult.publicKey) as BufferSource });
+                const response = await fetch("/api/push/subscribe", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
+                });
+                const result = await response.json().catch(() => null);
+                if (!response.ok || !result?.ok) throw new Error(result?.error || "Impossibile attivare le notifiche.");
+                alert("Notifiche attivate su questo dispositivo.");
+              } catch (error) {
+                console.error("Attivazione notifiche:", error);
+                alert(error instanceof Error ? error.message : "Errore durante l'attivazione delle notifiche.");
+              }
+            }}
+            style={{ border: "1px solid #D9E1EC", borderRadius: 999, padding: "9px 15px", background: "#FFFFFF", color: "#041E49", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.05)" }}
+          >
+            ATTIVA NOTIFICHE
+          </button>
+        </div>
         {/* =========================
             STATISTICHE
         ========================= */}
