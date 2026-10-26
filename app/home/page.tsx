@@ -986,7 +986,7 @@ export default function Home() {
         {/* =========================
             HEADER
         ========================= */}
-        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 18, padding: "28px 70px 24px 20px" }}>
+        <div className="page-header-aligned" style={{ position: "relative", display: "flex", alignItems: "center", gap: 18, padding: "28px 70px 24px 20px" }}>
           <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
