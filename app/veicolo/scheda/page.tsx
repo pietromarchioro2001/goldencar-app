@@ -3437,13 +3437,13 @@ function SectionTitle({ title }: { title: string }) {
       case "TIPO DI LAVORO":
         return <svg width="24" height="24" viewBox="0 0 15 15" fill="currentColor" aria-hidden="true"><path d="M12.6,8.7,11.5,6.5a1.05,1.05,0,0,0-.9-.5H4.4a1.05,1.05,0,0,0-.9.5L2.4,8.7,1.16,9.852a.5.5,0,0,0-.16.367V14.5a.5.5,0,0,0,.5.5h2c.2,0,.5-.2.5-.4V14h7v.5c0,.2.2.5.4.5h2.1a.5.5,0,0,0,.5-.5V10.219a.5.5,0,0,0-.16-.367ZM4.5,7h6l1,2h-8ZM5,11.6c0,.2-.3.4-.5.4H2.4c-.2,0-.4-.3-.4-.5V10.4c.1-.3.3-.5.6-.4l2,.4c.2,0,.4.3.4.5Zm8-.1c0,.2-.2.5-.4.5H10.5c-.2,0-.5-.2-.5-.4v-.7c0-.2.2-.5.4-.5l2-.4c.3-.1.5.1.6.4ZM14,2V3a1.009,1.009,0,0,1-1.017,1H5.348A2.549,2.549,0,0,1,1,3.5H3.5v-2H1A2.549,2.549,0,0,1,5.348,1h7.635A1.009,1.009,0,0,1,14,2Z"/></svg>;
       case "TAGLIANDO":
-        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 8h11l3 3h4v4h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 8v7h2m3 0h6m-8-7V5h5l2 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="15.5" r="1.8" stroke="currentColor" strokeWidth="1.8"/><circle cx="17" cy="15.5" r="1.8" stroke="currentColor" strokeWidth="1.8"/></svg>;
+        return <WorkTypeIcon type="TAGLIANDO" />;
       case "FRENI":
-        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="M17.5 5.5 20 4v6h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+        return <WorkTypeIcon type="FRENI" />;
       case "PNEUMATICI":
-        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><ellipse cx="12" cy="12" rx="7" ry="10" stroke="currentColor" strokeWidth="1.8"/><ellipse cx="12" cy="12" rx="3" ry="6" stroke="currentColor" strokeWidth="1.8"/><path d="M5.5 7h3m7 0h3M5 12h3m8 0h3M5.5 17h3m7 0h3" stroke="currentColor" strokeWidth="1.5"/></svg>;
+        return <WorkTypeIcon type="PNEUMATICI" />;
       case "MANUTENZIONE":
-        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0-5.2 5.2l-5.7 5.7a1.8 1.8 0 0 0 2.5 2.5l5.7-5.7a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.5-2.5 2.4-2.4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="m15 15 4.5 4.5m-1-6 2-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+        return <WorkTypeIcon type="MANUTENZIONE" />;
       case "CENTRALINA":
         return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.8"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
       default:
