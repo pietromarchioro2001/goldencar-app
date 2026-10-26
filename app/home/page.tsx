@@ -986,25 +986,17 @@ export default function Home() {
         {/* =========================
             HEADER
         ========================= */}
-        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
-        <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 18, padding: "28px 70px 24px 20px" }}>
+          <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
-          <h1
-            style={{
-              fontSize: 31,
-              fontWeight: 800,
-              color: "#041E49",
-              letterSpacing: "-0.7px",
-              margin: "3px 0 0",
-            }}
-          >
+          <h1 style={{ fontSize: 31, fontWeight: 800, color: "#041E49", letterSpacing: "-0.7px", margin: "3px 0 0" }}>
             GOLDENCAR
           </h1>
-        </div>
-        <div style={{ display: "flex", justifyContent: "center", padding: "0 18px", marginTop: -10, marginBottom: 14 }}>
           <button
             type="button"
+            aria-label="Attiva notifiche"
+            title="Attiva notifiche"
             onClick={async () => {
               try {
                 if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
@@ -1041,9 +1033,12 @@ export default function Home() {
                 alert(error instanceof Error ? error.message : "Errore durante l'attivazione delle notifiche.");
               }
             }}
-            style={{ border: "1px solid #D9E1EC", borderRadius: 999, padding: "9px 15px", background: "#FFFFFF", color: "#041E49", fontSize: 12, fontWeight: 800, cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.05)" }}
+            style={{ position: "absolute", top: 28, right: 20, width: 44, height: 44, border: "1px solid #D9E1EC", borderRadius: "50%", padding: 0, background: "#FFFFFF", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.08)" }}
           >
-            ATTIVA NOTIFICHE
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+            </svg>
           </button>
         </div>
         {/* =========================
