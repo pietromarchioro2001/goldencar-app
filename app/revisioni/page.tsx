@@ -425,13 +425,13 @@ export default function RevisioniPage() {
             const concluso = lavoro.status === "CONCLUSO";
             const daDocumentare = lavoro.status === "DA_DOCUMENTARE";
             const statusText = concluso ? "CONCLUSO" : daDocumentare ? "DA DOCUMENTARE" : "IN LAVORAZIONE";
-            const statusColor = concluso ? "#DCFCE7" : daDocumentare ? "#FEF3C7" : "#FFF1C2";
-            const statusTextColor = concluso ? "#166534" : "#92400E";
+            const statusColor = concluso ? "#DCFCE7" : daDocumentare ? "#EDE9FE" : "#FFF1C2";
+            const statusTextColor = concluso ? "#166534" : daDocumentare ? "#6D28D9" : "#92400E";
             return <div key={lavoro.jobId || String(lavoro.jobNumber)} className="job-list-card" onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
               {concluso ? (
                 <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? <span className="pdf-button-loading" aria-hidden="true"><span /></span> : paperclipIcon()}</button>
               ) : (
-                <div aria-label={statusText} title={statusText} style={{ width: 48, height: 48, borderRadius: 15, background: daDocumentare ? "#FEF3C7" : "#FFF1C2", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
+                <div aria-label={statusText} title={statusText} style={{ width: 48, height: 48, borderRadius: 15, background: daDocumentare ? "#EDE9FE" : "#FFF1C2", color: daDocumentare ? "#6D28D9" : "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
               )}
               <div className="job-list-details" style={{ minWidth: 0, flex: 1 }}>
                 <div className="job-list-type" style={{ fontSize: 16, fontWeight: 800, color: "#041E49", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lavoro.types?.filter(Boolean).join(" · ") || "Intervento"}</div>
