@@ -3660,13 +3660,13 @@ function ProductChecklist({
   const selectedNames = draft.products
     .filter((product) => (product.category || "MANUTENZIONE") === category)
     .map((product) => product.name);
-  const visibleProducts = searchTerm.trim()
-    ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
-    : searchOnly
-      // Nella sezione PRODOTTI/RICAMBI mostra solo i prodotti già selezionati.
-      ? uniqueProducts.filter((name) => selectedNames.includes(name))
-      // In TAGLIANDO e FRENI mostra sempre la lista completa, nell'ordine originale.
-      : uniqueProducts;
+  const visibleProducts = searchOnly
+    ? searchTerm.trim()
+      // In PRODOTTI/RICAMBI la ricerca mostra temporaneamente i risultati da poter selezionare.
+      ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
+      // Quando il campo è vuoto, mostra esclusivamente i prodotti selezionati.
+      : uniqueProducts.filter((name) => selectedNames.includes(name))
+    : uniqueProducts;
 
   const rememberProduct = (name: string) => {
     const next = [name, ...recentNames.filter((item) => item !== name)].slice(0, 10);
@@ -3739,8 +3739,8 @@ function ProductChecklist({
               gridTemplateColumns:
 
                 selected
-                  ? "minmax(0,1fr) 62px minmax(0,1fr) 34px"
-                  : "minmax(0,1fr) 62px minmax(0,1fr)",
+                  ? "minmax(0,1fr) 48px minmax(0,0.8fr) 34px"
+                  : "minmax(0,1fr) 48px minmax(0,0.8fr)",
 
               gap: 7,
 
@@ -3784,6 +3784,7 @@ function ProductChecklist({
 
                   if (e.target.checked) {
                     rememberProduct(name);
+                    if (searchOnly) setSearchTerm("");
 
                     setDraft((previous) =>
 
@@ -3944,7 +3945,7 @@ function ProductChecklist({
                     )
                   }
 
-                  placeholder="Marca, codice..."
+                  placeholder="Note"
 
                   style={{
 
