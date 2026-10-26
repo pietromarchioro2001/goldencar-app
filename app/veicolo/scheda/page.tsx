@@ -1884,10 +1884,10 @@ export default function SchedaLavoroPage() {
             }}
           >
             {[
-              ["Nome", draft.nomeCliente, <CustomerPersonIcon />],
-              ["Telefono", draft.telefono, <CustomerPhoneIcon />],
-              ["Indirizzo", draft.indirizzo, <CustomerPinIcon />],
-              ["Codice fiscale", draft.codiceFiscale, <CustomerDocumentIcon />],
+              ["Nome", draft.nomeCliente, <CustomerPersonIcon key="customer-person-icon" />],
+              ["Telefono", draft.telefono, <CustomerPhoneIcon key="customer-phone-icon" />],
+              ["Indirizzo", draft.indirizzo, <CustomerPinIcon key="customer-pin-icon" />],
+              ["Codice fiscale", draft.codiceFiscale, <CustomerDocumentIcon key="customer-document-icon" />],
             ].map(([label, value, icon], index) => (
               <div
                 key={String(label)}
