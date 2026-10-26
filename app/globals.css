@@ -523,3 +523,26 @@ textarea {
     margin-inline: auto;
   }
 }
+
+
+/* Scheda lavoro: riepilogo cliente compatto su smartphone, come nel profilo veicolo. */
+@media (max-width: 600px) {
+  .job-customer-summary {
+    gap: 8px !important;
+    margin-top: 12px !important;
+  }
+  .job-customer-summary > div {
+    padding: 9px !important;
+    border-radius: 12px !important;
+  }
+  .job-customer-summary > div > div:first-child {
+    font-size: 10px !important;
+    line-height: 13px !important;
+  }
+  .job-customer-summary > div > div:nth-child(2) {
+    font-size: 12px !important;
+    line-height: 15px !important;
+    margin-top: 2px !important;
+    font-weight: 600 !important;
+  }
+}
