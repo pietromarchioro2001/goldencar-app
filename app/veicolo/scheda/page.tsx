@@ -1873,83 +1873,39 @@ export default function SchedaLavoroPage() {
 
           <div
             className="job-customer-summary"
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 0,
+              marginTop: 16,
+              padding: "4px 12px",
+              borderRadius: 14,
+              background: "#F8FAFC",
+            }}
           >
-
             {[
-
-              ["NOME CLIENTE", draft.nomeCliente],
-
-              ["TELEFONO", draft.telefono],
-
-              ["INDIRIZZO", draft.indirizzo],
-
-              ["CODICE FISCALE", draft.codiceFiscale],
-
-            ].map(([label, value]) => (
-
+              ["Nome", draft.nomeCliente, <CustomerPersonIcon />],
+              ["Telefono", draft.telefono, <CustomerPhoneIcon />],
+              ["Indirizzo", draft.indirizzo, <CustomerPinIcon />],
+              ["Codice fiscale", draft.codiceFiscale, <CustomerDocumentIcon />],
+            ].map(([label, value, icon], index) => (
               <div
-
-                key={label}
-
+                key={String(label)}
                 style={{
-
-                  background: "#F8FAFC",
-
-                  borderRadius: 14,
-
-                  padding: 11,
-
+                  display: "grid",
+                  gridTemplateColumns: "24px 104px minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: 8,
+                  minHeight: 42,
+                  padding: "7px 0",
+                  borderBottom: index === 3 ? 0 : "1px solid #E2E8F0",
                 }}
-
               >
-
-                <div
-
-                  style={{
-
-                    fontSize: 11,
-
-                    color: "#64748B",
-
-                    fontWeight: 700,
-
-                  }}
-
-                >
-
-                  {label}
-
-                </div>
-
-
-
-                <div
-
-                  style={{
-
-                    fontSize: 14,
-
-                    color: "#111827",
-
-                    fontWeight: 700,
-
-                    marginTop: 3,
-
-                    wordBreak: "break-word",
-
-                  }}
-
-                >
-
-                  {value || "—"}
-
-                </div>
-
+                <span style={{ display: "flex", alignItems: "center", color: "#475569" }}>{icon}</span>
+                <span style={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
+                <span style={{ fontSize: 13, color: "#111827", fontWeight: 700, overflowWrap: "anywhere" }}>{String(value || "—")}</span>
               </div>
-
             ))}
-
           </div>
 
         </section>
@@ -3403,39 +3359,8 @@ const addButtonStyle: CSSProperties = {
 
 function TrashIcon() {
   return (
-    <svg
-      width="21"
-      height="21"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M5 7h14"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M9 7V4.5h6V7"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 7.5 8.4 19h7.2l.9-11.5"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10.5 10.5v5.5M13.5 10.5v5.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 128 128" fill="currentColor" aria-hidden="true">
+      <path d="M 49 1 C 47.34 1 46 2.34 46 4 C 46 5.66 47.34 7 49 7 L 79 7 C 80.66 7 82 5.66 82 4 C 82 2.34 80.66 1 79 1 L 49 1 z M 24 15 C 16.83 15 11 20.83 11 28 C 11 35.17 16.83 41 24 41 L 101 41 L 101 104 C 101 113.37 93.37 121 84 121 L 44 121 C 34.63 121 27 113.37 27 104 L 27 52 C 27 50.34 25.66 49 24 49 C 22.34 49 21 50.34 21 52 L 21 104 C 21 116.68 31.32 127 44 127 L 84 127 C 96.68 127 107 116.68 107 104 L 107 40.640625 C 112.72 39.280625 117 34.14 117 28 C 117 20.83 111.17 15 104 15 L 24 15 z M 24 21 L 104 21 C 107.86 21 111 24.14 111 28 C 111 31.86 107.86 35 104 35 L 24 35 C 20.14 35 17 31.86 17 28 C 17 24.14 20.14 21 24 21 z M 50 55 C 48.34 55 47 56.34 47 58 L 47 104 C 47 105.66 48.34 107 50 107 C 51.66 107 53 105.66 53 104 L 53 58 C 53 56.34 51.66 55 50 55 z M 78 55 C 76.34 55 75 56.34 75 58 L 75 104 C 75 105.66 76.34 107 78 107 C 79.66 107 81 105.66 81 104 L 81 58 C 81 56.34 79.66 55 78 55 z" />
     </svg>
   );
 }
@@ -3492,42 +3417,47 @@ function GlobeIcon() {
 
 
 
-function SectionTitle({
-
-  title,
-
-}: {
-
-  title: string;
-
-}) {
-
+function SectionTitle({ title }: { title: string }) {
+  const iconColor = "#475569";
+  const icon = (() => {
+    switch (title.toUpperCase()) {
+      case "CHILOMETRI":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 17a8.5 8.5 0 1 1 17 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="m12 13 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="13" r="1.4" fill="currentColor"/></svg>;
+      case "TIPO DI LAVORO":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.2 6.2a4.5 4.5 0 0 0-5.8 5.7L3.2 17a2 2 0 0 0 2.8 2.8l5.1-5.2a4.5 4.5 0 0 0 5.7-5.8l-2.7 2.7-3.1-3.1 3.2-2.2Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="m14.8 14.8 4.5 4.5M17.5 13.5l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+      case "TAGLIANDO":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 8h11l3 3h4v4h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M3 8v7h2m3 0h6m-8-7V5h5l2 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="15.5" r="1.8" stroke="currentColor" strokeWidth="1.8"/><circle cx="17" cy="15.5" r="1.8" stroke="currentColor" strokeWidth="1.8"/></svg>;
+      case "FRENI":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="12" r="1" fill="currentColor"/><path d="M17.5 5.5 20 4v6h-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+      case "PNEUMATICI":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><ellipse cx="12" cy="12" rx="7" ry="10" stroke="currentColor" strokeWidth="1.8"/><ellipse cx="12" cy="12" rx="3" ry="6" stroke="currentColor" strokeWidth="1.8"/><path d="M5.5 7h3m7 0h3M5 12h3m8 0h3M5.5 17h3m7 0h3" stroke="currentColor" strokeWidth="1.5"/></svg>;
+      case "MANUTENZIONE":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M14.5 6.5a4 4 0 0 0-5.2 5.2l-5.7 5.7a1.8 1.8 0 0 0 2.5 2.5l5.7-5.7a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.5-2.5 2.4-2.4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="m15 15 4.5 4.5m-1-6 2-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+      case "CENTRALINA":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.8"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+      default:
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>;
+    }
+  })();
   return (
-
-    <div
-
-      style={{
-
-        fontSize: 15,
-
-        fontWeight: 800,
-
-        color: "#111827",
-
-        textTransform: "uppercase",
-
-        marginBottom: 8,
-
-      }}
-
-    >
-
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 800, color: "#111827", textTransform: "uppercase", marginBottom: 10 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", color: iconColor, flexShrink: 0 }}>{icon}</span>
       {title}
-
     </div>
-
   );
+}
 
+function CustomerPersonIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5" stroke="currentColor" strokeWidth="2"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+}
+function CustomerPhoneIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 3.5h3l1.5 4-2 1.5a15 15 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A15.5 15.5 0 0 1 4.5 5.5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+function CustomerPinIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" fill="currentColor"/><circle cx="12" cy="10" r="2.5" fill="#FFFFFF"/></svg>;
+}
+function CustomerDocumentIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 2.5h8l4 4V21H6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/><path d="M14 2.5v5h4M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
 }
 
 
