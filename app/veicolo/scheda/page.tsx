@@ -2186,7 +2186,6 @@ export default function SchedaLavoroPage() {
 
                   markUnsaved={() => setSaved(false)}
                   category="MANUTENZIONE"
-                  listMode
                 />
 
               </section>
@@ -3612,14 +3611,12 @@ function ProductChecklist({
 
   markUnsaved,
   category,
-  listMode = false,
   searchOnly = false,
 
 }: {
 
   products: string[];
   category: "TAGLIANDO" | "MANUTENZIONE";
-  listMode?: boolean;
   searchOnly?: boolean;
 
   draft: JobDraft;
