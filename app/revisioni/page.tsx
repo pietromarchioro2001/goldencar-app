@@ -226,11 +226,37 @@ export default function RevisioniPage() {
   };
   const apriPdf = async (lavoro: Lavoro) => {
     if (pdfLoading === lavoro.jobNumber) return;
+
+    // Apri la finestra direttamente dal clic per evitare che il browser blocchi
+    // la navigazione al termine della generazione asincrona del PDF.
+    const pdfWindow = window.open("about:blank", "_blank");
+    if (pdfWindow) {
+      pdfWindow.document.title = "Preparazione PDF…";
+      pdfWindow.document.body.innerHTML = '<div style="font-family:Arial,sans-serif;padding:32px;color:#041E49"><h2>Preparazione scheda di lavoro…</h2><p>Attendi qualche istante, il PDF si aprirà automaticamente.</p><div style="height:5px;background:#e5e7eb;border-radius:99px;overflow:hidden"><div style="height:100%;width:40%;background:#d8b12f;border-radius:99px;animation:pdf-progress 1.2s ease-in-out infinite alternate"></div></div><style>@keyframes pdf-progress{from{transform:translateX(-100%)}to{transform:translateX(250%)}}</style></div>';
+    }
+
     setPdfLoading(lavoro.jobNumber);
     try {
-      if (lavoro.pdfR2Key) { const response = await fetch("/api/r2/file?key=" + encodeURIComponent(lavoro.pdfR2Key)); const data = await response.json(); if (!response.ok || !data?.ok || !data?.downloadUrl) throw new Error(data?.error || "PDF non disponibile su R2."); window.open(data.downloadUrl, "_blank", "noopener,noreferrer"); return; }
-      const blob = await pdf(<SchedaLavoroPDF lavoro={toPdfData(lavoro)} />).toBlob(); const url = URL.createObjectURL(blob); window.open(url, "_blank", "noopener,noreferrer"); window.setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (error) { console.error("Errore apertura PDF scheda:", error); alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF della scheda."); } finally { setPdfLoading(null); }
+      if (lavoro.pdfR2Key) {
+        const response = await fetch("/api/r2/file?key=" + encodeURIComponent(lavoro.pdfR2Key));
+        const data = await response.json();
+        if (!response.ok || !data?.ok || !data?.downloadUrl) throw new Error(data?.error || "PDF non disponibile su R2.");
+        if (pdfWindow && !pdfWindow.closed) pdfWindow.location.href = data.downloadUrl;
+        else window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      const blob = await pdf(<SchedaLavoroPDF lavoro={toPdfData(lavoro)} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.location.href = url;
+      else window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      if (pdfWindow && !pdfWindow.closed) pdfWindow.close();
+      console.error("Errore apertura PDF scheda:", error);
+      alert(error instanceof Error ? error.message : "Non è stato possibile aprire il PDF della scheda.");
+    } finally {
+      setPdfLoading(null);
+    }
   };
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
@@ -403,7 +429,7 @@ export default function RevisioniPage() {
             const statusTextColor = concluso ? "#166534" : "#92400E";
             return <div key={lavoro.jobId || String(lavoro.jobNumber)} className="job-list-card" onClick={() => { sessionStorage.setItem("goldencar_apri_scheda", String(lavoro.jobId || formatJobNumber(lavoro.jobNumber))); router.push("/veicolo/scheda"); }} style={{ background: "#FFFFFF", borderRadius: 20, minHeight: 88, padding: "13px 14px", display: "flex", alignItems: "center", gap: 13, boxShadow: "0 4px 14px rgba(15,23,42,.07)", boxSizing: "border-box", cursor: "pointer" }}>
               {concluso ? (
-                <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? "…" : paperclipIcon()}</button>
+                <button type="button" onClick={(event) => { event.stopPropagation(); void apriPdf(lavoro); }} disabled={pdfLoading === lavoro.jobNumber} aria-label={"Apri PDF scheda " + formatJobNumber(lavoro.jobNumber)} style={{ width: 48, height: 48, borderRadius: 15, border: "none", background: "#EEF3F8", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, cursor: pdfLoading === lavoro.jobNumber ? "wait" : "pointer", opacity: pdfLoading === lavoro.jobNumber ? 0.55 : 1 }}>{pdfLoading === lavoro.jobNumber ? <span className="pdf-button-loading" aria-hidden="true"><span /></span> : paperclipIcon()}</button>
               ) : (
                 <div aria-label={statusText} title={statusText} style={{ width: 48, height: 48, borderRadius: 15, background: daDocumentare ? "#FEF3C7" : "#FFF1C2", color: "#92400E", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22, fontWeight: 900 }}>!</div>
               )}
@@ -421,6 +447,9 @@ export default function RevisioniPage() {
           })}
           <style jsx>{`
             .job-list-status-dot { display: none; }
+            .pdf-button-loading { width: 22px; height: 22px; border: 2px solid #CBD5E1; border-radius: 50%; position: relative; overflow: hidden; display: inline-block; }
+            .pdf-button-loading > span { position: absolute; left: -45%; top: 0; height: 100%; width: 45%; background: #D8B12F; animation: pdf-button-progress 1s ease-in-out infinite; }
+            @keyframes pdf-button-progress { from { left: -45%; } to { left: 100%; } }
             @media (max-width: 640px) {
               .job-list-card { gap: 10px !important; padding: 12px !important; min-height: 80px !important; }
               .job-list-card > button, .job-list-card > div[aria-label] { width: 40px !important; height: 40px !important; flex: 0 0 40px !important; }
