@@ -128,7 +128,7 @@ type LavoroSalvato = {
 
 
 
-  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  status?: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
 
 
 
@@ -516,8 +516,8 @@ export default function Veicolo() {
           ? details.types
           : row.tipo ? String(row.tipo).split(" · ").filter(Boolean) : [],
         works: row.lavori || "",
-        status: String(row.stato || "").toUpperCase() === "CONCLUSO" ||
-          String(row.stato || "").toUpperCase() === "CHIUSO"
+        status: String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" :
+          String(row.stato || "").toUpperCase() === "CONCLUSO" || String(row.stato || "").toUpperCase() === "CHIUSO"
           ? "CONCLUSO" : "IN_LAVORAZIONE",
         invoiceNumber: row.fattura || "",
         pdfUrl: details.pdfUrl || "",
@@ -932,7 +932,7 @@ export default function Veicolo() {
 
 
 
-  const veicoloAperto = lavori.some((lavoro) => lavoro.status === "IN_LAVORAZIONE");
+  const veicoloAperto = lavori.some((lavoro) => lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE");
 
 
 
@@ -943,8 +943,9 @@ export default function Veicolo() {
     }
 
     if (veicoloAperto) {
-      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE");
-      alert(`Questo veicolo ha già un lavoro in lavorazione${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
+      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE");
+      const statoDescrizione = lavoroAperto?.status === "DA_DOCUMENTARE" ? "in attesa di documentazione" : "in lavorazione";
+      alert(`Questo veicolo ha già un lavoro ${statoDescrizione}${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
       return;
     }
 
