@@ -278,6 +278,41 @@ textarea {
   max-width: 100%;
 }
 
+/* All main-page logo/title headers use the same mobile alignment. */
+@media (max-width: 600px) {
+  .page-header-aligned {
+    display: grid !important;
+    grid-template-columns: 110px minmax(0, 1fr);
+    align-items: center !important;
+    column-gap: 18px !important;
+    padding: 28px 20px 24px !important;
+  }
+
+  .page-header-aligned > div:first-child {
+    width: 110px !important;
+    height: 90px !important;
+    min-width: 110px !important;
+    justify-content: center !important;
+  }
+
+  .page-header-aligned > div:first-child img {
+    width: 110px !important;
+    height: 90px !important;
+    object-fit: contain !important;
+  }
+
+  .page-header-aligned > h1 {
+    min-width: 0 !important;
+    width: 100%;
+    text-align: center !important;
+    font-size: clamp(25px, 5.2vw, 31px) !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.7px !important;
+    margin: 0 !important;
+    overflow-wrap: anywhere;
+  }
+}
+
 @media (max-width: 600px) {
   .app,
   .responsive-page {
