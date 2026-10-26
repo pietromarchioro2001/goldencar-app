@@ -431,7 +431,7 @@ export default function RevisioniPage() {
             }
           `}</style>
         </section>
-: (
+      ) : (
         <div style={{ padding: "0 18px", display: "flex", flexDirection: "column", gap: 10 }}>
           {revisioniFiltrate.length === 0 ? <div style={{ background: "#FFFFFF", borderRadius: 20, padding: 24, textAlign: "center", color: "#64748B", fontSize: 14 }}>Nessuna revisione trovata.</div> : revisioniFiltrate.map((revisione) => {
             const giorni = daysFromToday(getRevisionDate(revisione)); const scaduta = giorni !== null && giorni < 0; const entro30 = giorni !== null && giorni >= 0 && giorni <= 30;
