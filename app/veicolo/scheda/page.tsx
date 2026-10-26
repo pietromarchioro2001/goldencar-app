@@ -606,9 +606,27 @@ export default function SchedaLavoroPage() {
         if (rawVehicle) { vehicle = { ...vehicle, ...JSON.parse(rawVehicle) }; sessionStorage.removeItem("goldencar_nuova_scheda"); }
         if (!vehicle.vehicleId) throw new Error("ID del veicolo non disponibile. Torna al profilo del veicolo e riprova.");
 
+        // Il progressivo viene calcolato sul database, non solo sul browser:
+        // le schede già salvate in Supabase devono essere considerate anche su un dispositivo nuovo.
+        let serverJobNumber = 0;
+        try {
+          const numberResponse = await fetch("/api/jobs?nextNumber=1", { cache: "no-store" });
+          const numberResult = await numberResponse.json();
+          if (numberResponse.ok && numberResult?.ok && Number(numberResult.nextJobNumber) > 0) {
+            serverJobNumber = Number(numberResult.nextJobNumber);
+          }
+        } catch (numberError) {
+          console.warn("Impossibile recuperare il progressivo dal database:", numberError);
+        }
+
         // Aprire "Nuovo lavoro" crea solo una bozza locale.
         // La riga in Supabase viene creata esclusivamente dal pulsante SALVA.
-        const draft = emptyDraft(vehicle, createOrReuseNewJobNumber());
+        const draft = emptyDraft(vehicle, serverJobNumber || createOrReuseNewJobNumber());
+        if (serverJobNumber) {
+          sessionStorage.setItem("goldencar_nuova_scheda_job_number", String(serverJobNumber));
+          const year = Math.floor(serverJobNumber / 1000);
+          localStorage.setItem(`goldencar_next_job_number_${year}`, String((serverJobNumber % 1000) + 1));
+        }
         setDraft(draft);
         setSaved(false);
       } catch (error) {
@@ -3641,11 +3659,13 @@ function ProductChecklist({
     .map((product) => product.name);
   const visibleProducts = searchTerm.trim()
     ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
-    : Array.from(new Set([
-        ...selectedNames,
-        ...recentNames.filter((name) => uniqueProducts.includes(name)),
-        ...uniqueProducts,
-      ])).slice(0, Math.max(10, selectedNames.length));
+    : (() => {
+        // Mostra fino a 10 prodotti recenti, ma sempre nell'ordine originale del catalogo.
+        // Se non ci sono prodotti recenti, mostra i primi 10 del catalogo.
+        const recentSet = new Set(recentNames.filter((name) => uniqueProducts.includes(name)));
+        const recentInCatalogOrder = uniqueProducts.filter((name) => recentSet.has(name)).slice(0, 10);
+        return recentInCatalogOrder.length ? recentInCatalogOrder : uniqueProducts.slice(0, 10);
+      })();
 
   const rememberProduct = (name: string) => {
     const next = [name, ...recentNames.filter((item) => item !== name)].slice(0, 10);
