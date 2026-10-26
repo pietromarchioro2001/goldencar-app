@@ -3682,7 +3682,7 @@ function ProductChecklist({
         onChange={(event) => setSearchTerm(event.target.value)}
         placeholder="Cerca prodotto..."
         aria-label="Cerca prodotto nel catalogo"
-        style={{ ...inputStyle, marginBottom: 10, width: "100%", boxSizing: "border-box" }}
+        style={{ display: "block", padding: "12px 14px", border: "1px solid #CBD5E1", borderRadius: 12, background: "#FFFFFF", color: "#111827", fontSize: 14, marginBottom: 10, width: "100%", boxSizing: "border-box", outlineColor: "#D4AF37" }}
       />
 
       {visibleProducts.length === 0 ? (
