@@ -3148,79 +3148,57 @@ export default function SchedaLavoroPage() {
           >
 
             <button
-
               type="button"
-
               onClick={() => saveDraft("conclude")}
-
               style={{
-
                 height: 42,
-
                 padding: "0 16px",
-
                 border: 0,
-
                 borderRadius: 13,
-
                 background: "#15803D",
-
                 color: "#FFFFFF",
-
                 fontSize: 13,
-
                 fontWeight: 800,
-
-                boxShadow:
-
-                  "0 4px 12px rgba(21,128,61,.18)",
-
+                boxShadow: "0 4px 12px rgba(21,128,61,.18)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
               }}
-
             >
-
-              CONCLUDI
-
+              <svg width="18" height="18" viewBox="0 0 1920 1920" fill="currentColor" aria-hidden="true">
+                <path d="M1524.824 1242.353c93.402 0 169.411 76.01 169.411 169.412v338.823c0 93.403-76.01 169.412-169.411 169.412H395.412C302.009 1920 226 1843.99 226 1750.588v-338.823c0-93.403 76.01-169.412 169.412-169.412ZM1016.588 0v338.824h-112.94V0h112.94ZM564.824 1468.235c62.343 0 112.94 50.71 112.94 112.941s-50.597 112.942-112.94 112.942c-62.344 0-112.942-50.71-112.942-112.942 0-62.23 50.598-112.94 112.942-112.94ZM903.647 338.824v428.385L657.322 520.885l-79.85 79.85 382.646 382.644 382.644-382.645-79.85-79.85-246.324 246.325V338.824h508.236c93.74 0 169.411 75.67 169.411 169.411v677.647c-46.306-35.011-106.164-56.47-169.411-56.47H395.412c-63.247 0-123.106 21.459-169.412 56.47V508.235c0-93.74 75.67-169.411 169.412-169.411h508.235Z" fillRule="evenodd"/>
+              </svg>
+              INVIA
             </button>
 
 
 
             <button
-
               type="button"
-
               onClick={() => { void saveDraft("save"); }}
               disabled={saving}
               aria-label="Salva scheda di lavoro"
-
               style={{
-
                 height: 42,
-
                 padding: "0 18px",
-
                 border: 0,
-
                 borderRadius: 13,
-
                 background: "#FFFFFF",
-
                 color: "#111827",
-
                 fontSize: 13,
-
                 fontWeight: 800,
-
-                boxShadow:
-
-                  "0 4px 14px rgba(15,23,42,.08)",
-
+                boxShadow: "0 4px 14px rgba(15,23,42,.08)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
               }}
-
             >
-
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" clipRule="evenodd" d="M18.1716 1C18.702 1 19.2107 1.21071 19.5858 1.58579L22.4142 4.41421C22.7893 4.78929 23 5.29799 23 5.82843V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H18.1716ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21L5 21L5 15C5 13.3431 6.34315 12 8 12L16 12C17.6569 12 19 13.3431 19 15V21H20C20.5523 21 21 20.5523 21 20V6.82843C21 6.29799 20.7893 5.78929 20.4142 5.41421L18.5858 3.58579C18.2107 3.21071 17.702 3 17.1716 3H17V5C17 6.65685 15.6569 8 14 8H10C8.34315 8 7 6.65685 7 5V3H4ZM17 21V15C17 14.4477 16.5523 14 16 14L8 14C7.44772 14 7 14.4477 7 15L7 21L17 21ZM9 3H15V5C15 5.55228 14.5523 6 14 6H10C9.44772 6 9 5.55228 9 5V3Z"/>
+              </svg>
               {saving ? "SALVATAGGIO..." : saveConfirmed ? "✓ SALVATO" : "SALVA"}
-
             </button>
 
           </div>
