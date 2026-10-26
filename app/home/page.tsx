@@ -1428,9 +1428,11 @@ export default function Home() {
             <option value="">Seleziona veicolo</option>
             {veicoliOrdini.map(v=><option key={v.id} value={v.id}>{v.targa} — {v.veicolo} — {v.cliente}</option>)}
           </select>
-          <label style={labelStyle}>COSA ORDINARE</label>
-          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90,resize:"vertical"}} placeholder="Descrizione prodotto"/>
-          <button type="button" onClick={()=>{const R=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!R){alert("Dettatura non disponibile.");return;}const r=new R();r.lang="it-IT";r.onresult=(e:any)=>{setOrdineDescrizione(String(e.results?.[0]?.[0]?.transcript||""));setOrdineListening(false)};r.onend=()=>setOrdineListening(false);setOrdineListening(true);r.start();}} style={secondaryButtonStyle}>{ordineListening?"ASCOLTO…":"🎙️ DETTA"}</button>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,marginBottom:6}}>
+            <label style={{...labelStyle,margin:0}}>COSA ORDINARE</label>
+            <button type="button" onClick={()=>{const R=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!R){alert("Dettatura non disponibile.");return;}const r=new R();r.lang="it-IT";r.onresult=(e:any)=>{setOrdineDescrizione(String(e.results?.[0]?.[0]?.transcript||""));setOrdineListening(false)};r.onerror=()=>setOrdineListening(false);r.onend=()=>setOrdineListening(false);setOrdineListening(true);r.start();}} aria-label={ordineListening?"Ascolto in corso":"Detta descrizione ordine"} title={ordineListening?"Ascolto in corso":"Detta descrizione ordine"} style={{width:36,height:36,border:"1px solid #E2E8F0",borderRadius:11,background:ordineListening?"#FEE2E2":"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><MicIcon active={ordineListening}/></button>
+          </div>
+          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90,resize:"vertical",marginTop:0}} placeholder="Descrizione prodotto"/>
           <label style={labelStyle}>FORNITORE</label>
           <select value={ordineFornitoreId} onChange={e=>setOrdineFornitoreId(e.target.value)} style={inputStyle}>
             <option value="">Seleziona fornitore</option>
@@ -1559,12 +1561,12 @@ export default function Home() {
             {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginTop:16}}>
-            <button type="button" onClick={()=>void aggiornaOrdineHome()} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,fontSize:13,cursor:"pointer"}}>SALVA</button>
             {ordineAperto.stato !== "INVIATO" ? (
-              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#25D366",color:"#FFFFFF",fontWeight:900,fontSize:13,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:7}}><span aria-hidden="true" style={{fontSize:17,lineHeight:1}}>◉</span> WHATSAPP</button>
+              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} aria-label="Invia ordine su WhatsApp" title="WhatsApp" style={{flex:"0 0 44%",minHeight:50,border:0,borderRadius:13,background:"#25D366",color:"#FFFFFF",fontWeight:900,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><WhatsAppIcon/></button>
             ) : (
-              <div style={{fontSize:11,fontWeight:800,color:"#64748B",textAlign:"right"}}>INVIATO</div>
+              <div style={{flex:"0 0 44%",fontSize:11,fontWeight:800,color:"#64748B",textAlign:"center"}}>ORDINE INVIATO</div>
             )}
+            <button type="button" onClick={()=>void aggiornaOrdineHome()} aria-label="Salva ordine" title="Salva" style={{flex:"0 0 44%",minHeight:50,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><SaveIcon/></button>
           </div>
         </Modal>
       )}
@@ -1705,11 +1707,18 @@ function MicIcon({ active = false }: { active?: boolean }) {
   );
 }
 
+function SaveIcon() {
+  return <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M18.1716 1C18.702 1 19.2107 1.21071 19.5858 1.58579L22.4142 4.41421C22.7893 4.78929 23 5.29799 23 5.82843V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H18.1716ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21L5 21L5 15C5 13.3431 6.34315 12 8 12L16 12C17.6569 12 19 13.3431 19 15V21H20C20.5523 21 21 20.5523 21 20V6.82843C21 6.29799 20.7893 5.78929 20.4142 5.41421L18.5858 3.58579C18.2107 3.21071 17.702 3 17.1716 3H17V5C17 6.65685 15.6569 8 14 8H10C8.34315 8 7 6.65685 7 5V3H4ZM17 21V15C17 14.4477 16.5523 14 16 14L8 14C7.44772 14 7 14.4477 7 15L7 21L17 21ZM9 3H15V5C15 5.55228 14.5523 6 14 6H10C9.44772 6 9 5.55228 9 5V3Z" fill="currentColor"/></svg>;
+}
+function WhatsAppIcon() {
+  return <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.5 11.8a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.3-4.7A8.5 8.5 0 1 1 20.5 11.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M8.5 7.5c-.3-.7-.7-.7-1-.7-.2 0-.5 0-.7.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.8 2.9 4.4 3.9 2.2.9 2.6.7 3.1.6.5-.1 1.6-.7 1.8-1.3.2-.6.2-1.1.1-1.2-.1-.1-.3-.2-.7-.4l-1.7-.8c-.2-.1-.4-.1-.6.2l-.8 1c-.1.2-.3.2-.6.1-.3-.1-1.2-.4-2.2-1.3-.8-.7-1.3-1.6-1.5-1.9-.2-.3 0-.4.1-.6l.5-.6c.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.7-1.7Z" fill="currentColor"/></svg>;
+}
 function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
-  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>ORDINE</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
+  const descrizione = (ordine.descrizione || "").replace(/\\s+/g, " ").trim();
+  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", minWidth: 0 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0, fontSize: 13, color: "#64748B", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span style={{fontWeight:900,color:"#111827"}}>{ordine.cliente || "Cliente"}</span>{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}{descrizione ? ` · ${descrizione}` : ""}</div></div>;
 }
 
 /* =====================================================
