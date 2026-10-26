@@ -701,6 +701,9 @@ export default function Home() {
       const residuo = Math.max(0, totale - pagato);
       if (residuo <= 0) continue;
 
+      const typesText = Array.isArray(lavoro.types)
+        ? lavoro.types.filter(Boolean).join(" · ").trim()
+        : String(lavoro.types || "").trim();
       const worksText = Array.isArray(lavoro.works)
         ? lavoro.works.filter(Boolean).join(" · ").trim()
         : String(lavoro.works || "").trim();
@@ -709,7 +712,7 @@ export default function Home() {
         clientKey: key,
         nomeCliente: nome,
         telefono: lavoro.telefono,
-        descrizione: worksText || "Lavoro effettuato",
+        descrizione: typesText || worksText || "Tipologia non indicata",
         importo: residuo,
         totale,
         pagato,
