@@ -1855,9 +1855,11 @@ export default function SchedaLavoroPage() {
 
               color: "#475569",
 
-              marginTop: 4,
+              marginTop: 0,
 
-              fontSize: 16,
+              fontSize: 14,
+
+              lineHeight: 1.2,
 
               fontWeight: 700,
 
@@ -1893,17 +1895,17 @@ export default function SchedaLavoroPage() {
                 key={String(label)}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "24px 104px minmax(0, 1fr)",
+                  gridTemplateColumns: "20px 78px minmax(0, 1fr)",
                   alignItems: "center",
-                  gap: 8,
+                  gap: 5,
                   minHeight: 42,
                   padding: "7px 0",
                   borderBottom: index === 3 ? 0 : "1px solid #E2E8F0",
                 }}
               >
                 <span style={{ display: "flex", alignItems: "center", color: "#475569" }}>{icon}</span>
-                <span style={{ fontSize: 12, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
-                <span style={{ fontSize: 13, color: "#111827", fontWeight: 700, overflowWrap: "anywhere" }}>{String(value || "—")}</span>
+                <span style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
+                <span style={{ fontSize: 12, lineHeight: 1.25, color: "#111827", fontWeight: 700, overflowWrap: "anywhere", wordBreak: "normal" }}>{String(value || "—")}</span>
               </div>
             ))}
           </div>
@@ -1980,7 +1982,7 @@ export default function SchedaLavoroPage() {
 
               display: "grid",
 
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
 
               gap: 9,
 
@@ -2020,9 +2022,23 @@ export default function SchedaLavoroPage() {
 
                     borderRadius: 14,
 
-                    padding: "12px 10px",
+                    padding: "12px 5px",
 
-                    fontSize: 13,
+                    minHeight: 94,
+
+                    display: "flex",
+
+                    flexDirection: "column",
+
+                    alignItems: "center",
+
+                    justifyContent: "center",
+
+                    gap: 7,
+
+                    fontSize: 11,
+
+                    lineHeight: 1.2,
 
                     fontWeight: 800,
 
@@ -2032,9 +2048,9 @@ export default function SchedaLavoroPage() {
 
                 >
 
-                  {active ? "✓ " : ""}
+                  <WorkTypeIcon type={type} />
 
-                  {type}
+                  <span>{type}</span>
 
                 </button>
 
@@ -2315,30 +2331,6 @@ export default function SchedaLavoroPage() {
                   />
 
                 </div>
-
-
-
-                <CheckRow
-
-                  label="Deposito pneumatici"
-
-                  checked={draft.pneumatici.storage}
-
-                  onChange={(value) =>
-
-                    updateNested(
-
-                      "pneumatici",
-
-                      "storage",
-
-                      value
-
-                    )
-
-                  }
-
-                />
 
 
 
@@ -3416,6 +3408,24 @@ function GlobeIcon() {
 }
 
 
+
+function WorkTypeIcon({ type }: { type: string }) {
+  const common = { width: 28, height: 28, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true as const };
+  switch (type) {
+    case "TAGLIANDO":
+      return <svg {...common}><path d="M3 8h11l3 3h4v4h-2M3 8v7h2m3 0h6m-8-7V5h5l2 3"/><circle cx="7" cy="15.5" r="1.8"/><circle cx="17" cy="15.5" r="1.8"/></svg>;
+    case "FRENI":
+      return <svg {...common}><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/><path d="M17.5 5.5 20 4v6h-2"/></svg>;
+    case "PNEUMATICI":
+      return <svg {...common}><ellipse cx="12" cy="12" rx="7" ry="10"/><ellipse cx="12" cy="12" rx="3" ry="6"/><path d="M5.5 7h3m7 0h3M5 12h3m8 0h3M5.5 17h3m7 0h3"/></svg>;
+    case "MANUTENZIONE":
+      return <svg {...common}><path d="M14.5 6.5a4 4 0 0 0-5.2 5.2l-5.7 5.7a1.8 1.8 0 0 0 2.5 2.5l5.7-5.7a4 4 0 0 0 5.2-5.2l-2.4 2.4-2.5-2.5 2.4-2.4Z"/><path d="m15 15 4.5 4.5m-1-6 2-2"/></svg>;
+    case "CENTRALINA":
+      return <svg {...common}><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5"/></svg>;
+    default:
+      return <svg {...common}><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>;
+  }
+}
 
 function SectionTitle({ title }: { title: string }) {
   const iconColor = "#475569";
