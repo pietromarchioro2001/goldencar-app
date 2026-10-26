@@ -1454,18 +1454,19 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const openInvoicing = () => {
-
-    void saveDraft("save");
-
-
-
-    alert(
-
-      "Qui collegheremo il sito di fatturazione che utilizzi. Per ora la scheda viene salvata prima di uscire."
-
-    );
-
+  const openInvoicing = async () => {
+    // Apri subito una finestra per evitare il blocco popup; salva prima di navigare.
+    const invoiceWindow = window.open("about:blank", "_blank");
+    const savedDraft = await saveDraft("save");
+    if (!invoiceWindow) {
+      alert("Consenti i popup per aprire il sito di fatturazione.");
+      return;
+    }
+    if (!savedDraft) {
+      invoiceWindow.close();
+      return;
+    }
+    invoiceWindow.location.href = "https://metropolis.seac.it/login";
   };
 
 
@@ -1853,19 +1854,8 @@ export default function SchedaLavoroPage() {
 
 
           <div
-
-            style={{
-
-              display: "grid",
-
-              gridTemplateColumns: "1fr 1fr",
-
-              gap: 12,
-
-              marginTop: 16,
-
-            }}
-
+            className="job-customer-summary"
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}
           >
 
             {[
@@ -2981,27 +2971,7 @@ export default function SchedaLavoroPage() {
 
 
 
-              <div
 
-                style={{
-
-                  fontSize: 12,
-
-                  color: "#94A3B8",
-
-                  marginTop: 7,
-
-                }}
-
-              >
-
-                Il pulsante apre il sito di fatturazione
-
-                in una nuova scheda. La scheda viene
-
-                salvata prima dell'apertura.
-
-              </div>
 
             </section>
 
@@ -3652,6 +3622,39 @@ function ProductChecklist({
 
 }) {
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [recentNames, setRecentNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("goldencar_recent_products_" + category);
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) setRecentNames(parsed.filter((name): name is string => typeof name === "string"));
+    } catch {
+      setRecentNames([]);
+    }
+  }, [category]);
+
+  const uniqueProducts = Array.from(new Set(products.map((name) => name.trim()).filter(Boolean)));
+  const selectedNames = draft.products
+    .filter((product) => (product.category || "MANUTENZIONE") === category)
+    .map((product) => product.name);
+  const visibleProducts = searchTerm.trim()
+    ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
+    : Array.from(new Set([
+        ...selectedNames,
+        ...recentNames.filter((name) => uniqueProducts.includes(name)),
+        ...uniqueProducts,
+      ])).slice(0, Math.max(10, selectedNames.length));
+
+  const rememberProduct = (name: string) => {
+    const next = [name, ...recentNames.filter((item) => item !== name)].slice(0, 10);
+    setRecentNames(next);
+    try {
+      localStorage.setItem("goldencar_recent_products_" + category, JSON.stringify(next));
+    } catch {}
+  };
+
   const toggleOrderRequested = (index: number) => {
     setDraft((previous) => {
       if (!previous) return previous;
@@ -3669,31 +3672,22 @@ function ProductChecklist({
 
     <>
 
-      <div
-
-        style={{
-
-          fontSize: 12,
-
-          color: "#94A3B8",
-
-          marginBottom: 8,
-
-        }}
-
-      >
-
-        Seleziona ciò che hai utilizzato. Per ogni
-
-        prodotto puoi indicare quantità, marca, codice
-
-        o altri dettagli.
-
-      </div>
 
 
 
-      {products.map((name) => {
+
+      <input
+        type="search"
+        value={searchTerm}
+        onChange={(event) => setSearchTerm(event.target.value)}
+        placeholder="Cerca prodotto..."
+        aria-label="Cerca prodotto nel catalogo"
+        style={{ ...inputStyle, marginBottom: 10, width: "100%", boxSizing: "border-box" }}
+      />
+
+      {visibleProducts.length === 0 ? (
+        <div style={{ padding: "10px 0", color: "#64748B", fontSize: 13 }}>Nessun prodotto trovato.</div>
+      ) : visibleProducts.map((name) => {
 
         const index = draft.products.findIndex(
 
@@ -3768,6 +3762,7 @@ function ProductChecklist({
                 onChange={(e) => {
 
                   if (e.target.checked) {
+                    rememberProduct(name);
 
                     setDraft((previous) =>
 
@@ -3784,11 +3779,9 @@ function ProductChecklist({
                               {
 
                                 name,
-
                                 details: "",
-
                                 quantity: "1",
-
+                                category,
                               },
 
                             ],
@@ -3813,9 +3806,7 @@ function ProductChecklist({
 
                               previous.products.filter(
 
-                                (item) =>
-
-                                  item.name !== name
+                                (item) => !(item.name === name && (item.category || "MANUTENZIONE") === category)
 
                               ),
 
