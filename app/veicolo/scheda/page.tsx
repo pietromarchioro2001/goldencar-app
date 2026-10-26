@@ -1906,7 +1906,7 @@ export default function SchedaLavoroPage() {
               >
                 <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", color: "#475569" }}>{icon}</span>
                 <span style={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
-                <span style={{ fontSize: String(label) === "Indirizzo" ? 10 : 12, lineHeight: 1.2, color: "#111827", fontWeight: 600, overflowWrap: "anywhere", wordBreak: "normal", whiteSpace: String(label) === "Indirizzo" ? "nowrap" : "normal", letterSpacing: "-0.2px", fontFamily: "Arial, Helvetica, sans-serif" }}>{String(value || "—")}</span>
+                <span style={{ fontSize: 10, lineHeight: 1.2, color: "#111827", fontWeight: 600, overflowWrap: "anywhere", wordBreak: "normal", whiteSpace: String(label) === "Indirizzo" ? "nowrap" : "normal", letterSpacing: "-0.2px", fontFamily: "Arial, Helvetica, sans-serif" }}>{String(value || "—")}</span>
               </div>
             ))}
           </div>
