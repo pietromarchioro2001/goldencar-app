@@ -2186,6 +2186,7 @@ export default function SchedaLavoroPage() {
 
                   markUnsaved={() => setSaved(false)}
                   category="MANUTENZIONE"
+                  listMode
                 />
 
               </section>
@@ -2605,6 +2606,7 @@ export default function SchedaLavoroPage() {
 
                     markUnsaved={() => setSaved(false)}
                     category="MANUTENZIONE"
+                    searchOnly
                 />
 
                 </section>
@@ -3610,11 +3612,15 @@ function ProductChecklist({
 
   markUnsaved,
   category,
+  listMode = false,
+  searchOnly = false,
 
 }: {
 
   products: string[];
   category: "TAGLIANDO" | "MANUTENZIONE";
+  listMode?: boolean;
+  searchOnly?: boolean;
 
   draft: JobDraft;
 
@@ -3659,16 +3665,11 @@ function ProductChecklist({
     .map((product) => product.name);
   const visibleProducts = searchTerm.trim()
     ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
-    : (() => {
-        // Mantieni sempre l'ordine originale del catalogo: i prodotti selezionati
-        // restano visibili senza essere spostati in cima alla lista.
-        const recentSet = new Set(recentNames.filter((name) => uniqueProducts.includes(name)));
-        const recentInCatalogOrder = uniqueProducts.filter((name) => recentSet.has(name)).slice(0, 10);
-        const initialNames = recentInCatalogOrder.length ? recentInCatalogOrder : uniqueProducts.slice(0, 10);
-        const selectedSet = new Set(selectedNames);
-        const visibleSet = new Set([...initialNames, ...selectedNames]);
-        return uniqueProducts.filter((name) => visibleSet.has(name) || selectedSet.has(name));
-      })();
+    : searchOnly
+      // Nella sezione PRODOTTI/RICAMBI mostra solo i prodotti già selezionati.
+      ? uniqueProducts.filter((name) => selectedNames.includes(name))
+      // In TAGLIANDO e FRENI mostra sempre la lista completa, nell'ordine originale.
+      : uniqueProducts;
 
   const rememberProduct = (name: string) => {
     const next = [name, ...recentNames.filter((item) => item !== name)].slice(0, 10);
