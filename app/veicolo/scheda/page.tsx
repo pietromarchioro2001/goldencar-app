@@ -4254,7 +4254,7 @@ function FieldHeader({
 
       <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
         {(() => {
-          const iconTitle = title.toUpperCase().replace(/\\s*\\/\\s*/g, "/");
+          const iconTitle = title.toUpperCase().replaceAll(" / ", "/").replaceAll(" /", "/").replaceAll("/ ", "/");
           const iconTitles = ["MANODOPERA", "NOTE", "FATTURAZIONE", "FATTURA", "MEDIA", "PAGAMENTO", "PROBLEMI RISCONTRATI", "PRODOTTI/RICAMBI", "LAVORI EFFETTUATI"];
           return iconTitles.includes(iconTitle) ? <WorkTypeIcon type={iconTitle} /> : null;
         })()}
