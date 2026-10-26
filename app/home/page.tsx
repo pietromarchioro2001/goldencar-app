@@ -1934,7 +1934,7 @@ function LavoroRow({
             "—"}
         </div>
       </div>
-      <div className="lavoro-row-status" style={{
+      <div className="lavoro-row-status" data-status={lavoro.status} style={{
         background: lavoro.status === "DA_DOCUMENTARE" ? "#EDE9FE" : "#FFF1C2",
         color: lavoro.status === "DA_DOCUMENTARE" ? "#6D28D9" : "#92400E",
         borderRadius: 999,
@@ -1960,6 +1960,8 @@ function LavoroRow({
             margin-left: 2px;
           }
           .lavoro-row-status-text { display: none; }
+          .lavoro-row-status[data-status="DA_DOCUMENTARE"] { background: #8B5CF6 !important; color: #FFFFFF !important; }
+          .lavoro-row-status[data-status="IN_LAVORAZIONE"] { background: #FACC15 !important; color: #713F12 !important; }
           .lavoro-row-status-dot { display: block; width: 100%; height: 100%; }
         }
       `}</style>
