@@ -1818,6 +1818,7 @@ export default function SchedaLavoroPage() {
             <div
               style={{
                 fontSize: 21,
+                lineHeight: 1.05,
                 fontWeight: 900,
                 color: "#111827",
               }}
@@ -1830,8 +1831,8 @@ export default function SchedaLavoroPage() {
               onClick={() => setDeleteConfirmOpen(true)}
               aria-label="Elimina scheda lavoro"
               style={{
-                width: 40,
-                height: 40,
+                width: 34,
+                height: 34,
                 border: 0,
                 borderRadius: 12,
                 background: "#FEE2E2",
@@ -1855,11 +1856,11 @@ export default function SchedaLavoroPage() {
 
               color: "#475569",
 
-              marginTop: 0,
+              marginTop: -2,
 
               fontSize: 14,
 
-              lineHeight: 1.2,
+              lineHeight: 1.1,
 
               fontWeight: 700,
 
@@ -1880,7 +1881,7 @@ export default function SchedaLavoroPage() {
               flexDirection: "column",
               gap: 0,
               marginTop: 16,
-              padding: "4px 12px",
+              padding: "4px 6px",
               borderRadius: 14,
               background: "#F8FAFC",
             }}
@@ -1889,23 +1890,23 @@ export default function SchedaLavoroPage() {
               ["Nome", draft.nomeCliente, <CustomerPersonIcon key="customer-person-icon" />],
               ["Telefono", draft.telefono, <CustomerPhoneIcon key="customer-phone-icon" />],
               ["Indirizzo", draft.indirizzo, <CustomerPinIcon key="customer-pin-icon" />],
-              ["Codice fiscale", draft.codiceFiscale, <CustomerDocumentIcon key="customer-document-icon" />],
+              ["Cod. Fiscale", draft.codiceFiscale, <CustomerDocumentIcon key="customer-document-icon" />],
             ].map(([label, value, icon], index) => (
               <div
                 key={String(label)}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "20px 78px minmax(0, 1fr)",
+                  gridTemplateColumns: "18px 68px minmax(0, 1fr)",
                   alignItems: "center",
-                  gap: 5,
+                  gap: 4,
                   minHeight: 42,
                   padding: "7px 0",
                   borderBottom: index === 3 ? 0 : "1px solid #E2E8F0",
                 }}
               >
-                <span style={{ display: "flex", alignItems: "center", color: "#475569" }}>{icon}</span>
-                <span style={{ fontSize: 11, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
-                <span style={{ fontSize: 12, lineHeight: 1.25, color: "#111827", fontWeight: 700, overflowWrap: "anywhere", wordBreak: "normal" }}>{String(value || "—")}</span>
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", color: "#475569" }}>{icon}</span>
+                <span style={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
+                <span style={{ fontSize: 11, lineHeight: 1.2, color: "#111827", fontWeight: 700, overflowWrap: "anywhere", wordBreak: "normal", whiteSpace: String(label) === "Indirizzo" ? "nowrap" : "normal", letterSpacing: "-0.15px" }}>{String(value || "—")}</span>
               </div>
             ))}
           </div>
