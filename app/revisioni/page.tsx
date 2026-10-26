@@ -442,7 +442,7 @@ export default function RevisioniPage() {
                   <span style={{ flexShrink: 0 }}>{formatJobDate(lavoro.createdAt)}</span>
                 </div>
               </div>
-              <div className="job-list-status" style={{ flexShrink: 0, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 176, textAlign: "center", borderRadius: 999, padding: "10px 16px", fontSize: 13, fontWeight: 900, color: statusTextColor, background: statusColor }}>{statusText}</div>
+              <div className="job-list-status" data-status={lavoro.status} style={{ flexShrink: 0, alignSelf: "center", display: "flex", alignItems: "center", justifyContent: "center", minWidth: 176, textAlign: "center", borderRadius: 999, padding: "10px 16px", fontSize: 13, fontWeight: 900, color: statusTextColor, background: statusColor }}>{statusText}</div>
             </div>;
           })}
           <style jsx>{`
@@ -457,6 +457,9 @@ export default function RevisioniPage() {
               .job-list-client { font-size: 13px !important; }
               .job-list-meta { font-size: 11px !important; }
               .job-list-status { min-width: 12px !important; width: 12px; height: 12px; padding: 0 !important; border-radius: 50% !important; font-size: 0 !important; overflow: hidden; }
+              .job-list-status[data-status="CONCLUSO"] { background: #22C55E !important; color: #FFFFFF !important; }
+              .job-list-status[data-status="DA_DOCUMENTARE"] { background: #8B5CF6 !important; color: #FFFFFF !important; }
+              .job-list-status[data-status="IN_LAVORAZIONE"] { background: #FACC15 !important; color: #713F12 !important; }
             }
           `}</style>
         </section>
