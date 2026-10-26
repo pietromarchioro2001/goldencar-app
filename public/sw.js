@@ -27,8 +27,8 @@ self.addEventListener("push", (event) => {
   const title = typeof data.title === "string" ? data.title : "GOLDENCAR";
   const options = {
     body: typeof data.body === "string" ? data.body : "Hai una nuova notifica.",
-    icon: "/icons/icon-192.png",
-    badge: "/icons/icon-192.png",
+    icon: "/logo.png",
+    badge: "/logo.png",
     tag: typeof data.tag === "string" ? data.tag : "goldencar-notification",
     data: { url: typeof data.url === "string" ? data.url : "/" },
     renotify: false,
