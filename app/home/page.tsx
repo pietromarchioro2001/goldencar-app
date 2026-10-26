@@ -1922,21 +1922,35 @@ function LavoroRow({
             "—"}
         </div>
       </div>
-      <div
-        style={{
-          background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : "#FFF1C2",
-          color: lavoro.status === "DA_DOCUMENTARE" ? "#92400E" : "#92400E",
-          borderRadius: 999,
-          padding:
-            "6px 9px",
-          fontSize: 10,
-          fontWeight: 900,
-          whiteSpace:
-            "nowrap",
-        }}
-      >
-        {lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : "IN LAVORAZIONE"}
+      <div className="lavoro-row-status" style={{
+        background: lavoro.status === "DA_DOCUMENTARE" ? "#FEF3C7" : "#FFF1C2",
+        color: "#92400E",
+        borderRadius: 999,
+        padding: "6px 9px",
+        fontSize: 10,
+        fontWeight: 900,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}>
+        <span className="lavoro-row-status-text">{lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : "IN LAVORAZIONE"}</span>
+        <span className="lavoro-row-status-dot" aria-label={lavoro.status === "DA_DOCUMENTARE" ? "Da documentare" : "In lavorazione"} />
       </div>
+      <style jsx>{`
+        .lavoro-row-status-dot { display: none; }
+        @media (max-width: 640px) {
+          .lavoro-row-status {
+            width: 12px;
+            height: 12px;
+            min-width: 12px;
+            padding: 0 !important;
+            border-radius: 50% !important;
+            align-self: center;
+            margin-left: 2px;
+          }
+          .lavoro-row-status-text { display: none; }
+          .lavoro-row-status-dot { display: block; width: 100%; height: 100%; }
+        }
+      `}</style>
     </button>
   );
 }
