@@ -1130,7 +1130,8 @@ export default function Veicolo() {
   const eliminaMedia = async (
     item: MediaAttachment & { jobNumber: number; jobDate: string; jobType: string; url?: string }
   ) => {
-    const conferma = window.confirm('Eliminare "' + item.name + '"?');
+    const messaggioConferma = 'Eliminare "' + item.name + '"?';
+    const conferma = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
     if (!conferma) return;
     try {
       if (item.source === 'vehicle') {
