@@ -31,10 +31,25 @@ async function validSession(token: string | undefined, secret: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (pathname === "/accesso" || pathname === "/api/auth/device") return NextResponse.next();
+  if (pathname === "/api/auth/device") return NextResponse.next();
 
   const secret = process.env.GOLDENCAR_SESSION_SECRET;
-  if (secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret)) return NextResponse.next();
+  const hasValidSession = Boolean(secret && secret.length >= 32 && await validSession(request.cookies.get(COOKIE)?.value, secret));
+
+  // If the device already has a valid 30-day session, do not show the password
+  // screen again when a PWA/browser restores /accesso as its start URL.
+  if (pathname === "/accesso") {
+    if (hasValidSession) {
+      const url = request.nextUrl.clone();
+      const next = url.searchParams.get("next");
+      url.pathname = next && next.startsWith("/") && !next.startsWith("//") ? next : "/home";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  if (hasValidSession) return NextResponse.next();
 
   // API endpoints are always checked, even if a path happens to end with a file extension.
   if (pathname.startsWith("/api/")) return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
