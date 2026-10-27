@@ -130,7 +130,7 @@ export default function VenditePage(){
   function edit(c:Car){setDraft({...c});setEquipmentSearch("");setEditing(true);setView("form")}
 
   async function uploadPhotoToR2(key:string,file:File){
-  const presignResponse=await fetch("/api/r2/file",{
+  const presignResponse=await fetch("/api/r2/announcement-file",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({key,contentType:file.type||"image/jpeg"})
@@ -151,7 +151,7 @@ export default function VenditePage(){
 
 async function deletePhotoFromR2(key?:string){
   if(!key)return;
-  const response=await fetch("/api/r2/file",{
+  const response=await fetch("/api/r2/announcement-file",{
     method:"DELETE",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({key})

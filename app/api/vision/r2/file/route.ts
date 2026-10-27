@@ -1,3 +1,5 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
+import { isR2KeyAuthorized } from "@/lib/r2-access";
 import { NextResponse } from "next/server";
 import {
   createDownloadUrl,
@@ -7,18 +9,28 @@ import {
 
 export const runtime = "nodejs";
 
+function cleanKey(value: unknown) {
+  return typeof value === "string" ? value.trim().replace(/^[/]+/, "") : "";
+}
+function validContentType(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 200 && !value.includes("\r") && !value.includes("\n");
+}
+
 export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const body = await request.json();
 
-    const key =
-      typeof body.key === "string" ? body.key : "";
+    const key = cleanKey(body?.key);
 
-    const contentType =
-      typeof body.contentType === "string"
-        ? body.contentType
-        : "application/octet-stream";
+    const contentType = body?.contentType == null ? "application/octet-stream" : body.contentType;
+    if (!key || !validContentType(contentType)) return NextResponse.json({ ok: false, error: "Chiave R2 o Content-Type non valido." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "upload"))) {
+      return NextResponse.json({ ok: false, error: "La chiave non è autorizzata per questo file." }, { status: 403 });
+    }
     const uploadUrl = await createUploadUrl(key, contentType);
 
     return NextResponse.json({
@@ -43,10 +55,17 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const { searchParams } = new URL(request.url);
-    const key = searchParams.get("key") || "";
+    const key = cleanKey(searchParams.get("key"));
+    if (!key) return NextResponse.json({ ok: false, error: "Chiave R2 mancante." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "read"))) {
+      return NextResponse.json({ ok: false, error: "File non associato a un record autorizzato." }, { status: 403 });
+    }
     const downloadUrl = await createDownloadUrl(key);
 
     return NextResponse.json({
@@ -70,12 +89,18 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const body = await request.json();
 
-    const key =
-      typeof body.key === "string" ? body.key : "";
+    const key = cleanKey(body?.key);
+    if (!key) return NextResponse.json({ ok: false, error: "Chiave R2 mancante." }, { status: 400 });
 
+    if (!(await isR2KeyAuthorized(key, "delete"))) {
+      return NextResponse.json({ ok: false, error: "Eliminazione non autorizzata per questo file." }, { status: 403 });
+    }
     await deleteR2Object(key);
 
     return NextResponse.json({

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
-import { supabase } from "@/lib/supabase";
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
@@ -225,6 +224,23 @@ export default function Home() {
 
   useEffect(() => {
     void caricaDati();
+    const rawOrderContext = sessionStorage.getItem("goldencar_nuovo_ordine");
+    if (rawOrderContext) {
+      try {
+        const orderContext = JSON.parse(rawOrderContext) as { vehicleId?: string; nomeCliente?: string; telefono?: string; veicolo?: string; targa?: string };
+        if (orderContext.vehicleId) setOrdineVeicoloId(String(orderContext.vehicleId));
+        if (orderContext.nomeCliente || orderContext.veicolo || orderContext.targa) {
+          setOrdineDescrizione("");
+        }
+        setOrdineFornitoreId("");
+        setModal("ordini");
+        setNuovoOrdineAperto(true);
+      } catch (error) {
+        console.error("Contesto nuovo ordine non valido:", error);
+      } finally {
+        sessionStorage.removeItem("goldencar_nuovo_ordine");
+      }
+    }
     const refresh = () => caricaDati();
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
@@ -319,372 +335,130 @@ export default function Home() {
   };
   const handleRecognizedPlate = async (plate: string) => {
     const normalized = normalizePlate(plate);
-
     try {
-      const { data: vehicle, error: vehicleError } = await supabase
-        .from("vehicles")
-        .select("id, veicolo, motore, targa, immatricolazione, revisione")
-        .ilike("targa", normalized)
-        .maybeSingle();
-
-      if (vehicleError) throw new Error(vehicleError.message);
-
-      if (vehicle) {
-        const { error: checkInUpdateError } = await supabase
-          .from("vehicles")
-          .update({
-            stato: "APERTO",
-            ultima_apertura: new Date().toISOString(),
-          })
-          .eq("id", vehicle.id);
-
-        if (checkInUpdateError) {
-          throw new Error(checkInUpdateError.message);
-        }
-
+      const response = await fetch("/api/checkin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plate: normalized }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore durante la ricerca del veicolo.");
+      if (result.found && result.vehicle) {
+        const vehicle = result.vehicle;
+        const cliente = result.client || null;
         stopCheckInCamera();
-        const { data: relations } = await supabase
-          .from("vehicle_clients")
-          .select("client_id, ruolo")
-          .eq("vehicle_id", vehicle.id)
-          .order("ruolo", { ascending: true });
-
-        const primaryRelation =
-          (relations ?? []).find((item: any) => item.ruolo === "PRINCIPALE") ??
-          (relations ?? [])[0];
-
-        let cliente: any = null;
-        if (primaryRelation?.client_id) {
-          const { data: client } = await supabase
-            .from("clients")
-            .select("nome, indirizzo, telefono, codice_fiscale, data_nascita")
-            .eq("id", primaryRelation.client_id)
-            .maybeSingle();
-          cliente = client;
-        }
-
-        sessionStorage.setItem(
-          "goldencar_nuova_scheda",
-          JSON.stringify({
-            vehicleId: String(vehicle.id),
-            nomeCliente: String(cliente?.nome ?? "").trim(),
-            indirizzo: cliente?.indirizzo || "",
-            telefono: cliente?.telefono || "",
-            codiceFiscale: cliente?.codice_fiscale || "",
-            veicolo: vehicle.veicolo || "",
-            targa: normalized,
-          })
-        );
+        sessionStorage.setItem("goldencar_nuova_scheda", JSON.stringify({
+          vehicleId: String(vehicle.id),
+          nomeCliente: String(cliente?.nome ?? "").trim(),
+          indirizzo: cliente?.indirizzo || "",
+          telefono: cliente?.telefono || "",
+          codiceFiscale: cliente?.codice_fiscale || "",
+          veicolo: vehicle.veicolo || "",
+          targa: normalized,
+        }));
         router.push("/veicolo/scheda");
         return;
       }
-
       sessionStorage.setItem("goldencar_checkin_targa", normalized);
       router.push("/veicolo/profilo");
     } catch (error) {
-      console.error("CHECK-IN ricerca veicolo Supabase error:", error);
+      console.error("CHECK-IN ricerca veicolo error:", error);
       stopCheckInCamera();
-      setCheckInError(
-        error instanceof Error
-          ? `Errore durante la ricerca del veicolo: ${error.message}`
-          : "Errore durante la ricerca del veicolo."
-      );
+      setCheckInError(error instanceof Error ? `Errore durante la ricerca del veicolo: ${error.message}` : "Errore durante la ricerca del veicolo.");
     }
   };
 
   const caricaDati = async () => {
     if (typeof window === "undefined") return;
-    /* =========================
-       LAVORI
-       Anche la Home usa Supabase per le schede lavoro.
-    ========================= */
-    const { data: jobRows, error: jobsError } = await supabase
-      .from("jobs")
-      .select("id, vehicle_id, titolo, tipo, chilometri, manodopera, note, fattura, stato, created_at, closed_at, payment_amount, payment_paid_amount, payment_status, dettagli")
-      .order("created_at", { ascending: false });
-
-    let lavoriPerSolleciti: Lavoro[] = lavori;
-
-    if (jobsError) {
-      console.error("Errore caricamento lavori Home:", jobsError);
+    const response = await fetch("/api/home", { cache: "no-store" });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      console.error("Errore caricamento dati Home:", result?.error || response.status);
       setLavori([]);
-      lavoriPerSolleciti = [];
-    } else {
-      const vehicleIds = (jobRows ?? [])
-        .map((row: any) => row.vehicle_id)
-        .filter(Boolean)
-        .map(String);
-
-      const [{ data: vehicleRows }, { data: relationRows }, { data: clientRows }] =
-        await Promise.all([
-          vehicleIds.length
-            ? supabase.from("vehicles").select("id, veicolo, targa").in("id", vehicleIds)
-            : Promise.resolve({ data: [] as any[] }),
-          vehicleIds.length
-            ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", vehicleIds)
-            : Promise.resolve({ data: [] as any[] }),
-          supabase.from("clients").select("id, nome, telefono"),
-        ]);
-
-      const vehiclesById = new Map(
-        (vehicleRows ?? []).map((row: any) => [String(row.id), row])
-      );
-      const clientsById = new Map(
-        (clientRows ?? []).map((row: any) => [String(row.id), row])
-      );
-      setClientiAnagrafica(
-        (clientRows ?? [])
-          .map((row: any) => {
-            const nomeCliente = String(row?.nome ?? "").trim();
-            if (!nomeCliente) return null;
-            return {
-              clientKey: makeClientKey(nomeCliente, row?.telefono),
-              clientId: String(row?.id ?? ""),
-              nomeCliente,
-              telefono: String(row?.telefono ?? "").trim(),
-            };
-          })
-          .filter(Boolean) as ClienteRicerca[]
-      );
-
-      const primaryClientByVehicle = new Map<string, any>();
-
-      for (const relation of relationRows ?? []) {
-        const vehicleId = String(relation.vehicle_id);
-        if (
-          relation.ruolo === "PRINCIPALE" ||
-          !primaryClientByVehicle.has(vehicleId)
-        ) {
-          primaryClientByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
-        }
-      }
-
-      const lavoriCaricati: Lavoro[] = (jobRows ?? []).map((row: any) => {
-        const vehicle = vehiclesById.get(String(row.vehicle_id));
-        const client = primaryClientByVehicle.get(String(row.vehicle_id));
-        const nomeCliente = String(client?.nome ?? "").trim();
-
-        const dettagli = row.dettagli && typeof row.dettagli === "object"
-          ? row.dettagli
-          : {};
-
-        const jobNumberRaw = String(row.id ?? "");
-        const jobNumber = jobNumberRaw;
-
-        return {
-          jobNumber,
-          createdAt: String(row.created_at ?? ""),
-          nomeCliente: nomeCliente || "Cliente",
-          veicolo: String(vehicle?.veicolo ?? ""),
-          targa: String(vehicle?.targa ?? ""),
-          telefono: String(client?.telefono ?? ""),
-          paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
-          paymentPaidAmount: row.payment_paid_amount != null ? String(row.payment_paid_amount) : "0",
-          paymentStatus:
-            row.payment_status === "PAGATO"
-              ? "PAGATO"
-              : row.payment_status === "PARZIALE"
-                ? "PARZIALE"
-                : "DA_PAGARE",
-          types: Array.isArray(dettagli.types)
-            ? dettagli.types
-            : row.tipo
-              ? [String(row.tipo)]
-              : [],
-          works: Array.isArray(dettagli.works)
-            ? dettagli.works
-            : String(row.lavori ?? ""),
-          status:
-            ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase())
-              ? "IN_LAVORAZIONE"
-              : "CONCLUSO",
-          pdfUrl: String(dettagli.pdfUrl ?? ""),
-        };
-      });
-
-      setLavori(lavoriCaricati);
-      lavoriPerSolleciti = lavoriCaricati;
-    }
-    /* =       PAGAMENTI / SOLLECITI
-    ========================= */
-    const { data: paymentRows, error: paymentsError } = await supabase
-      .from("payments")
-      .select("id, client_id, vehicle_id, job_id, nome_cliente, description, amount, paid_amount, status, created_at")
-      .is("job_id", null)
-      .in("status", ["DA_PAGARE", "PARZIALE"])
-      .order("created_at", { ascending: false });
-
-    if (paymentsError) {
-      console.error("Errore caricamento pagamenti Home:", paymentsError);
       setPagamentiManuali([]);
-      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, []));
-    } else {
-      const clientIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.client_id).filter(Boolean).map(String)));
-      const vehicleIds = Array.from(new Set((paymentRows ?? []).map((row: any) => row.vehicle_id).filter(Boolean).map(String)));
-      const [{ data: paymentClients }, { data: paymentVehicles }] = await Promise.all([
-        clientIds.length ? supabase.from("clients").select("id, nome, telefono").in("id", clientIds) : Promise.resolve({data: [] as any[]}),
-        vehicleIds.length ? supabase.from("vehicles").select("id, targa").in("id", vehicleIds) : Promise.resolve({data: [] as any[]}),
-      ]);
-      const clientsById = new Map((paymentClients ?? []).map((row:any)=>[String(row.id),row]));
-      const vehiclesById = new Map((paymentVehicles ?? []).map((row:any)=>[String(row.id),row]));
-      const manuali: PagamentoManuale[] = (paymentRows ?? []).map((row:any)=>{
-        const client=clientsById.get(String(row.client_id));
-        const vehicle=vehiclesById.get(String(row.vehicle_id));
-        const nomeCliente=String(client?.nome ?? row.nome_cliente ?? "").trim() || "Cliente";
-        const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
-        return {id:String(row.id),clientKey:makeClientKey(nomeCliente,client?.telefono),nomeCliente,telefono:String(client?.telefono??""),targa:String(vehicle?.targa??""),descrizione:String(row.description??""),importo:String(row.amount??""),paidAmount:String(row.paid_amount??"0"),stato,createdAt:String(row.created_at??"")};
-      });
-      setPagamentiManuali(manuali);
-      setSolleciti(aggregaSolleciti(lavoriPerSolleciti, manuali));
-    }
-
-    /* =========================
-       AGENDA
-       La Home usa la stessa sorgente Supabase della pagina Agenda.
-    ========================= */
-    const { data: appointmentRows, error: appointmentsError } = await supabase
-      .from("appointments")
-      .select("id, vehicle_id, titolo, descrizione, data_ora")
-      .order("data_ora", { ascending: true });
-
-    if (appointmentsError) {
-      console.error("Errore caricamento appuntamenti Home:", appointmentsError);
+      setSolleciti([]);
       setAppuntamenti([]);
-    } else {
-      setAppuntamenti(
-        (appointmentRows ?? []).map((row: any) => {
-          const dateTime = new Date(String(row.data_ora ?? ""));
-          return {
-            id: String(row.id ?? ""),
-            date: Number.isNaN(dateTime.getTime()) ? "" : `${dateTime.getFullYear()}-${String(dateTime.getMonth()+1).padStart(2,"0")}-${String(dateTime.getDate()).padStart(2,"0")}`,
-            time: Number.isNaN(dateTime.getTime())
-              ? ""
-              : dateTime.toLocaleTimeString("it-IT", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }),
-            description: String(row.descrizione ?? row.titolo ?? ""),
-          };
-        })
-      );
-    }
-
-    /* =========================
-       REVISIONI
-       La Home usa la stessa sorgente Supabase della pagina Revisioni.
-    ========================= */
-    const { data: revisionRows, error: revisionsError } = await supabase
-      .from("vehicles")
-      .select("id, client_id, veicolo, targa, revisione")
-      .not("revisione", "is", null);
-
-    if (revisionsError) {
-      console.error("Errore caricamento revisioni Home:", revisionsError);
       setRevisioni([]);
-    } else {
-      const revisionVehicleIds = (revisionRows ?? []).map((row: any) => String(row.id));
-      const [{ data: revisionRelations }, { data: revisionClients }] = await Promise.all([
-        revisionVehicleIds.length
-          ? supabase.from("vehicle_clients").select("vehicle_id, client_id, ruolo").in("vehicle_id", revisionVehicleIds)
-          : Promise.resolve({ data: [] as any[] }),
-        supabase.from("clients").select("id, nome, telefono"),
-      ]);
-
-      const revisionClientsById = new Map(
-        (revisionClients ?? []).map((row: any) => [String(row.id), row])
-      );
-      const revisionPrimaryByVehicle = new Map<string, any>();
-
-      for (const relation of revisionRelations ?? []) {
-        const vehicleId = String(relation.vehicle_id);
-        if (relation.ruolo === "PRINCIPALE" || !revisionPrimaryByVehicle.has(vehicleId)) {
-          revisionPrimaryByVehicle.set(
-            vehicleId,
-            revisionClientsById.get(String(relation.client_id))
-          );
-        }
-      }
-
-      setRevisioni(
-        (revisionRows ?? []).map((row: any) => {
-          const client =
-            revisionPrimaryByVehicle.get(String(row.id)) ||
-            revisionClientsById.get(String(row.client_id ?? ""));
-          const nomeCliente = String(client?.nome ?? "").trim();
-
-          return {
-            id: `revisione-${row.id}`,
-            nomeCliente,
-            cliente: nomeCliente,
-            telefono: String(client?.telefono ?? ""),
-            veicolo: String(row.veicolo ?? ""),
-            targa: String(row.targa ?? ""),
-            revisione: String(row.revisione ?? "").slice(0, 10),
-            scadenza: String(row.revisione ?? "").slice(0, 10),
-          };
-        })
-      );
-    }
-
-/* =========================
-       ORDINI
-       Gli ordini sono gestiti da Supabase, quindi la Home
-       deve leggere la stessa sorgente usata dalla pagina ORDINI.
-    ========================= */
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const { data: orderRows, error: ordersError } = await supabase
-      .from("orders")
-      .select("id, numero, cliente, veicolo, prodotti, vehicle_id, supplier_id, stato")
-      .order("created_at", { ascending: false });
-
-    if (ordersError) {
-      console.error("Errore caricamento ordini Home:", ordersError);
       setOrdini([]);
-    } else {
-      setOrdini(
-        (orderRows ?? []).map((row: any) => {
-          const prodotti = Array.isArray(row.prodotti) ? row.prodotti : [];
-          const descrizione = prodotti
-            .map((product: any) => {
-              const nome = String(product?.name ?? "").trim();
-              if (!nome) return "";
-              const quantita = String(product?.quantity ?? "1").trim() || "1";
-              const dettagli = String(product?.details ?? "").trim();
-              return `${quantita} × ${nome}${dettagli ? ` — ${dettagli}` : ""}`;
-            })
-            .filter(Boolean)
-            .join(" · ");
-
-          return {
-            id: String(row.id ?? ""),
-            numero: String(row.numero ?? ""),
-            cliente: String(row.cliente ?? ""),
-            veicolo: String(row.veicolo ?? ""),
-            descrizione,
-            stato: String(row.stato ?? "DA_INVIARE"),
-            vehicleId: row.vehicle_id ? String(row.vehicle_id) : undefined,
-            supplierId: row.supplier_id ? String(row.supplier_id) : undefined,
-          };
-        })
-      );
+      setFornitori([]);
+      setVeicoliOrdini([]);
+      setClientiAnagrafica([]);
+      return;
     }
-    const [{ data: supplierRows }, { data: vehicleRows }] = await Promise.all([
-      supabase.from("suppliers").select("id, nome, whatsapp").order("nome", { ascending: true }),
-      supabase.from("vehicles").select("id, veicolo, targa, client_id").order("targa", { ascending: true }),
-    ]);
-    setFornitori((supplierRows ?? []).map((r:any)=>({id:String(r.id),nome:String(r.nome??""),whatsapp:String(r.whatsapp??"")})));
-    const vehicleIds=(vehicleRows??[]).map((r:any)=>String(r.id));
-    if(vehicleIds.length){
-      const {data:rels}=await supabase.from("vehicle_clients").select("vehicle_id,client_id,ruolo").in("vehicle_id",vehicleIds);
-      const clientIds=Array.from(new Set((rels??[]).map((r:any)=>String(r.client_id))));
-      const {data:cls}=clientIds.length?await supabase.from("clients").select("id,nome,telefono").in("id",clientIds):{data:[]};
-      const cm=new Map((cls??[]).map((r:any)=>[String(r.id),r]));
-      const rm=new Map<string,any>();
-      for(const rel of rels??[]){const k=String(rel.vehicle_id); if(rel.ruolo==="PRINCIPALE"||!rm.has(k)) rm.set(k,cm.get(String(rel.client_id)));}
-      setVeicoliOrdini((vehicleRows??[]).map((v:any)=>({id:String(v.id),veicolo:String(v.veicolo??""),targa:String(v.targa??""),cliente:String(rm.get(String(v.id))?.nome??"")})));
-    } else setVeicoliOrdini([]);
+    const jobRows = Array.isArray(result.jobs) ? result.jobs : [];
+    const paymentRows = Array.isArray(result.payments) ? result.payments : [];
+    const appointmentRows = Array.isArray(result.appointments) ? result.appointments : [];
+    const revisionRows = Array.isArray(result.vehicles) ? result.vehicles.filter((row: any) => row.revisione != null) : [];
+    const relationRows = Array.isArray(result.relations) ? result.relations : [];
+    const clientRows = Array.isArray(result.clients) ? result.clients : [];
+    const vehicleRows = Array.isArray(result.vehicles) ? result.vehicles : [];
+    const orderRows = Array.isArray(result.orders) ? result.orders : [];
+    const supplierRows = Array.isArray(result.suppliers) ? result.suppliers : [];
+    let lavoriPerSolleciti: Lavoro[] = lavori;
+    const vehicleIds = jobRows.map((row: any) => row.vehicle_id).filter(Boolean).map(String);
+    const vehiclesForJobs = new Map<string, any>(vehicleRows.filter((row: any) => vehicleIds.includes(String(row.id))).map((row: any) => [String(row.id), row] as [string, any]));
+    const clientsById = new Map<string, any>(clientRows.map((row: any) => [String(row.id), row] as [string, any]));
+    setClientiAnagrafica(clientRows.map((row: any) => {
+      const nomeCliente = String(row?.nome ?? "").trim();
+      if (!nomeCliente) return null;
+      return { clientKey: makeClientKey(nomeCliente, row?.telefono), clientId: String(row?.id ?? ""), nomeCliente, telefono: String(row?.telefono ?? "").trim() };
+    }).filter(Boolean) as ClienteRicerca[]);
+    const primaryClientByVehicle = new Map<string, any>();
+    for (const relation of relationRows) {
+      const vehicleId = String(relation.vehicle_id);
+      if (relation.ruolo === "PRINCIPALE" || !primaryClientByVehicle.has(vehicleId)) primaryClientByVehicle.set(vehicleId, clientsById.get(String(relation.client_id)));
+    }
+    const lavoriCaricati: Lavoro[] = jobRows.map((row: any) => {
+      const vehicle = vehiclesForJobs.get(String(row.vehicle_id));
+      const client = primaryClientByVehicle.get(String(row.vehicle_id));
+      const dettagli = row.dettagli && typeof row.dettagli === "object" ? row.dettagli : {};
+      return {
+        jobNumber: String(row.id ?? ""), createdAt: String(row.created_at ?? ""),
+        nomeCliente: String(client?.nome ?? "").trim() || "Cliente",
+        veicolo: String(vehicle?.veicolo ?? ""), targa: String(vehicle?.targa ?? ""), telefono: String(client?.telefono ?? ""),
+        paymentAmount: row.payment_amount != null ? String(row.payment_amount) : "",
+        paymentPaidAmount: row.payment_paid_amount != null ? String(row.payment_paid_amount) : "0",
+        paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : row.payment_status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
+        types: Array.isArray(dettagli.types) ? dettagli.types : row.tipo ? [String(row.tipo)] : [],
+        works: Array.isArray(dettagli.works) ? dettagli.works : String(row.lavori ?? ""),
+        status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
+        pdfUrl: String(dettagli.pdfUrl ?? ""),
+      };
+    });
+    setLavori(lavoriCaricati);
+    lavoriPerSolleciti = lavoriCaricati;
+    const manuali: PagamentoManuale[] = paymentRows.map((row: any) => {
+      const client = clientsById.get(String(row.client_id ?? ""));
+      const vehicle = vehicleRows.find((item: any) => String(item.id) === String(row.vehicle_id ?? ""));
+      const nomeCliente = String(client?.nome ?? row.nome_cliente ?? "").trim() || "Cliente";
+      const stato = row.status === "PAGATO" ? "PAGATO" : row.status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE";
+      return { id: String(row.id), clientKey: makeClientKey(nomeCliente, client?.telefono), nomeCliente, telefono: String(client?.telefono ?? ""), targa: String(vehicle?.targa ?? ""), descrizione: String(row.description ?? ""), importo: String(row.amount ?? ""), paidAmount: String(row.paid_amount ?? "0"), stato, createdAt: String(row.created_at ?? "") };
+    });
+    setPagamentiManuali(manuali);
+    setSolleciti(aggregaSolleciti(lavoriPerSolleciti, manuali));
+    setAppuntamenti(appointmentRows.map((row: any) => {
+      const dateTime = new Date(String(row.data_ora ?? ""));
+      return { id: String(row.id ?? ""), date: Number.isNaN(dateTime.getTime()) ? "" : `${dateTime.getFullYear()}-${String(dateTime.getMonth()+1).padStart(2,"0")}-${String(dateTime.getDate()).padStart(2,"0")}`, time: Number.isNaN(dateTime.getTime()) ? "" : dateTime.toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",hour12:false}), description: String(row.descrizione ?? row.titolo ?? "") };
+    }));
+    const revisionPrimaryByVehicle = new Map<string, any>();
+    for (const relation of relationRows) {
+      const id = String(relation.vehicle_id);
+      if (relation.ruolo === "PRINCIPALE" || !revisionPrimaryByVehicle.has(id)) revisionPrimaryByVehicle.set(id, clientsById.get(String(relation.client_id)));
+    }
+    setRevisioni(revisionRows.map((row: any) => {
+      const client = revisionPrimaryByVehicle.get(String(row.id)) || clientsById.get(String(row.client_id ?? ""));
+      const nomeCliente = String(client?.nome ?? "").trim();
+      return { id: `revisione-${row.id}`, nomeCliente, cliente: nomeCliente, telefono: String(client?.telefono ?? ""), veicolo: String(row.veicolo ?? ""), targa: String(row.targa ?? ""), revisione: String(row.revisione ?? "").slice(0,10), scadenza: String(row.revisione ?? "").slice(0,10) };
+    }));
+    setOrdini(orderRows.map((row: any) => {
+      const prodotti = Array.isArray(row.prodotti) ? row.prodotti : [];
+      const descrizione = prodotti.map((product: any) => { const nome=String(product?.name??"").trim(); if(!nome)return ""; const quantita=String(product?.quantity??"1").trim()||"1"; const dettagli=String(product?.details??"").trim(); return `${quantita} × ${nome}${dettagli ? ` — ${dettagli}` : ""}`; }).filter(Boolean).join(" · ");
+      return { id:String(row.id??""), numero:String(row.numero??""), cliente:String(row.cliente??""), veicolo:String(row.veicolo??""), descrizione, stato:String(row.stato??"DA_INVIARE"), vehicleId:row.vehicle_id?String(row.vehicle_id):undefined, supplierId:row.supplier_id?String(row.supplier_id):undefined };
+    }));
+    setFornitori(supplierRows.map((row: any) => ({ id:String(row.id), nome:String(row.nome??""), whatsapp:String(row.whatsapp??"") })));
+    const clientForVehicle = new Map<string, any>();
+    for (const relation of relationRows) { const id=String(relation.vehicle_id); if(relation.ruolo==="PRINCIPALE"||!clientForVehicle.has(id))clientForVehicle.set(id,clientsById.get(String(relation.client_id))); }
+    setVeicoliOrdini(vehicleRows.map((row: any) => ({ id:String(row.id), veicolo:String(row.veicolo??""), targa:String(row.targa??""), cliente:String(clientForVehicle.get(String(row.id))?.nome??"") })));
   };
   const lavoriAttivi = useMemo(
     () =>
@@ -823,15 +597,14 @@ export default function Home() {
     if (!ok) return;
     try {
       for (const lavoro of targetJobs) {
-        const { error } = await supabase.from("jobs").update({
-          payment_status: "PAGATO",
-          payment_paid_amount: parseImporto(lavoro.paymentAmount),
-        }).eq("id", String(lavoro.jobNumber));
-        if (error) throw error;
+        const response = await fetch("/api/jobs/payment", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: String(lavoro.jobNumber), paymentStatus: "PAGATO", paymentPaidAmount: parseImporto(lavoro.paymentAmount) }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore aggiornamento pagamento scheda.");
       }
       for (const pagamento of targetManuali) {
-        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
-        if (error) throw error;
+        const response = await fetch("/api/payments", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pagamento.id }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore eliminazione pagamento.");
       }
       await caricaDati();
       setDettaglioSollecito(null);
@@ -851,14 +624,13 @@ export default function Home() {
     if (!ok) return;
     try {
       if (pagamento.manuale) {
-        const { error } = await supabase.from("payments").delete().eq("id", pagamento.id);
-        if (error) throw error;
+        const response = await fetch("/api/payments", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: pagamento.id }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore eliminazione pagamento.");
       } else {
-        const { error } = await supabase.from("jobs").update({
-          payment_status: "PAGATO",
-          payment_paid_amount: parseImporto(pagamento.totale ?? pagamento.importo),
-        }).eq("id", String(pagamento.jobNumber));
-        if (error) throw error;
+        const response = await fetch("/api/jobs/payment", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: String(pagamento.jobNumber), paymentStatus: "PAGATO", paymentPaidAmount: parseImporto(pagamento.totale ?? pagamento.importo) }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore aggiornamento pagamento scheda.");
       }
       await caricaDati();
       setDettaglioSollecito(null);
@@ -975,16 +747,9 @@ export default function Home() {
     if (importo <= 0) { alert("Inserisci un importo valido."); return; }
     if (!descrizione) { alert("Inserisci la descrizione."); return; }
     try {
-      const { error } = await supabase.from("payments").insert({
-        id: crypto.randomUUID(),
-        client_id: clienteSelezionatoPagamento?.clientId || null,
-        nome_cliente: nome,
-        description: descrizione,
-        amount: importo,
-        paid_amount: 0,
-        status: "DA_PAGARE",
-      });
-      if (error) throw error;
+      const response = await fetch("/api/payments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), client_id: clienteSelezionatoPagamento?.clientId || null, nome_cliente: nome, description: descrizione, amount: importo }) });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio sollecito.");
       setNuovoPagamentoAperto(false);
       setClienteSelezionatoPagamento(null); setClienteQuery("");
       setNuovoClienteNome(""); setNuovoClienteTelefono(""); setNuovoPagamentoDescrizione(""); setNuovoPagamentoImporto("");
@@ -1050,11 +815,9 @@ export default function Home() {
   const salvaAgendaVoice = async () => {
     if (!agendaDraft.date || !agendaDraft.time || !agendaDraft.description) return;
     const local = new Date(`${agendaDraft.date}T${agendaDraft.time}:00`);
-    const { error } = await supabase.from("appointments").insert({
-      id: crypto.randomUUID(), titolo: agendaDraft.description, descrizione: agendaDraft.description,
-      data_ora: local.toISOString(),
-    });
-    if (error) { alert("Non è stato possibile salvare l'appuntamento: " + error.message); return; }
+    const response = await fetch("/api/appointments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), description: agendaDraft.description, dateTime: local.toISOString() }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Non è stato possibile salvare l'appuntamento: " + (result?.error || "Errore sconosciuto.")); return; }
     setAgendaVoiceOpen(false); setAgendaVoiceText(""); await caricaDati();
   };
 
@@ -1062,13 +825,10 @@ export default function Home() {
     const vehicle = veicoliOrdini.find(v => v.id === ordineVeicoloId);
     const supplier = fornitori.find(s => s.id === ordineFornitoreId);
     const desc = ordineDescrizione.trim();
-    if (!vehicle || !supplier || !desc) { alert("Seleziona veicolo, fornitore e inserisci cosa ordinare."); return; }
-    const { error } = await supabase.from("orders").insert({
-      id: crypto.randomUUID(), numero: String(Date.now()), vehicle_id: vehicle.id, supplier_id: supplier.id,
-      cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{name: desc, quantity:"1"}],
-      stato: "DA_INVIARE",
-    });
-    if (error) { alert("Errore salvataggio ordine: " + error.message); return; }
+    if (!vehicle || !desc) { alert("Seleziona il veicolo e inserisci cosa ordinare."); return; }
+    const response = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: crypto.randomUUID(), numero: String(Date.now()), vehicleId: vehicle.id, supplierId: supplier?.id || "", cliente: vehicle.cliente, veicolo: vehicle.veicolo, targa: vehicle.targa, prodotti: [{ name: desc, quantity: "1" }] }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Errore salvataggio ordine: " + (result?.error || "Errore sconosciuto.")); return; }
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
   };
   const inviaOrdineHome = async (ordine: Ordine) => {
@@ -1077,8 +837,9 @@ export default function Home() {
     const numero = supplier.whatsapp.replace(/\D/g,"");
     const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
     window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const { error } = await supabase.from("orders").update({stato:"INVIATO"}).eq("id",ordine.id);
-    if (error) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: "+error.message); return; }
+    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordine.id, stato: "INVIATO" }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: " + (result?.error || "Errore sconosciuto.")); return; }
     await caricaDati();
   };
   const salvaFornitoreHome = async () => {
@@ -1087,12 +848,14 @@ export default function Home() {
     if (!nome || !whatsapp) { alert("Inserisci nome e numero WhatsApp."); return; }
     try {
       if (fornitoreEditId) {
-        const { error } = await supabase.from("suppliers").update({ nome, whatsapp }).eq("id", fornitoreEditId);
-        if (error) throw error;
+        const response = await fetch("/api/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: fornitoreEditId, nome, whatsapp }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio fornitore.");
       } else {
         const id = `fornitore-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-        const { error } = await supabase.from("suppliers").insert({ id, nome, whatsapp });
-        if (error) throw error;
+        const response = await fetch("/api/orders", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, nome, whatsapp }) });
+        const result = await response.json();
+        if (!response.ok || !result?.ok) throw new Error(result?.error || "Errore salvataggio fornitore.");
       }
       setRubricaFornitoreAperta(false);
       setFornitoreEditId(""); setFornitoreEditNome(""); setFornitoreEditWhatsapp(""); setNuovoFornitoreMode(false);
@@ -1107,8 +870,9 @@ export default function Home() {
     const supplier = fornitori.find(s=>s.id===ordineFornitoreId);
     const desc = ordineDescrizione.trim();
     if(!desc || !supplier){ alert("Inserisci descrizione e fornitore."); return; }
-    const {error}=await supabase.from("orders").update({prodotti:[{name:desc,quantity:"1"}],supplier_id:supplier.id}).eq("id",ordineAperto.id);
-    if(error){alert("Errore aggiornamento ordine: "+error.message);return;}
+    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordineAperto.id, description: desc, supplierId: supplier.id }) });
+    const result = await response.json();
+    if (!response.ok || !result?.ok) { alert("Errore aggiornamento ordine: " + (result?.error || "Errore sconosciuto.")); return; }
     setOrdineAperto(null); await caricaDati();
   };
 
@@ -1450,6 +1214,24 @@ export default function Home() {
                 key={ordine.id || ordine.numero || index}
                 ordine={ordine}
                 onClick={() => {
+                  if (ordine.stato === "INVIATO") {
+                    const conferma = window.confirm("Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?");
+                    if (!conferma) return;
+                    void (async () => {
+                      const response = await fetch("/api/orders", {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: ordine.id }),
+                      });
+                      const result = await response.json().catch(() => null);
+                      if (!response.ok || !result?.ok) {
+                        alert("Non è stato possibile eliminare l'ordine: " + (result?.error || "Errore sconosciuto."));
+                        return;
+                      }
+                      await caricaDati();
+                    })();
+                    return;
+                  }
                   setOrdineAperto(ordine);
                   setOrdineDescrizione(ordine.descrizione || "");
                   setOrdineFornitoreId(ordine.supplierId || "");
@@ -1667,7 +1449,6 @@ export default function Home() {
       {ordineAperto && (
         <Modal title="ORDINE" onClose={()=>setOrdineAperto(null)}>
           <div style={{fontWeight:900,color:"#041E49"}}>{ordineAperto.cliente || "Cliente"} · {ordineAperto.veicolo || ""}</div>
-          <div style={{fontSize:12,color:"#64748B",marginTop:4}}>{ordineAperto.numero || ""}</div>
           <label style={labelStyle}>PRODOTTO</label>
           <textarea
             value={ordineDescrizione}
@@ -1831,7 +1612,7 @@ function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
-  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>{ordine.numero ? `ORDINE ${ordine.numero}` : "ORDINE"}</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
+  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>ORDINE</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
 }
 
 /* =====================================================

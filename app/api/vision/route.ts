@@ -1,3 +1,4 @@
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -94,6 +95,9 @@ async function analyzeImage(file: File, apiKey: string) {
 }
 
 export async function POST(request: Request) {
+  if (!(await isDeviceRequestAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: "Accesso non autorizzato." }, { status: 401 });
+  }
   try {
     const apiKey = process.env.GOOGLE_VISION_API_KEY?.trim();
 
@@ -121,6 +125,18 @@ export async function POST(request: Request) {
           error: "Servono entrambe le foto del libretto.",
         },
         { status: 400 }
+      );
+    }
+
+    const imageFiles = [photo1, photo1Top, photo1TopRight, photo1B, photo2, photo2B]
+      .filter((item): item is File => item instanceof File);
+    const maxImageBytes = 15 * 1024 * 1024;
+    const maxTotalBytes = 30 * 1024 * 1024;
+    if (imageFiles.some((file) => file.size <= 0 || file.size > maxImageBytes) ||
+        imageFiles.reduce((total, file) => total + file.size, 0) > maxTotalBytes) {
+      return NextResponse.json(
+        { error: "Le immagini superano il limite consentito. Usa foto più leggere (massimo 15 MB ciascuna e 30 MB complessivi)." },
+        { status: 413 }
       );
     }
 
