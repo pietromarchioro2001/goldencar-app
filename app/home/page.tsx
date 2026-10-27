@@ -680,7 +680,7 @@ export default function Home() {
       l.paymentStatus !== "PAGATO"
     );
     const targetManuali = pagamentiManuali.filter((p) => p.clientKey === clientKey && p.stato !== "PAGATO");
-    const ok = window.confirm("Confermi che tutte le voci di questo cliente sono state pagate?");
+    const ok = window.goldencarConfirm ? await window.goldencarConfirm("Confermi che tutte le voci di questo cliente sono state pagate?") : window.confirm("Confermi che tutte le voci di questo cliente sono state pagate?");
     if (!ok) return;
     try {
       for (const lavoro of targetJobs) {
@@ -707,7 +707,8 @@ export default function Home() {
   };
 
   const pagaSingolo = async (pagamento: PagamentoDettaglio) => {
-    const ok = window.confirm(`Confermi il pagamento di ${formatEuro(pagamento.importo)} per "${pagamento.descrizione}"?`);
+    const messaggioPagamento = `Confermi il pagamento di ${formatEuro(pagamento.importo)} per "${pagamento.descrizione}"?`;
+    const ok = window.goldencarConfirm ? await window.goldencarConfirm(messaggioPagamento) : window.confirm(messaggioPagamento);
     if (!ok) return;
     try {
       if (pagamento.manuale) {
@@ -1391,9 +1392,10 @@ export default function Home() {
               <OrderRow
                 key={ordine.id || ordine.numero || index}
                 ordine={ordine}
-                onClick={() => {
+                onClick={async () => {
                   if (ordine.stato === "INVIATO") {
-                    const conferma = window.confirm("Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?");
+                    const messaggioConferma = "Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?";
+                    const conferma = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
                     if (!conferma) return;
                     void (async () => {
                       const response = await fetch("/api/orders", {
