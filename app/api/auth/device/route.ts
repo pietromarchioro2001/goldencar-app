@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 
 export const runtime = "nodejs";
 const COOKIE = "goldencar_device";
@@ -57,6 +58,14 @@ function clearFailures(ip: string) {
   attemptsByIp.delete(ip);
 }
 
+export async function GET(request: Request) {
+  const authorized = await isDeviceRequestAuthorized(request);
+  return NextResponse.json(
+    { ok: authorized },
+    { status: authorized ? 200 : 401, headers: { "Cache-Control": "no-store, max-age=0" } }
+  );
+}
+
 export async function POST(request: Request) {
   const now = Date.now();
   const ip = clientIp(request);
@@ -95,6 +104,7 @@ export async function POST(request: Request) {
     sameSite: "strict",
     path: "/",
     expires: new Date(expiresAt * 1000),
+    maxAge: DAYS * 86400,
   });
   return response;
 }
