@@ -1286,11 +1286,10 @@ export default function SchedaLavoroPage() {
     }
 
     if (action === "conclude" || action === "document") {
-      const confirmed = window.confirm(
-        action === "conclude"
-          ? "Confermi che il lavoro è terminato e deve passare alla fase di documentazione? La scheda resterà modificabile."
-          : "Confermi la documentazione definitiva? La scheda verrà bloccata e verrà generato il PDF."
-      );
+      const messaggioConferma = action === "conclude"
+        ? "Confermi che il lavoro è terminato e deve passare alla fase di documentazione? La scheda resterà modificabile."
+        : "Confermi la documentazione definitiva? La scheda verrà bloccata e verrà generato il PDF.";
+      const confirmed = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
       if (!confirmed) return null;
     }
 
