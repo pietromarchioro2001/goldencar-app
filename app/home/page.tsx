@@ -185,6 +185,7 @@ function aggregaSolleciti(lavori: Lavoro[], manuali: PagamentoManuale[]): Sollec
 }
 export default function Home() {
   const router = useRouter();
+  const [pushNotificationsActive, setPushNotificationsActive] = useState<boolean | null>(null);
   const [lavori, setLavori] = useState<Lavoro[]>([]);
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
@@ -259,6 +260,41 @@ export default function Home() {
       })
       .catch((error) => console.error("Errore conteggio solleciti Home:", error));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkPushSubscription = async () => {
+      try {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window) || Notification.permission !== "granted") {
+          if (!cancelled) setPushNotificationsActive(false);
+          return;
+        }
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (!subscription) {
+          if (!cancelled) setPushNotificationsActive(false);
+          return;
+        }
+        // Ri-sincronizza silenziosamente l'iscrizione già concessa con il server.
+        const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+        const keyResult = await keyResponse.json().catch(() => null);
+        if (!keyResponse.ok || !keyResult?.publicKey) throw new Error("Configurazione push non disponibile");
+        const response = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok) throw new Error("Registrazione push non confermata");
+        if (!cancelled) setPushNotificationsActive(true);
+      } catch (error) {
+        console.warn("Verifica iscrizione notifiche:", error);
+        if (!cancelled) setPushNotificationsActive(false);
+      }
+    };
+    void checkPushSubscription();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     void caricaDati(false);
@@ -993,53 +1029,56 @@ export default function Home() {
           <h1 style={{ fontSize: 31, fontWeight: 800, color: "#041E49", letterSpacing: "-0.7px", margin: "3px 0 0" }}>
             GOLDENCAR
           </h1>
-          <button
-            type="button"
-            aria-label="Attiva notifiche"
-            title="Attiva notifiche"
-            onClick={async () => {
-              try {
-                if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-                  alert("Le notifiche push non sono supportate da questo browser.");
-                  return;
-                }
-                const permission = await Notification.requestPermission();
-                if (permission !== "granted") {
-                  alert("Per ricevere gli avvisi, consenti le notifiche nelle impostazioni del browser.");
-                  return;
-                }
-                const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
-                const keyResult = await keyResponse.json().catch(() => null);
-                if (!keyResponse.ok || !keyResult?.publicKey) throw new Error(keyResult?.error || "Notifiche non configurate sul server.");
-                const registration = await navigator.serviceWorker.register("/sw.js");
-                await navigator.serviceWorker.ready;
-                const decodeKey = (value: string) => {
-                  const padded = value + "=".repeat((4 - value.length % 4) % 4);
-                  const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
-                  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
-                };
-                let subscription = await registration.pushManager.getSubscription();
-                if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(keyResult.publicKey) as BufferSource });
-                const response = await fetch("/api/push/subscribe", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
-                });
-                const result = await response.json().catch(() => null);
-                if (!response.ok || !result?.ok) throw new Error(result?.error || "Impossibile attivare le notifiche.");
+{pushNotificationsActive !== true && (
+            <button
+              type="button"
+              aria-label="Attiva notifiche"
+              title="Attiva notifiche"
+              onClick={async () => {
+                try {
+                  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+                    alert("Le notifiche push non sono supportate da questo browser.");
+                    return;
+                  }
+                  const permission = await Notification.requestPermission();
+                  if (permission !== "granted") {
+                    alert("Per ricevere gli avvisi, consenti le notifiche nelle impostazioni del browser.");
+                    return;
+                  }
+                  const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+                  const keyResult = await keyResponse.json().catch(() => null);
+                  if (!keyResponse.ok || !keyResult?.publicKey) throw new Error(keyResult?.error || "Notifiche non configurate sul server.");
+                  const registration = await navigator.serviceWorker.register("/sw.js");
+                  await navigator.serviceWorker.ready;
+                  const decodeKey = (value: string) => {
+                    const padded = value + "=".repeat((4 - value.length % 4) % 4);
+                    const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+                    return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+                  };
+                  let subscription = await registration.pushManager.getSubscription();
+                  if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(keyResult.publicKey) as BufferSource });
+                  const response = await fetch("/api/push/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
+                  });
+                  const result = await response.json().catch(() => null);
+                  if (!response.ok || !result?.ok) throw new Error(result?.error || "Impossibile attivare le notifiche.");
+                  setPushNotificationsActive(true);
                 alert("Notifiche attivate su questo dispositivo.");
-              } catch (error) {
-                console.error("Attivazione notifiche:", error);
-                alert(error instanceof Error ? error.message : "Errore durante l'attivazione delle notifiche.");
-              }
-            }}
-            style={{ position: "absolute", top: 28, right: 20, width: 44, height: 44, border: "1px solid #D9E1EC", borderRadius: "50%", padding: 0, background: "#FFFFFF", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.08)" }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
-            </svg>
-          </button>
+                } catch (error) {
+                  console.error("Attivazione notifiche:", error);
+                  alert(error instanceof Error ? error.message : "Errore durante l'attivazione delle notifiche.");
+                }
+              }}
+              style={{ position: "absolute", top: 28, right: 20, width: 44, height: 44, border: "1px solid #D9E1EC", borderRadius: "50%", padding: 0, background: "#FFFFFF", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.08)" }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         {/* =========================
             STATISTICHE
