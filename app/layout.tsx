@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import PWARegister from "./pwa-register";
+import AppDialogs from "@/components/AppDialogs";
 
 export const metadata: Metadata = {
   title: "Goldencar",
@@ -35,6 +36,7 @@ export default function RootLayout({
     <html lang="it">
       <body>
         <PWARegister />
+        <AppDialogs />
         {children}
       </body>
     </html>
