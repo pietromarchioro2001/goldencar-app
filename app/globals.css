@@ -304,7 +304,8 @@ textarea {
   .page-header-aligned > h1 {
     min-width: 0 !important;
     width: 100%;
-    text-align: center !important;
+    text-align: left !important;
+    justify-self: start !important;
     font-size: clamp(25px, 5.2vw, 31px) !important;
     line-height: 1.05 !important;
     letter-spacing: -0.7px !important;
@@ -587,5 +588,26 @@ textarea {
 @media (max-width: 600px) {
   .home-checkin-wrap {
     margin-top: 38px !important;
+  }
+}
+
+
+/* Mobile: tutti i titoli partono subito a destra del logo, allineati a sinistra. */
+@media (max-width: 600px) {
+  .page-header-aligned {
+    grid-template-columns: 110px minmax(0, 1fr) !important;
+    column-gap: 12px !important;
+    padding-top: 18px !important;
+    padding-bottom: 12px !important;
+  }
+
+  .page-header-aligned > h1 {
+    text-align: left !important;
+    justify-self: start !important;
+  }
+
+  /* Sulla Home riduce lo spazio tra intestazione e griglia delle card. */
+  .app > .page-header-aligned + div {
+    margin-top: 14px !important;
   }
 }
