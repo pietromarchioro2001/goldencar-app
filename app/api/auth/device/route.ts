@@ -95,6 +95,7 @@ export async function POST(request: Request) {
     sameSite: "strict",
     path: "/",
     expires: new Date(expiresAt * 1000),
+    maxAge: DAYS * 86400,
   });
   return response;
 }
