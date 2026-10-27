@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   try {
     const client = db();
     const [jobs, appointments, revisions, orders] = await Promise.all([
-      client.from("jobs").select("id", { count: "exact", head: true }).in("stato", ["APERTO", "IN_LAVORAZIONE"]),
+      client.from("jobs").select("id", { count: "exact", head: true }).in("stato", ["APERTO", "IN_LAVORAZIONE", "DA_DOCUMENTARE"]),
       client.from("appointments").select("id", { count: "exact", head: true }).gte("data_ora", start).lt("data_ora", end),
       client.from("vehicles").select("id", { count: "exact", head: true }).not("revisione", "is", null).lte("revisione", until),
       client.from("orders").select("id", { count: "exact", head: true }),

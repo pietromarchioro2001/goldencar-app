@@ -1,3 +1,4 @@
+import { sendPushOnce } from "@/lib/push-notifications";
 import { isDeviceRequestAuthorized } from "@/lib/device-auth";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
@@ -92,6 +93,7 @@ export async function POST(request: Request) {
       cliente:clientName, telefono:phone, targa:plate, veicolo:vehicleName, prodotti: products, stato:"DA_INVIARE"
     }).select("*").single();
     if(error)throw error;
+    await sendPushOnce("order-created:"+String(data.id),{title:"GOLDENCAR · Ordine da completare",body:String(data.cliente||"Cliente")+" · "+String(data.veicolo||"Veicolo")+" · "+products.map((p:any)=>String(p.name||"")).filter(Boolean).join(", ").slice(0,100),url:"/?open=ordini",tag:"order-"+String(data.id)}).catch(error=>console.error("Notifica nuovo ordine:",error));
     return NextResponse.json({ok:true,order:data},{status:201});
   } catch(error) {
     console.error("POST /api/orders:",error);

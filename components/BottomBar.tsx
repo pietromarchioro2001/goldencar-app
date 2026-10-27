@@ -19,6 +19,8 @@ export default function BottomBar() {
 
   return (
     <nav
+      aria-label="Navigazione principale"
+      className="bottom-navigation"
       style={{
         position: "fixed",
         bottom: 0,

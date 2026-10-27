@@ -128,7 +128,7 @@ type LavoroSalvato = {
 
 
 
-  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  status?: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
 
 
 
@@ -516,8 +516,8 @@ export default function Veicolo() {
           ? details.types
           : row.tipo ? String(row.tipo).split(" · ").filter(Boolean) : [],
         works: row.lavori || "",
-        status: String(row.stato || "").toUpperCase() === "CONCLUSO" ||
-          String(row.stato || "").toUpperCase() === "CHIUSO"
+        status: String(row.stato || "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" :
+          String(row.stato || "").toUpperCase() === "CONCLUSO" || String(row.stato || "").toUpperCase() === "CHIUSO"
           ? "CONCLUSO" : "IN_LAVORAZIONE",
         invoiceNumber: row.fattura || "",
         pdfUrl: details.pdfUrl || "",
@@ -885,6 +885,7 @@ export default function Veicolo() {
       lavoro.types?.length ? lavoro.types.join(" · ") : "Intervento";
 
     const concluso = lavoro.status === "CONCLUSO";
+    const daDocumentare = lavoro.status === "DA_DOCUMENTARE";
 
 
 
@@ -908,15 +909,15 @@ export default function Veicolo() {
 
 
 
-      stato: concluso ? "Concluso" : "In lavorazione",
+      stato: concluso ? "Concluso" : daDocumentare ? "Da documentare" : "In lavorazione",
 
 
 
-      statoBg: concluso ? "#DCFCE7" : "#FFF1C2",
+      statoBg: concluso ? "#DCFCE7" : daDocumentare ? "#F3E8FF" : "#FFF1C2",
 
 
 
-      statoColor: concluso ? "#15803D" : "#92400E",
+      statoColor: concluso ? "#15803D" : daDocumentare ? "#7E22CE" : "#92400E",
 
 
 
@@ -932,7 +933,7 @@ export default function Veicolo() {
 
 
 
-  const veicoloAperto = lavori.some((lavoro) => lavoro.status === "IN_LAVORAZIONE");
+  const veicoloAperto = lavori.some((lavoro) => lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE");
 
 
 
@@ -943,8 +944,9 @@ export default function Veicolo() {
     }
 
     if (veicoloAperto) {
-      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE");
-      alert(`Questo veicolo ha già un lavoro in lavorazione${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
+      const lavoroAperto = lavori.find((lavoro) => lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE");
+      const statoDescrizione = lavoroAperto?.status === "DA_DOCUMENTARE" ? "in attesa di documentazione" : "in lavorazione";
+      alert(`Questo veicolo ha già un lavoro ${statoDescrizione}${lavoroAperto?.jobNumber ? ` (scheda #${lavoroAperto.jobNumber})` : ""}.`);
       return;
     }
 
@@ -1128,7 +1130,8 @@ export default function Veicolo() {
   const eliminaMedia = async (
     item: MediaAttachment & { jobNumber: number; jobDate: string; jobType: string; url?: string }
   ) => {
-    const conferma = window.confirm('Eliminare "' + item.name + '"?');
+    const messaggioConferma = 'Eliminare "' + item.name + '"?';
+    const conferma = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
     if (!conferma) return;
     try {
       if (item.source === 'vehicle') {
@@ -1337,7 +1340,7 @@ export default function Veicolo() {
 
 
 
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
+      <div className="page-header-aligned" style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
         <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
           <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
         </div>
@@ -1800,16 +1803,23 @@ export default function Veicolo() {
                   </>
                 ) : (
                   <>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingRight: 50 }}>
-                      <h2 style={{ fontSize: 20, fontWeight: 800, color: "#111827", margin: 0 }}>
+                    <div className="profilo-veicolo-title-row" style={{ display: "flex", alignItems: "center", gap: 8, paddingRight: 50, minWidth: 0 }}>
+                      <h2 style={{ flex: "1 1 auto", minWidth: 0, fontSize: 20, fontWeight: 800, color: "#111827", margin: 0 }}>
                         {veicoloProfilo.veicolo || "Nessun veicolo"}
                       </h2>
                       {veicoloAperto && (
-                        <div style={{
+                        <div className="profilo-veicolo-status" style={{
                           marginLeft: "auto", background: "#22C55E", color: "#FFFFFF", fontSize: 12,
-                          fontWeight: 700, padding: "6px 12px", borderRadius: 999, whiteSpace: "nowrap",
+                          fontWeight: 700, padding: "6px 12px", borderRadius: 999, whiteSpace: "nowrap", flexShrink: 0,
                         }}>APERTO</div>
                       )}
+                      <style jsx>{`
+                        @media (max-width: 640px) {
+                          .profilo-veicolo-title-row { gap: 6px !important; padding-right: 34px !important; }
+                          .profilo-veicolo-title-row h2 { font-size: 17px !important; line-height: 1.2; overflow-wrap: anywhere; }
+                          .profilo-veicolo-status { font-size: 9px !important; padding: 5px 7px !important; letter-spacing: .1px; }
+                        }
+                      `}</style>
                     </div>
                     <div style={{ color: "#6B7280", marginTop: 4, fontSize: 16 }}>
                       {veicoloProfilo.targa || "Nessuna targa"}
@@ -1874,6 +1884,7 @@ export default function Veicolo() {
 
 
           <div
+            className="vehicle-profile-info-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",

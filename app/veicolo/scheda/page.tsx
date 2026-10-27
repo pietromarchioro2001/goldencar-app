@@ -115,7 +115,7 @@ type JobDraft = VeicoloScheda & {
 
   problems: string[];
 
-  products: { name: string; details: string; quantity?: string; orderRequested?: boolean }[];
+  products: { name: string; details: string; quantity?: string; orderRequested?: boolean; category?: "TAGLIANDO" | "MANUTENZIONE" }[];
 
   works: string[];
 
@@ -130,7 +130,7 @@ type JobDraft = VeicoloScheda & {
   paymentStatus: "DA_PAGARE" | "PAGATO";
   media: MediaAttachment[];
 
-  status: "IN_LAVORAZIONE" | "CONCLUSO";
+  status: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
 
   pdfUrl?: string;
   pdfR2Key?: string;
@@ -383,7 +383,9 @@ function jobIdToNumber(id: string): number {
 
 function normalizeJobStatus(value: unknown): JobDraft["status"] {
   const stato = String(value || "").toUpperCase();
-  return stato === "CONCLUSO" || stato === "CHIUSO" ? "CONCLUSO" : "IN_LAVORAZIONE";
+  if (stato === "CONCLUSO" || stato === "CHIUSO") return "CONCLUSO";
+  if (stato === "DA_DOCUMENTARE") return "DA_DOCUMENTARE";
+  return "IN_LAVORAZIONE";
 }
 
 function parseJobDetails(value: unknown): Record<string, any> {
@@ -530,6 +532,8 @@ export default function SchedaLavoroPage() {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveConfirmed, setSaveConfirmed] = useState(false);
+  const [tagliandoCatalog, setTagliandoCatalog] = useState<string[]>([]);
+  const [manutenzioneCatalog, setManutenzioneCatalog] = useState<string[]>([]);
 
   const [recording, setRecording] = useState<string | null>(null);
   const [mediaUrls, setMediaUrls] = useState<Record<string, string>>({});
@@ -547,12 +551,27 @@ export default function SchedaLavoroPage() {
   const productOrderKey = (name: string) => name.trim().toLowerCase();
 
   useEffect(() => {
+    let active = true;
+    fetch("/api/product-catalog?category=TAGLIANDO", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setTagliandoCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti tagliando non disponibile:", error));
+    fetch("/api/product-catalog?category=MANUTENZIONE", { cache: "no-store" })
+      .then((response) => response.ok ? response.json() : null)
+      .then((result) => { if (active && result?.ok && Array.isArray(result.products)) setManutenzioneCatalog(result.products.map((item: { name: string }) => item.name)); })
+      .catch((error) => console.warn("Catalogo prodotti manutenzione non disponibile:", error));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     const init = async () => {
       try {
-        const existingJobId = sessionStorage.getItem("goldencar_apri_scheda");
+        const requestedJobId = new URLSearchParams(window.location.search).get("jobId");
+        const existingJobId = sessionStorage.getItem("goldencar_apri_scheda") || requestedJobId;
+        if (requestedJobId) sessionStorage.setItem("goldencar_apri_scheda", requestedJobId);
 
         if (existingJobId) {
           const response = await fetch("/api/jobs?id=" + encodeURIComponent(existingJobId), { cache: "no-store" });
@@ -589,9 +608,27 @@ export default function SchedaLavoroPage() {
         if (rawVehicle) { vehicle = { ...vehicle, ...JSON.parse(rawVehicle) }; sessionStorage.removeItem("goldencar_nuova_scheda"); }
         if (!vehicle.vehicleId) throw new Error("ID del veicolo non disponibile. Torna al profilo del veicolo e riprova.");
 
+        // Il progressivo viene calcolato sul database, non solo sul browser:
+        // le schede già salvate in Supabase devono essere considerate anche su un dispositivo nuovo.
+        let serverJobNumber = 0;
+        try {
+          const numberResponse = await fetch("/api/jobs?nextNumber=1", { cache: "no-store" });
+          const numberResult = await numberResponse.json();
+          if (numberResponse.ok && numberResult?.ok && Number(numberResult.nextJobNumber) > 0) {
+            serverJobNumber = Number(numberResult.nextJobNumber);
+          }
+        } catch (numberError) {
+          console.warn("Impossibile recuperare il progressivo dal database:", numberError);
+        }
+
         // Aprire "Nuovo lavoro" crea solo una bozza locale.
         // La riga in Supabase viene creata esclusivamente dal pulsante SALVA.
-        const draft = emptyDraft(vehicle, createOrReuseNewJobNumber());
+        const draft = emptyDraft(vehicle, serverJobNumber || createOrReuseNewJobNumber());
+        if (serverJobNumber) {
+          sessionStorage.setItem("goldencar_nuova_scheda_job_number", String(serverJobNumber));
+          const year = Math.floor(serverJobNumber / 1000);
+          localStorage.setItem(`goldencar_next_job_number_${year}`, String((serverJobNumber % 1000) + 1));
+        }
         setDraft(draft);
         setSaved(false);
       } catch (error) {
@@ -805,7 +842,7 @@ export default function SchedaLavoroPage() {
 
 
 
-  const addProduct = () => {
+  const addProduct = (category: "TAGLIANDO" | "MANUTENZIONE" = "MANUTENZIONE") => {
 
     setDraft((previous) =>
 
@@ -822,11 +859,9 @@ export default function SchedaLavoroPage() {
               {
 
                 name: "",
-
                 details: "",
-
                 quantity: "1",
-
+                category,
               },
 
             ],
@@ -1139,7 +1174,7 @@ export default function SchedaLavoroPage() {
         products: lavoro.products,
         notes: lavoro.notes,
         invoiceNumber: lavoro.invoiceNumber,
-        status: lavoro.status,
+        status: lavoro.status === "DA_DOCUMENTARE" ? "IN_LAVORAZIONE" : lavoro.status,
       };
 
       const blob = await pdf(<SchedaLavoroPDF lavoro={pdfData} />).toBlob();
@@ -1243,31 +1278,57 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const saveDraft = async (conclude = false): Promise<JobDraft | null> => {
+  const saveDraft = async (action: "save" | "conclude" | "document" = "save"): Promise<JobDraft | null> => {
     if (saving) return null;
     if (!draft) {
       alert("Scheda non ancora caricata. Attendi un momento e riprova.");
       return null;
     }
 
-    if (conclude) {
+    if (action === "conclude" || action === "document") {
+      const messaggioConferma = action === "conclude"
+        ? "Confermi che il lavoro è terminato e deve passare alla fase di documentazione? La scheda resterà modificabile."
+        : "Confermi la documentazione definitiva? La scheda verrà bloccata e verrà generato il PDF.";
+      const confirmed = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
+      if (!confirmed) return null;
+    }
+
+    if (action === "document") {
       const missing: string[] = [];
       if (!draft.kilometers.trim()) missing.push("chilometri");
       if (!draft.labor.trim()) missing.push("manodopera");
       if (!draft.invoiceNumber.trim()) missing.push("numero di fattura");
       if (missing.length) {
-        alert(`Prima di concludere il lavoro devi inserire: ${missing.join(", ")}.`);
+        alert(`Prima di documentare il lavoro devi inserire: ${missing.join(", ")}.`);
         return null;
       }
-      const confirmed = window.confirm(
-        "Sei sicuro di voler concludere questo lavoro?\n\nUna volta concluso, la scheda verrà considerata definitiva."
-      );
-      if (!confirmed) return null;
     }
 
     setSaving(true);
     try {
-    const next = { ...draft, status: conclude ? "CONCLUSO" : "IN_LAVORAZIONE" } as JobDraft;
+    const next = { ...draft, status: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : draft.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "IN_LAVORAZIONE" } as JobDraft;
+    const fixedTagliandoNames = ["Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo", "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri"];
+    const newCatalogNames = Array.from(new Set(next.products.filter((item) => item.category === "TAGLIANDO" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !fixedTagliandoNames.some((item) => productOrderKey(item) === productOrderKey(name)) && !tagliandoCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    let catalogSaveFailed = false;
+    for (const name of newCatalogNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "TAGLIANDO", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setTagliandoCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
+    const newMaintenanceNames = Array.from(new Set(next.products.filter((item) => item.category === "MANUTENZIONE" && item.name.trim()).map((item) => item.name.trim())))
+      .filter((name) => !manutenzioneCatalog.some((item) => productOrderKey(item) === productOrderKey(name)));
+    for (const name of newMaintenanceNames) {
+      try {
+        const catalogResponse = await fetch("/api/product-catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ category: "MANUTENZIONE", name }) });
+        const catalogResult = await catalogResponse.json().catch(() => null);
+        if (!catalogResponse.ok || !catalogResult?.ok) catalogSaveFailed = true;
+        else setManutenzioneCatalog((previous) => previous.some((item) => productOrderKey(item) === productOrderKey(name)) ? previous : [...previous, name]);
+      } catch { catalogSaveFailed = true; }
+    }
     if (!next.vehicleId) {
       alert("La scheda non è collegata correttamente al veicolo. Torna al profilo e riaprila.");
       return null;
@@ -1292,8 +1353,8 @@ export default function SchedaLavoroPage() {
       manodopera: next.labor.trim() || null,
       note: next.notes.trim() || null,
       fattura: next.invoiceNumber.trim() || null,
-      stato: conclude ? "CONCLUSO" : "APERTO",
-      closed_at: conclude ? new Date().toISOString() : null,
+      stato: action === "document" ? "CONCLUSO" : action === "conclude" ? "DA_DOCUMENTARE" : next.status === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : "APERTO",
+      closed_at: action === "document" ? new Date().toISOString() : null,
       payment_amount: Number.isFinite(parsedPayment as number) ? parsedPayment : null,
       payment_status: next.paymentAmount.trim() ? next.paymentStatus : null,
       dettagli: details,
@@ -1318,13 +1379,19 @@ export default function SchedaLavoroPage() {
     setSaved(true);
     setSaveConfirmed(true);
     window.setTimeout(() => setSaveConfirmed(false), 1200);
+    if (catalogSaveFailed) alert("La scheda è stata salvata, ma non è stato possibile aggiornare il catalogo condiviso dei prodotti. Verifica che la migrazione product_catalog sia stata applicata.");
     try {
       await syncOrderForJob(savedDraft);
     } catch (orderError) {
       console.error("Errore sincronizzazione ordine:", orderError);
       alert(orderError instanceof Error ? orderError.message : "La scheda è stata salvata, ma l'ordine non è stato aggiornato.");
     }
-    if (conclude) await generateAndOpenPdf(savedDraft);
+    if (action === "document") {
+      await generateAndOpenPdf(savedDraft);
+      const refreshed = await fetch("/api/jobs?id=" + encodeURIComponent(savedDraft.jobId || ""), { cache: "no-store" });
+      const refreshedResult = await refreshed.json().catch(() => null);
+      if (refreshed.ok && refreshedResult?.ok && refreshedResult?.job) setDraft(rowToJobDraft(refreshedResult.job));
+    }
     return savedDraft;
     } catch (error) {
       console.error("Errore salvataggio scheda:", error);
@@ -1406,18 +1473,19 @@ export default function SchedaLavoroPage() {
     }
   };
 
-  const openInvoicing = () => {
-
-    saveDraft(false);
-
-
-
-    alert(
-
-      "Qui collegheremo il sito di fatturazione che utilizzi. Per ora la scheda viene salvata prima di uscire."
-
-    );
-
+  const openInvoicing = async () => {
+    // Apri subito una finestra per evitare il blocco popup; salva prima di navigare.
+    const invoiceWindow = window.open("about:blank", "_blank");
+    const savedDraft = await saveDraft("save");
+    if (!invoiceWindow) {
+      alert("Consenti i popup per aprire il sito di fatturazione.");
+      return;
+    }
+    if (!savedDraft) {
+      invoiceWindow.close();
+      return;
+    }
+    invoiceWindow.location.href = "https://metropolis.seac.it/login";
   };
 
 
@@ -1751,6 +1819,7 @@ export default function SchedaLavoroPage() {
             <div
               style={{
                 fontSize: 21,
+                lineHeight: 1.05,
                 fontWeight: 900,
                 color: "#111827",
               }}
@@ -1763,8 +1832,8 @@ export default function SchedaLavoroPage() {
               onClick={() => setDeleteConfirmOpen(true)}
               aria-label="Elimina scheda lavoro"
               style={{
-                width: 40,
-                height: 40,
+                width: 30,
+                height: 30,
                 border: 0,
                 borderRadius: 12,
                 background: "#FEE2E2",
@@ -1788,9 +1857,11 @@ export default function SchedaLavoroPage() {
 
               color: "#475569",
 
-              marginTop: 4,
+              marginTop: -2,
 
-              fontSize: 16,
+              fontSize: 14,
+
+              lineHeight: 1.1,
 
               fontWeight: 700,
 
@@ -1805,95 +1876,40 @@ export default function SchedaLavoroPage() {
 
 
           <div
-
+            className="job-customer-summary"
             style={{
-
-              display: "grid",
-
-              gridTemplateColumns: "1fr 1fr",
-
-              gap: 12,
-
+              display: "flex",
+              flexDirection: "column",
+              gap: 0,
               marginTop: 16,
-
+              padding: "4px 6px",
+              borderRadius: 14,
+              background: "#F8FAFC",
             }}
-
           >
-
             {[
-
-              ["NOME CLIENTE", draft.nomeCliente],
-
-              ["TELEFONO", draft.telefono],
-
-              ["INDIRIZZO", draft.indirizzo],
-
-              ["CODICE FISCALE", draft.codiceFiscale],
-
-            ].map(([label, value]) => (
-
+              ["Nome", draft.nomeCliente, <CustomerPersonIcon key="customer-person-icon" />],
+              ["Telefono", draft.telefono, <CustomerPhoneIcon key="customer-phone-icon" />],
+              ["Indirizzo", draft.indirizzo, <CustomerPinIcon key="customer-pin-icon" />],
+              ["Cod. Fiscale", draft.codiceFiscale, <CustomerDocumentIcon key="customer-document-icon" />],
+            ].map(([label, value, icon], index) => (
               <div
-
-                key={label}
-
+                key={String(label)}
                 style={{
-
-                  background: "#F8FAFC",
-
-                  borderRadius: 14,
-
-                  padding: 11,
-
+                  display: "grid",
+                  gridTemplateColumns: "18px 68px minmax(0, 1fr)",
+                  alignItems: "center",
+                  gap: 4,
+                  minHeight: 42,
+                  padding: "7px 0",
+                  borderBottom: index === 3 ? 0 : "1px solid #E2E8F0",
                 }}
-
               >
-
-                <div
-
-                  style={{
-
-                    fontSize: 11,
-
-                    color: "#64748B",
-
-                    fontWeight: 700,
-
-                  }}
-
-                >
-
-                  {label}
-
-                </div>
-
-
-
-                <div
-
-                  style={{
-
-                    fontSize: 14,
-
-                    color: "#111827",
-
-                    fontWeight: 700,
-
-                    marginTop: 3,
-
-                    wordBreak: "break-word",
-
-                  }}
-
-                >
-
-                  {value || "—"}
-
-                </div>
-
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", color: "#475569" }}>{icon}</span>
+                <span style={{ fontSize: 10, color: "#64748B", fontWeight: 500 }}>{String(label)}</span>
+                <span style={{ fontSize: 10, lineHeight: 1.2, color: "#111827", fontWeight: 600, overflowWrap: "anywhere", wordBreak: "normal", whiteSpace: String(label) === "Indirizzo" ? "nowrap" : "normal", letterSpacing: "-0.2px", fontFamily: "Arial, Helvetica, sans-serif" }}>{String(value || "—")}</span>
               </div>
-
             ))}
-
           </div>
 
         </section>
@@ -1968,7 +1984,7 @@ export default function SchedaLavoroPage() {
 
               display: "grid",
 
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
 
               gap: 9,
 
@@ -2008,9 +2024,23 @@ export default function SchedaLavoroPage() {
 
                     borderRadius: 14,
 
-                    padding: "12px 10px",
+                    padding: "12px 5px",
 
-                    fontSize: 13,
+                    minHeight: 94,
+
+                    display: "flex",
+
+                    flexDirection: "column",
+
+                    alignItems: "center",
+
+                    justifyContent: "center",
+
+                    gap: 7,
+
+                    fontSize: 10,
+
+                    lineHeight: 1.2,
 
                     fontWeight: 800,
 
@@ -2020,9 +2050,9 @@ export default function SchedaLavoroPage() {
 
                 >
 
-                  {active ? "✓ " : ""}
+                  <WorkTypeIcon type={type} />
 
-                  {type}
+                  <span>{type}</span>
 
                 </button>
 
@@ -2060,25 +2090,11 @@ export default function SchedaLavoroPage() {
 
                 <ProductChecklist
 
-                  products={[
-
-                    "Olio motore",
-
-                    "Filtro olio",
-
-                    "Filtro aria",
-
-                    "Filtro abitacolo",
-
-                    "Filtro carburante",
-
-                    "Candele",
-
-                    "Liquido refrigerante",
-
-                    "Lavavetri",
-
-                  ]}
+                  products={Array.from(new Set([
+                    "Olio motore", "Filtro olio", "Filtro aria", "Filtro abitacolo",
+                    "Filtro carburante", "Candele", "Liquido refrigerante", "Lavavetri",
+                    ...tagliandoCatalog,
+                  ]))}
 
                   draft={draft}
 
@@ -2086,9 +2102,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("TAGLIANDO")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="TAGLIANDO"
                 />
 
               </section>
@@ -2139,9 +2156,10 @@ export default function SchedaLavoroPage() {
 
                   updateProduct={updateProduct}
 
-                  addProduct={addProduct}
+                  addProduct={() => addProduct("MANUTENZIONE")}
 
                   markUnsaved={() => setSaved(false)}
+                  category="MANUTENZIONE"
                 />
 
               </section>
@@ -2315,30 +2333,6 @@ export default function SchedaLavoroPage() {
                   />
 
                 </div>
-
-
-
-                <CheckRow
-
-                  label="Deposito pneumatici"
-
-                  checked={draft.pneumatici.storage}
-
-                  onChange={(value) =>
-
-                    updateNested(
-
-                      "pneumatici",
-
-                      "storage",
-
-                      value
-
-                    )
-
-                  }
-
-                />
 
 
 
@@ -2547,6 +2541,7 @@ export default function SchedaLavoroPage() {
                       "Spazzole tergicristallo",
 
                       "Pneumatici",
+                      ...manutenzioneCatalog,
 
                     ]}
 
@@ -2556,9 +2551,11 @@ export default function SchedaLavoroPage() {
 
                     updateProduct={updateProduct}
 
-                    addProduct={addProduct}
+                    addProduct={() => addProduct("MANUTENZIONE")}
 
                     markUnsaved={() => setSaved(false)}
+                    category="MANUTENZIONE"
+                    searchOnly
                 />
 
                 </section>
@@ -2943,27 +2940,7 @@ export default function SchedaLavoroPage() {
 
 
 
-              <div
 
-                style={{
-
-                  fontSize: 12,
-
-                  color: "#94A3B8",
-
-                  marginTop: 7,
-
-                }}
-
-              >
-
-                Il pulsante apre il sito di fatturazione
-
-                in una nuova scheda. La scheda viene
-
-                salvata prima dell'apertura.
-
-              </div>
 
             </section>
 
@@ -3127,6 +3104,30 @@ export default function SchedaLavoroPage() {
 
           </div>
 
+        ) : draft.status === "DA_DOCUMENTARE" ? (
+
+          <div style={{ padding: "0 18px" }}>
+            <button
+              type="button"
+              onClick={() => { void saveDraft("document"); }}
+              disabled={saving}
+              style={{
+                width: "100%",
+                height: 46,
+                border: 0,
+                borderRadius: 14,
+                background: "#15803D",
+                color: "#FFFFFF",
+                fontSize: 14,
+                fontWeight: 900,
+                boxShadow: "0 4px 14px rgba(21,128,61,.18)",
+                opacity: saving ? 0.65 : 1,
+              }}
+            >
+              {saving ? "DOCUMENTAZIONE..." : "DOCUMENTA"}
+            </button>
+          </div>
+
         ) : (
 
           <div
@@ -3148,79 +3149,57 @@ export default function SchedaLavoroPage() {
           >
 
             <button
-
               type="button"
-
-              onClick={() => saveDraft(true)}
-
+              onClick={() => saveDraft("conclude")}
               style={{
-
                 height: 42,
-
                 padding: "0 16px",
-
                 border: 0,
-
                 borderRadius: 13,
-
                 background: "#15803D",
-
                 color: "#FFFFFF",
-
                 fontSize: 13,
-
                 fontWeight: 800,
-
-                boxShadow:
-
-                  "0 4px 12px rgba(21,128,61,.18)",
-
+                boxShadow: "0 4px 12px rgba(21,128,61,.18)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
               }}
-
             >
-
-              CONCLUDI
-
+              <svg width="18" height="18" viewBox="0 0 1920 1920" fill="currentColor" aria-hidden="true">
+                <path d="M1524.824 1242.353c93.402 0 169.411 76.01 169.411 169.412v338.823c0 93.403-76.01 169.412-169.411 169.412H395.412C302.009 1920 226 1843.99 226 1750.588v-338.823c0-93.403 76.01-169.412 169.412-169.412ZM1016.588 0v338.824h-112.94V0h112.94ZM564.824 1468.235c62.343 0 112.94 50.71 112.94 112.941s-50.597 112.942-112.94 112.942c-62.344 0-112.942-50.71-112.942-112.942 0-62.23 50.598-112.94 112.942-112.94ZM903.647 338.824v428.385L657.322 520.885l-79.85 79.85 382.646 382.644 382.644-382.645-79.85-79.85-246.324 246.325V338.824h508.236c93.74 0 169.411 75.67 169.411 169.411v677.647c-46.306-35.011-106.164-56.47-169.411-56.47H395.412c-63.247 0-123.106 21.459-169.412 56.47V508.235c0-93.74 75.67-169.411 169.412-169.411h508.235Z" fillRule="evenodd"/>
+              </svg>
+              INVIA
             </button>
 
 
 
             <button
-
               type="button"
-
-              onClick={() => { void saveDraft(false); }}
+              onClick={() => { void saveDraft("save"); }}
               disabled={saving}
               aria-label="Salva scheda di lavoro"
-
               style={{
-
                 height: 42,
-
                 padding: "0 18px",
-
                 border: 0,
-
                 borderRadius: 13,
-
                 background: "#FFFFFF",
-
                 color: "#111827",
-
                 fontSize: 13,
-
                 fontWeight: 800,
-
-                boxShadow:
-
-                  "0 4px 14px rgba(15,23,42,.08)",
-
+                boxShadow: "0 4px 14px rgba(15,23,42,.08)",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
               }}
-
             >
-
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" clipRule="evenodd" d="M18.1716 1C18.702 1 19.2107 1.21071 19.5858 1.58579L22.4142 4.41421C22.7893 4.78929 23 5.29799 23 5.82843V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H18.1716ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21L5 21L5 15C5 13.3431 6.34315 12 8 12L16 12C17.6569 12 19 13.3431 19 15V21H20C20.5523 21 21 20.5523 21 20V6.82843C21 6.29799 20.7893 5.78929 20.4142 5.41421L18.5858 3.58579C18.2107 3.21071 17.702 3 17.1716 3H17V5C17 6.65685 15.6569 8 14 8H10C8.34315 8 7 6.65685 7 5V3H4ZM17 21V15C17 14.4477 16.5523 14 16 14L8 14C7.44772 14 7 14.4477 7 15L7 21L17 21ZM9 3H15V5C15 5.55228 14.5523 6 14 6H10C9.44772 6 9 5.55228 9 5V3Z"/>
+              </svg>
               {saving ? "SALVATAGGIO..." : saveConfirmed ? "✓ SALVATO" : "SALVA"}
-
             </button>
 
           </div>
@@ -3352,39 +3331,8 @@ const addButtonStyle: CSSProperties = {
 
 function TrashIcon() {
   return (
-    <svg
-      width="21"
-      height="21"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M5 7h14"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-      />
-      <path
-        d="M9 7V4.5h6V7"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 7.5 8.4 19h7.2l.9-11.5"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10.5 10.5v5.5M13.5 10.5v5.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
+    <svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 128 128" fill="currentColor" aria-hidden="true">
+      <path d="M 49 1 C 47.34 1 46 2.34 46 4 C 46 5.66 47.34 7 49 7 L 79 7 C 80.66 7 82 5.66 82 4 C 82 2.34 80.66 1 79 1 L 49 1 z M 24 15 C 16.83 15 11 20.83 11 28 C 11 35.17 16.83 41 24 41 L 101 41 L 101 104 C 101 113.37 93.37 121 84 121 L 44 121 C 34.63 121 27 113.37 27 104 L 27 52 C 27 50.34 25.66 49 24 49 C 22.34 49 21 50.34 21 52 L 21 104 C 21 116.68 31.32 127 44 127 L 84 127 C 96.68 127 107 116.68 107 104 L 107 40.640625 C 112.72 39.280625 117 34.14 117 28 C 117 20.83 111.17 15 104 15 L 24 15 z M 24 21 L 104 21 C 107.86 21 111 24.14 111 28 C 111 31.86 107.86 35 104 35 L 24 35 C 20.14 35 17 31.86 17 28 C 17 24.14 20.14 21 24 21 z M 50 55 C 48.34 55 47 56.34 47 58 L 47 104 C 47 105.66 48.34 107 50 107 C 51.66 107 53 105.66 53 104 L 53 58 C 53 56.34 51.66 55 50 55 z M 78 55 C 76.34 55 75 56.34 75 58 L 75 104 C 75 105.66 76.34 107 78 107 C 79.66 107 81 105.66 81 104 L 81 58 C 81 56.34 79.66 55 78 55 z" />
     </svg>
   );
 }
@@ -3441,42 +3389,95 @@ function GlobeIcon() {
 
 
 
-function SectionTitle({
+function WorkTypeIcon({ type }: { type: string }) {
+  const common = { width: 28, height: 28, fill: "currentColor", "aria-hidden": true as const };
+  switch (type) {
+    case "TAGLIANDO":
+      return <svg {...common} viewBox="0 0 512 512"><g transform="translate(1 1)"><path d="M447,312.514V41.667c0-14.507-11.093-25.6-25.6-25.6H310.467C310.467,6.68,302.787-1,293.4-1H173.933c-9.387,0-17.067,7.68-17.067,17.067H45.933c-14.507,0-25.6,11.093-25.6,25.6V485.4c0,14.507,11.093,25.6,25.6,25.6h332.8c61.44,0,110.933-49.493,110.933-110.933C489.667,364.413,472.997,332.785,447,312.514z M421.4,33.133c5.12,0,8.533,3.413,8.533,8.533v259.897c-5.438-2.822-11.143-5.206-17.067-7.109V67.267c0-9.387-7.68-17.067-17.067-17.067h-85.333V33.133H421.4z M267.859,403.539c.005.169.013.338.019.506.717,20.51,6.948,39.573,17.271,55.755H71.533V67.267h85.333c0,9.387,7.68,17.067,17.067,17.067H293.4c9.387,0,17.067-7.68,17.067-17.067H395.8v223.163c-1.191-.183-2.39-.341-3.594-.486-.084-.01-.169-.019-.253-.029-.941-.111-1.885-.21-2.833-.297-.239-.022-.477-.043-.716-.063-.803-.069-1.608-.129-2.416-.18-.294-.019-.589-.039-.883-.056-.782-.044-1.566-.077-2.352-.105-.287-.01-.573-.024-.86-.032-1.05-.029-2.102-.047-3.159-.047-61.44,0-110.933,49.493-110.933,110.933C267.8,401.229,267.824,402.385,267.859,403.539z M173.933,16.067H293.4V24.6v34.133v8.533H173.933v-8.533V24.6V16.067z M45.933,493.933c-5.12,0-8.533-3.413-8.533-8.533V41.667c0-5.12,3.413-8.533,8.533-8.533h110.933V50.2H71.533c-9.387,0-17.067,7.68-17.067,17.067V459.8c0,9.387,7.68,17.067,17.067,17.067H298.56c6.227,6.5,13.242,12.237,20.893,17.067H45.933z M378.733,493.933c-27.118,0-51.453-11.353-68.548-29.585-.343-.704-.808-1.371-1.425-1.988-14.389-15.988-22.786-36.469-23.79-57.935-.002-.053-.004-.105-.006-.158-.063-1.397-.097-2.797-.097-4.201 0-52.053,41.813-93.867,93.867-93.867 1.099,0,2.194.025,3.287.063.1.003.199.008.299.011.247.009.494.023.741.034.727.033,1.452.076,2.176.125.659.047,1.319.095,1.978.159.092.008.184.018.275.027 4.761.479,9.523,1.407,14.284,2.995.995.332,1.991.399,2.986.265 8.963,2.593,17.641,6.553,25.939,11.896 25.3,16.77,41.901,45.496,41.901,78.292 0,52.053-41.813,93.867-93.867,93.867z"/><path d="M435.053,351.427c-4.267-3.413-9.387-2.56-11.947,1.707L375.32,421.4l-33.28-27.307c-3.413-3.413-9.387-2.56-11.947.853-3.413,3.413-2.56,9.387.853,11.947l40.96,33.28c.853.853,3.413,1.707,5.12,1.707 0,0,.853,0,.853.853 2.56,0,4.267-1.707,5.973-3.413l52.907-75.947C440.173,359.107,439.32,353.987,435.053,351.427z"/><path d="M301.933,280.6c15.829,0,29.232-10.921,33.046-25.6h13.034c12.8,0,22.187-9.387,23.04-22.187v-33.28c0-12.8-10.24-22.187-22.187-22.187h-18.176l-33.024-46.08c-5.12-7.68-13.653-11.947-23.04-11.947h-36.925c-1.169-.55-2.525-.853-4.035-.853s-2.865.304-4.035.853h-36.925c-9.387,0-17.92,4.267-23.04,11.947l-33.024,46.08H119.32c-12.8,0-22.187,10.24-22.187,22.187v33.28c0,12.8,9.387,22.187,22.187,22.187h13.034c3.814,14.679,17.216,25.6,33.046,25.6 15.829,0,29.232-10.921,33.046-25.6h70.442C272.702,269.679,286.104,280.6,301.933,280.6z M301.933,263.533c-9.387,0-17.067-7.68-17.067-17.067s7.68-17.067,17.067-17.067S319,237.08,319,246.467 311.32,263.533,301.933,263.533z M283.16,139.8l26.7,37.547H242.2v-41.813h31.573C278.04,135.533,281.453,137.24,283.16,139.8z M182.467,139.8c2.56-2.56,5.973-4.267,9.387-4.267h33.28v41.813h-68.532L182.467,139.8z M165.4,263.533c-9.387,0-17.067-7.68-17.067-17.067s7.68-17.067,17.067-17.067c9.387,0,17.067,7.68,17.067,17.067S174.787,263.533,165.4,263.533z M166.253,212.333c-.156,0-.309.008-.464.01-.13-.001-.258-.01-.389-.01-15.83,0-29.232,10.921-33.046,25.6H119.32c-2.56,0-5.12-2.56-5.12-5.12v-33.28c0-2.56,2.56-5.12,5.12-5.12h16.642c1.132.538,2.405.853,3.838.853h187.733c1.433,0,2.706-.315,3.838-.853h17.495c2.56,0,5.12,2.56,5.12,5.12v33.28c0,2.56-2.56,5.12-5.12,5.12h-13.653c-4.267-14.507-15.36-25.6-31.573-25.6-.311,0-.62.012-.929.02-.259-.006-.517-.02-.778-.02-15.83,0-29.232,10.921-33.046,25.6h-69.354C195.267,223.427,182.467,212.333,166.253,212.333z"/><path d="M233.667,323.267h-128c-5.12,0-8.533,3.413-8.533,8.533 0,5.12,3.413,8.533,8.533,8.533h128c5.12,0,8.533-3.413,8.533-8.533C242.2,326.68,238.787,323.267,233.667,323.267z"/><path d="M233.667,365.933h-128c-5.12,0-8.533,3.413-8.533,8.533s3.413,8.533,8.533,8.533h128c5.12,0,8.533-3.413,8.533-8.533S238.787,365.933,233.667,365.933z"/><path d="M233.667,408.6h-128c-5.12,0-8.533,3.413-8.533,8.533s3.413,8.533,8.533,8.533h128c5.12,0,8.533-3.413,8.533-8.533S238.787,408.6,233.667,408.6z"/></g></svg>;
+    case "FRENI":
+      return <svg {...common} viewBox="0 0 512.009 512.009"><g><path d="M277.337,256.007c11.776,0,21.333-9.557,21.333-21.333s-9.557-21.333-21.333-21.333-21.333,9.557-21.333,21.333 9.557,21.333,21.333,21.333z"/><path d="M277.337,298.674c-11.776,0-21.333,9.557-21.333,21.333s9.557,21.333,21.333,21.333 21.333-9.557 21.333-21.333-9.557-21.333-21.333-21.333z"/><path d="M277.337,149.34c-70.683,0-128,57.317-128,128s57.317,128 128,128 128-57.317 128-128-57.317-128-128-128zm0,213.334c-47.119,0-85.333-38.214-85.333-85.333s38.214-85.333 85.333-85.333 85.333,38.214 85.333,85.333-38.214,85.333-85.333,85.333z"/><path d="M307.08,44.344V33.679c0-19.406-16.295-34.56-35.517-33.64C124.746,7.211 7.202,124.762 .054,271.554c-.98,19.189 14.2,35.512 33.617,35.512h10.664c14.711,115.872 113.645,204.943 232.869,204.943 129.674,0 234.795-105.128 234.795-234.816 0-119.226-89.049-218.147-204.919-232.849zM264.405,43.281v42.914c-5.207.546-10.35,1.299-15.427,2.23-60.921,11.163-111.992,49.574-140.217,102.267-11.965,22.334-19.826,47.232-22.597,73.707H43.296C53.479,146.906 146.943,53.453 264.405,43.281zM277.205,469.342c-95.683,0-175.418-70.121-189.795-162.261h7.075c12.207,0 23.097-6.537 28.984-16.465 2.605-4.383 4.237-9.426 4.564-14.865 1.85-30.291 12.134-58.188 28.543-81.408 22.705-32.124 57.14-55.289 97.251-63.412 7.144-1.445 14.467-2.413 21.935-2.87 4.989-.3 9.65-1.697 13.773-3.941 .072-.039.141-.082.212-.122 .383-.212.764-.427 1.137-.654 .252-.153.497-.317.745-.476 .188-.121.38-.237.565-.361 .316-.212.623-.435.931-.658 .111-.081.227-.156.337-.238 .316-.235.623-.48.93-.725 .097-.077.197-.15.293-.229 .258-.211.506-.431.757-.649 .139-.121.283-.237.42-.36 .147-.132.286-.27.43-.405 6.661-6.195 10.787-15.058 10.787-24.742v-7.085c92.143,14.361 162.253,94.086 162.253,189.778 0 106.13-86.019 192.155-192.128 192.155z"/><path d="M234.67,256.007c-11.776,0-21.333,9.557-21.333,21.333s9.557,21.333 21.333,21.333 21.333-9.557 21.333-21.333-9.557-21.333-21.333-21.333z"/><path d="M320.004,256.007c-11.776,0-21.333,9.557-21.333,21.333s9.557,21.333 21.333,21.333 21.333-9.557 21.333-21.333-9.557-21.333-21.333-21.333z"/></g></svg>;
+    case "PNEUMATICI":
+      return <svg {...common} viewBox="0 0 24 24"><path d="M21 12C21 17.5228 18.9853 22 16.5 22M16.5 2C18.3453 2 19.9312 4.46819 20.6256 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M3 12C3 6.47715 5.01472 2 7.5 2C9.98528 2 12 6.47715 12 12C12 17.5228 9.98528 22 7.5 22C5.65471 22 4.06884 19.5318 3.37444 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M7.5 22C9.98528 22 12 17.5228 12 12C12 6.47715 9.98528 2 7.5 2" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M9 12C9 15.3137 8.32843 18 7.5 18C6.67157 18 6 15.3137 6 12C6 8.68629 6.67157 6 7.5 6C8.32843 6 9 8.68629 9 12Z" fill="none" stroke="currentColor" strokeWidth="1.5"/><path d="M7.5 2L16.5 2M7.5 22L16.5 22M9 12H8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>;
+    case "MANUTENZIONE":
+      return <svg {...common} viewBox="0 0 16 16"><path d="M12.28592,11.7143,6.49472,5.92372a2.50375,2.50375,0,0,0,.16958-.7544,2.14905,2.14905,0,0,0-.09474-.81438,2.11972,2.11972,0,0,0-.54871-.90431,2.32771,2.32771,0,0,0-1.76079-.68447H4.21515a2.104,2.104,0,0,0-.71829.15488L4.59925,4.02518l.31921.31976.24445.24481a1.864,1.864,0,0,1-.21948.85435,1.04314,1.04314,0,0,1-.11475.14488,1.64822,1.64822,0,0,1-1.00259.33474L2.609,4.70468,2.16005,4.255a2.07386,2.07386,0,0,0-.13469.54457l-.015.10493a2.33671,2.33671,0,0,0,.38407,1.51882,2.50928,2.50928,0,0,0,.29431.35975A2.20549,2.20549,0,0,0,4.265,7.43257a2.45325,2.45325,0,0,0,.89789-.17485L9.95648,12.054l1.20212,1.19909H11.827l.66343-.6645v-.6695Zm-6.53561-2.806,1.3662,1.3662L4.12892,13.2621H3.20558l-.45037-.45038V11.8959ZM14,5.90569,12.19094,7.71475,10.89232,6.49869,9.5111,7.87992,8.1449,6.51372,9.51861,5.13249,7.89717,3.5111l.68312-.7732,2.252.45042Z"/></svg>;
+    case "CENTRALINA":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5"/></svg>;
+    case "MANODOPERA":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V12L14.5 14.5"/><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z"/></svg>;
+    case "NOTE":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 8.25V18C20 21 18.21 22 16 22H8C5.79 22 4 21 4 18V8.25C4 5 5.79 4.25 8 4.25C8 4.87 8.24997 5.43 8.65997 5.84C9.06997 6.25 9.63 6.5 10.25 6.5H13.75C14.99 6.5 16 5.49 16 4.25C18.21 4.25 20 5 20 8.25Z"/><path d="M16 4.25C16 5.49 14.99 6.5 13.75 6.5H10.25C9.63 6.5 9.06997 6.25 8.65997 5.84C8.24997 5.43 8 4.87 8 4.25C8 3.01 9.01 2 10.25 2H13.75C14.37 2 14.93 2.25 15.34 2.66C15.75 3.07 16 3.63 16 4.25Z"/><path d="M8 13H12M8 17H16"/></svg>;
+    case "FATTURA":
+    case "FATTURAZIONE":
+      return <svg {...common} viewBox="0 0 24 24"><path d="M15 8a1 1 0 0 1-1 1H6a1 1 0 0 1 0-2h8a1 1 0 0 1 1 1Zm-1 3H6a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2Zm-4 4H6a1 1 0 0 0 0 2h4a1 1 0 0 0 0-2Zm13-3v8a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V4a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v7h3a1 1 0 0 1 1 1ZM17 4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h13Zm4 9h-2v8h1a1 1 0 0 0 1-1Z"/></svg>;
+    case "MEDIA":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14.2639 15.9376L12.5958 14.2835C11.7909 13.4852 11.3884 13.0861 10.9266 12.9402C10.5204 12.8119 10.0838 12.8166 9.68048 12.9537C9.22188 13.1096 8.82814 13.5173 8.04068 14.3327L4.04409 18.2802M14.2639 15.9376L14.6053 15.5991C15.4112 14.7999 15.8141 14.4003 16.2765 14.2544C16.6831 14.1262 17.12 14.1312 17.5236 14.2688C17.9824 14.4252 18.3761 14.834 19.1634 15.6515L20 16.4936M14.2639 15.9376L18.275 19.9566M18.275 19.9566C17.9176 20.0001 17.4543 20.0001 16.8 20.0001H7.2C6.07989 20.0001 5.51984 20.0001 5.09202 19.7821C4.71569 19.5904 4.40973 19.2844 4.21799 18.9081C4.12796 18.7314 4.07512 18.5322 4.04409 18.2802M18.275 19.9566C18.5293 19.9257 18.7301 19.8728 18.908 19.7821C19.2843 19.5904 19.5903 19.2844 19.782 18.9081C20 18.4803 20 17.9202 20 16.8001V16.4936M12.5 4L7.2 4.00011C6.07989 4.00011 5.51984 4.00011 5.09202 4.21809C4.71569 4.40984 4.40973 4.7158 4.21799 5.09213C4 5.51995 4 6.08 4 7.20011V16.8001C4 17.4576 4 17.9222 4.04409 18.2802M20 11.5V16.4936M14 10.0002L16.0249 9.59516C16.2015 9.55984 16.2898 9.54219 16.3721 9.5099C16.4452 9.48124 16.5146 9.44407 16.579 9.39917C16.6515 9.34859 16.7152 9.28492 16.8425 9.1576L21 5.00015C21.5522 4.44787 21.5522 3.55244 21 3.00015C20.4477 2.44787 19.5522 2.44787 19 3.00015L14.8425 7.1576C14.7152 7.28492 14.6515 7.34859 14.6009 7.42112C14.556 7.4855 14.5189 7.55494 14.4902 7.62801C14.4579 7.71033 14.4403 7.79862 14.4049 7.97518L14 10.0002Z"/></svg>;
+    case "PAGAMENTO":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M2 14C2 10.2288 2 8.34315 3.17157 7.17157C4.34315 6 6.22876 6 10 6H14C17.7712 6 19.6569 6 20.8284 7.17157C22 8.34315 22 10.2288 22 14C22 17.7712 22 19.6569 20.8284 20.8284C19.6569 22 17.7712 22 14 22H10C6.22876 22 4.34315 22 3.17157 20.8284C2 19.6569 2 17.7712 2 14Z"/><path d="M16 6C16 4.11438 16 3.17157 15.4142 2.58579C14.8284 2 13.8856 2 12 2C10.1144 2 9.17157 2 8.58579 2.58579C8 3.17157 8 4.11438 8 6"/><path d="M12 17.3333C13.1046 17.3333 14 16.5871 14 15.6667C14 14.7462 13.1046 14 12 14C10.8954 14 10 13.2538 10 12.3333C10 11.4129 10.8954 10.6667 12 10.6667M12 17.3333C10.8954 17.3333 10 16.5871 10 15.6667M12 17.3333V18M12 10V10.6667M12 10.6667C13.1046 10.6667 14 11.4129 14 12.3333"/></svg>;
+    case "PROBLEMI RISCONTRATI":
+      return <svg {...common} viewBox="0 0 24 24" aria-hidden="true"><path d="M1.225 21.225A1.678 1.678 0 0 0 2.707 22H22.28a1.68 1.68 0 0 0 1.484-.775 1.608 1.608 0 0 0 .003-1.656L13.995 1.827a1.745 1.745 0 0 0-2.969 0l-9.8 17.742a1.603 1.603 0 0 0 0 1.656zm.859-1.143l9.82-17.773A.71.71 0 0 1 12.508 2a.73.73 0 0 1 .629.342l9.751 17.708a.626.626 0 0 1 .017.662.725.725 0 0 1-.626.288H2.708a.723.723 0 0 1-.623-.286.605.605 0 0 1-.001-.632zM13 15h-1V8h1zm-1.5 2.5a1 1 0 1 1 1 1 1.002 1.002 0 0 1-1-1z"/></svg>;
+    case "PRODOTTI/RICAMBI":
+      return <svg {...common} viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M44 14L24 4L4 14V34L24 44L44 34V14Z"/><path d="M4 14L24 24M24 44V24M44 14L24 24M34 9L14 19"/></svg>;
+    case "LAVORI EFFETTUATI":
+      return <svg {...common} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M14 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10"/><path d="M14 2v5h5"/><path d="M14 2l5 5"/><path d="m6.5 11 1.5 1.5 3-3"/><path d="m6.5 16 1.5 1.5 3-3"/><path d="m14 14 5-5 2 2-5 5-3 1z"/></svg>;
+    default:
+      return <svg {...common} viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>;
+  }
+}
 
-  title,
-
-}: {
-
-  title: string;
-
-}) {
-
+function SectionTitle({ title }: { title: string }) {
+  const iconColor = "#475569";
+  const icon = (() => {
+    switch (title.toUpperCase()) {
+      case "CHILOMETRI":
+        return <svg width="24" height="24" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 4a.5.5 0 0 1 .5.5V6a.5.5 0 0 1-1 0V4.5A.5.5 0 0 1 8 4zM3.732 5.732a.5.5 0 0 1 .707 0l.915.914a.5.5 0 1 1-.708.708l-.914-.915a.5.5 0 0 1 0-.707zM2 10a.5.5 0 0 1 .5-.5h1.586a.5.5 0 0 1 0 1H2.5A.5.5 0 0 1 2 10zm9.5 0a.5.5 0 0 1 .5-.5h1.5a.5.5 0 0 1 0 1H12a.5.5 0 0 1-.5-.5zm.754-4.246a.389.389 0 0 0-.527-.02L7.547 9.31a.91.91 0 1 0 1.302 1.258l3.434-4.297a.389.389 0 0 0-.029-.518z"/><path fillRule="evenodd" d="M0 10a8 8 0 1 1 15.547 2.661c-.442 1.253-1.845 1.602-2.932 1.25C11.309 13.488 9.475 13 8 13c-1.474 0-3.31.488-4.615.911-1.087.352-2.49.003-2.932-1.25A7.988 7.988 0 0 1 0 10zm8-7a7 7 0 0 0-6.603 9.329c.203.575.923.876 1.68.63C4.397 12.533 6.358 12 8 12s3.604.532 4.923.96c.757.245 1.477-.056 1.68-.631A7 7 0 0 0 8 3z"/></svg>;
+      case "PRODOTTI / RICAMBI":
+      case "PRODOTTI/RICAMBI":
+        return <svg width="24" height="24" viewBox="0 0 48 48" fill="none" stroke={iconColor} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" aria-hidden="true"><path d="M44 14L24 4L4 14V34L24 44L44 34V14Z"/><path d="M4 14L24 24M24 44V24M44 14L24 24M34 9L14 19"/></svg>;
+      case "TIPO DI LAVORO":
+        return <svg width="24" height="24" viewBox="0 0 15 15" fill="currentColor" aria-hidden="true"><path d="M12.6,8.7,11.5,6.5a1.05,1.05,0,0,0-.9-.5H4.4a1.05,1.05,0,0,0-.9.5L2.4,8.7,1.16,9.852a.5.5,0,0,0-.16.367V14.5a.5.5,0,0,0,.5.5h2c.2,0,.5-.2.5-.4V14h7v.5c0,.2.2.5.4.5h2.1a.5.5,0,0,0,.5-.5V10.219a.5.5,0,0,0-.16-.367ZM4.5,7h6l1,2h-8ZM5,11.6c0,.2-.3.4-.5.4H2.4c-.2,0-.4-.3-.4-.5V10.4c.1-.3.3-.5.6-.4l2,.4c.2,0,.4.3.4.5Zm8-.1c0,.2-.2.5-.4.5H10.5c-.2,0-.5-.2-.5-.4v-.7c0-.2.2-.5.4-.5l2-.4c.3-.1.5.1.6.4ZM14,2V3a1.009,1.009,0,0,1-1.017,1H5.348A2.549,2.549,0,0,1,1,3.5H3.5v-2H1A2.549,2.549,0,0,1,5.348,1h7.635A1.009,1.009,0,0,1,14,2Z"/></svg>;
+      case "TAGLIANDO":
+        return <WorkTypeIcon type="TAGLIANDO" />;
+      case "FRENI":
+        return <WorkTypeIcon type="FRENI" />;
+      case "PNEUMATICI":
+        return <WorkTypeIcon type="PNEUMATICI" />;
+      case "MANUTENZIONE":
+        return <WorkTypeIcon type="MANUTENZIONE" />;
+      case "CENTRALINA":
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.8"/><path d="M9 2.5v3M12 2.5v3M15 2.5v3M9 18v3.5M12 18v3.5M15 18v3.5M2.5 9h3M2.5 12h3M2.5 15h3M18 9h3.5M18 12h3.5M18 15h3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+      case "MANODOPERA":
+      case "NOTE":
+      case "PROBLEMI RISCONTRATI":
+      case "PRODOTTI/RICAMBI":
+      case "LAVORI EFFETTUATI":
+      case "FATTURA":
+      case "FATTURAZIONE":
+      case "MEDIA":
+      case "PAGAMENTO":
+        return <WorkTypeIcon type={title.toUpperCase()} />;
+      default:
+        return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>;
+    }
+  })();
   return (
-
-    <div
-
-      style={{
-
-        fontSize: 15,
-
-        fontWeight: 800,
-
-        color: "#111827",
-
-        textTransform: "uppercase",
-
-        marginBottom: 8,
-
-      }}
-
-    >
-
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 15, fontWeight: 800, color: "#111827", textTransform: "uppercase", marginBottom: 10 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", color: iconColor, flexShrink: 0 }}>{icon}</span>
       {title}
-
     </div>
-
   );
+}
 
+function CustomerPersonIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5" stroke="currentColor" strokeWidth="2"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
+}
+function CustomerPhoneIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6.5 3.5h3l1.5 4-2 1.5a15 15 0 0 0 6 6l1.5-2 4 1.5v3a2 2 0 0 1-2 2A15.5 15.5 0 0 1 4.5 5.5a2 2 0 0 1 2-2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+}
+function CustomerPinIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" fill="currentColor"/><circle cx="12" cy="10" r="2.5" fill="#FFFFFF"/></svg>;
+}
+function CustomerDocumentIcon() {
+  return <svg width="21" height="21" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 2.5h8l4 4V21H6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/><path d="M14 2.5v5h4M9 12h6M9 16h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
 }
 
 
@@ -3559,10 +3560,14 @@ function ProductChecklist({
   addProduct,
 
   markUnsaved,
+  category,
+  searchOnly = false,
 
 }: {
 
   products: string[];
+  category: "TAGLIANDO" | "MANUTENZIONE";
+  searchOnly?: boolean;
 
   draft: JobDraft;
 
@@ -3588,6 +3593,39 @@ function ProductChecklist({
 
 }) {
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [recentNames, setRecentNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("goldencar_recent_products_" + category);
+      const parsed = saved ? JSON.parse(saved) : [];
+      if (Array.isArray(parsed)) setRecentNames(parsed.filter((name): name is string => typeof name === "string"));
+    } catch {
+      setRecentNames([]);
+    }
+  }, [category]);
+
+  const uniqueProducts = Array.from(new Set(products.map((name) => name.trim()).filter(Boolean)));
+  const selectedNames = draft.products
+    .filter((product) => (product.category || "MANUTENZIONE") === category)
+    .map((product) => product.name);
+  const visibleProducts = searchOnly
+    ? searchTerm.trim()
+      // In PRODOTTI/RICAMBI la ricerca mostra temporaneamente i risultati da poter selezionare.
+      ? uniqueProducts.filter((name) => name.toLocaleLowerCase("it").includes(searchTerm.trim().toLocaleLowerCase("it")))
+      // Quando il campo è vuoto, mostra esclusivamente i prodotti selezionati.
+      : uniqueProducts.filter((name) => selectedNames.includes(name))
+    : uniqueProducts;
+
+  const rememberProduct = (name: string) => {
+    const next = [name, ...recentNames.filter((item) => item !== name)].slice(0, 10);
+    setRecentNames(next);
+    try {
+      localStorage.setItem("goldencar_recent_products_" + category, JSON.stringify(next));
+    } catch {}
+  };
+
   const toggleOrderRequested = (index: number) => {
     setDraft((previous) => {
       if (!previous) return previous;
@@ -3605,35 +3643,26 @@ function ProductChecklist({
 
     <>
 
-      <div
-
-        style={{
-
-          fontSize: 12,
-
-          color: "#94A3B8",
-
-          marginBottom: 8,
-
-        }}
-
-      >
-
-        Seleziona ciò che hai utilizzato. Per ogni
-
-        prodotto puoi indicare quantità, marca, codice
-
-        o altri dettagli.
-
-      </div>
 
 
 
-      {products.map((name) => {
+
+      <input
+        type="search"
+        value={searchTerm}
+        onChange={(event) => setSearchTerm(event.target.value)}
+        placeholder="Cerca prodotto..."
+        aria-label="Cerca prodotto nel catalogo"
+        style={{ display: "block", padding: "12px 14px", border: "1px solid #CBD5E1", borderRadius: 12, background: "#FFFFFF", color: "#111827", fontSize: 14, marginBottom: 10, width: "100%", boxSizing: "border-box", outlineColor: "#D4AF37" }}
+      />
+
+      {visibleProducts.length === 0 ? (
+        <div style={{ padding: "10px 0", color: "#64748B", fontSize: 13 }}>Nessun prodotto trovato.</div>
+      ) : visibleProducts.map((name) => {
 
         const index = draft.products.findIndex(
 
-          (product) => product.name === name
+          (product) => product.name === name && (product.category || "MANUTENZIONE") === category
 
         );
 
@@ -3660,8 +3689,8 @@ function ProductChecklist({
               gridTemplateColumns:
 
                 selected
-                  ? "minmax(0,1fr) 62px minmax(0,1fr) 34px"
-                  : "minmax(0,1fr) 62px minmax(0,1fr)",
+                  ? "minmax(0,1fr) 48px minmax(0,0.8fr) 34px"
+                  : "minmax(0,1fr) 48px minmax(0,0.8fr)",
 
               gap: 7,
 
@@ -3704,6 +3733,8 @@ function ProductChecklist({
                 onChange={(e) => {
 
                   if (e.target.checked) {
+                    rememberProduct(name);
+                    if (searchOnly) setSearchTerm("");
 
                     setDraft((previous) =>
 
@@ -3720,11 +3751,9 @@ function ProductChecklist({
                               {
 
                                 name,
-
                                 details: "",
-
                                 quantity: "1",
-
+                                category,
                               },
 
                             ],
@@ -3749,9 +3778,7 @@ function ProductChecklist({
 
                               previous.products.filter(
 
-                                (item) =>
-
-                                  item.name !== name
+                                (item) => !(item.name === name && (item.category || "MANUTENZIONE") === category)
 
                               ),
 
@@ -3868,7 +3895,7 @@ function ProductChecklist({
                     )
                   }
 
-                  placeholder="Marca, codice..."
+                  placeholder="Note"
 
                   style={{
 
@@ -3958,7 +3985,7 @@ function ProductChecklist({
 
         .filter(
 
-          (product) => !products.includes(product.name)
+          (product) => !products.includes(product.name) && (product.category ?? "RICAMBI") === category && product.name.trim()
 
         )
 
@@ -4207,24 +4234,15 @@ function FieldHeader({
 
     >
 
-      <div
-
-        style={{
-
-          fontSize: 14,
-
-          fontWeight: 800,
-
-          color: "#111827",
-
-          textTransform: "uppercase",
-
-        }}
-
-      >
-
-        {title}
-
+      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+        {(() => {
+          const iconTitle = title.toUpperCase().replaceAll(" / ", "/").replaceAll(" /", "/").replaceAll("/ ", "/");
+          const iconTitles = ["MANODOPERA", "NOTE", "FATTURAZIONE", "FATTURA", "MEDIA", "PAGAMENTO", "PROBLEMI RISCONTRATI", "PRODOTTI/RICAMBI", "LAVORI EFFETTUATI"];
+          return iconTitles.includes(iconTitle) ? <WorkTypeIcon type={iconTitle} /> : null;
+        })()}
+        <div style={{ fontSize: 14, fontWeight: 800, color: "#111827", textTransform: "uppercase" }}>
+          {title}
+        </div>
       </div>
 
 

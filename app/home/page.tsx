@@ -2,6 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BottomBar from "@/components/BottomBar";
+import { fetchJsonCached, invalidateApiCache } from "@/lib/client-api-cache";
+
+
 type Lavoro = {
   jobNumber: number | string;
   createdAt: string;
@@ -14,7 +17,7 @@ type Lavoro = {
   paymentStatus?: "DA_PAGARE" | "PARZIALE" | "PAGATO";
   types?: string[];
   works?: string[] | string;
-  status?: "IN_LAVORAZIONE" | "CONCLUSO";
+  status?: "IN_LAVORAZIONE" | "DA_DOCUMENTARE" | "CONCLUSO";
   pdfUrl?: string;
 };
 type Appuntamento = {
@@ -182,6 +185,7 @@ function aggregaSolleciti(lavori: Lavoro[], manuali: PagamentoManuale[]): Sollec
 }
 export default function Home() {
   const router = useRouter();
+  const [pushNotificationsActive, setPushNotificationsActive] = useState<boolean | null>(null);
   const [lavori, setLavori] = useState<Lavoro[]>([]);
   const [appuntamenti, setAppuntamenti] = useState<Appuntamento[]>([]);
   const [revisioni, setRevisioni] = useState<Revisione[]>([]);
@@ -226,6 +230,8 @@ export default function Home() {
   const conteggiRequestRef = useRef(0);
 
   const caricaConteggiRapidi = async () => {
+    // I conteggi devono leggere lo stato appena scritto, non la cache breve della Home.
+    invalidateApiCache("/api/home/counts");
     const requestId = ++conteggiRequestRef.current;
     const oggi = new Date();
     const inizio = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
@@ -239,27 +245,61 @@ export default function Home() {
     });
 
     // Conteggi essenziali indipendenti dal caricamento delle liste complete.
-    void fetch("/api/home/counts?" + params.toString(), { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setConteggiRapidi(result.counts);
+    void fetchJsonCached("/api/home/counts?" + params.toString())
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok && result.counts) setConteggiRapidi(result.counts);
       })
       .catch((error) => console.error("Errore conteggi rapidi Home:", error));
 
-    // I solleciti richiedono un'aggregazione distinta per cliente: non rallentano le altre card.
-    void fetch("/api/home/counts/reminders", { cache: "no-store" })
-      .then(async (response) => {
-        const result = await response.json().catch(() => null);
-        if (!response.ok || !result?.ok || requestId !== conteggiRequestRef.current) return;
-        setSollecitiRapido(Number(result.count) || 0);
+    // La risposta viene condivisa tra navigazioni ravvicinate e richieste simultanee.
+    void fetchJsonCached("/api/home/counts/reminders")
+      .then((result) => {
+        if (requestId !== conteggiRequestRef.current) return;
+        if (result?.ok) setSollecitiRapido(Number(result.count) || 0);
       })
       .catch((error) => console.error("Errore conteggio solleciti Home:", error));
   };
 
   useEffect(() => {
+    let cancelled = false;
+    const checkPushSubscription = async () => {
+      try {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window) || Notification.permission !== "granted") {
+          if (!cancelled) setPushNotificationsActive(false);
+          return;
+        }
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (!subscription) {
+          if (!cancelled) setPushNotificationsActive(false);
+          return;
+        }
+        // Ri-sincronizza silenziosamente l'iscrizione già concessa con il server.
+        const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+        const keyResult = await keyResponse.json().catch(() => null);
+        if (!keyResponse.ok || !keyResult?.publicKey) throw new Error("Configurazione push non disponibile");
+        const response = await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
+        });
+        const result = await response.json().catch(() => null);
+        if (!response.ok || !result?.ok) throw new Error("Registrazione push non confermata");
+        if (!cancelled) setPushNotificationsActive(true);
+      } catch (error) {
+        console.warn("Verifica iscrizione notifiche:", error);
+        if (!cancelled) setPushNotificationsActive(false);
+      }
+    };
+    void checkPushSubscription();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
     void caricaDati(false);
     void caricaConteggiRapidi();
+    if (new URLSearchParams(window.location.search).get("open") === "ordini") setModal("ordini");
     const rawOrderContext = sessionStorage.getItem("goldencar_nuovo_ordine");
     if (rawOrderContext) {
       try {
@@ -277,10 +317,23 @@ export default function Home() {
         sessionStorage.removeItem("goldencar_nuovo_ordine");
       }
     }
-    const refresh = () => { void caricaDati(false); void caricaConteggiRapidi(); };
+    const refresh = () => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+      void caricaConteggiRapidi();
+    };
+    // Allinea le altre postazioni senza richiedere un aggiornamento manuale:
+    // conteggi ogni 5 s, dati completi ogni 10 s.
+    const countsTimer = window.setInterval(() => { void caricaConteggiRapidi(); }, 5000);
+    const dataTimer = window.setInterval(() => {
+      invalidateApiCache("/api/home");
+      void caricaDati(false);
+    }, 10000);
     window.addEventListener("storage", refresh);
     window.addEventListener("focus", refresh);
     return () => {
+      window.clearInterval(countsTimer);
+      window.clearInterval(dataTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("focus", refresh);
     };
@@ -406,19 +459,16 @@ export default function Home() {
 
   const caricaDati = async (aggiornaConteggi = true) => {
     if (typeof window === "undefined") return;
-    const response = await fetch("/api/home", { cache: "no-store" });
-    const result = await response.json().catch(() => null);
-    if (!response.ok || !result?.ok) {
-      console.error("Errore caricamento dati Home:", result?.error || response.status);
-      setLavori([]);
-      setPagamentiManuali([]);
-      setSolleciti([]);
-      setAppuntamenti([]);
-      setRevisioni([]);
-      setOrdini([]);
-      setFornitori([]);
-      setVeicoliOrdini([]);
-      setClientiAnagrafica([]);
+    let result: any;
+    try {
+      result = await fetchJsonCached("/api/home");
+    } catch (error) {
+      // Mantieni l'ultimo stato valido: un errore temporaneo non deve svuotare le card.
+      console.error("Errore caricamento dati Home:", error);
+      return;
+    }
+    if (!result?.ok) {
+      console.error("Errore caricamento dati Home:", result?.error || "Risposta non valida");
       return;
     }
     const jobRows = Array.isArray(result.jobs) ? result.jobs : [];
@@ -457,7 +507,7 @@ export default function Home() {
         paymentStatus: row.payment_status === "PAGATO" ? "PAGATO" : row.payment_status === "PARZIALE" ? "PARZIALE" : "DA_PAGARE",
         types: Array.isArray(dettagli.types) ? dettagli.types : row.tipo ? [String(row.tipo)] : [],
         works: Array.isArray(dettagli.works) ? dettagli.works : String(row.lavori ?? ""),
-        status: ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
+        status: String(row.stato ?? "").toUpperCase() === "DA_DOCUMENTARE" ? "DA_DOCUMENTARE" : ["APERTO", "IN_LAVORAZIONE"].includes(String(row.stato ?? "").toUpperCase()) ? "IN_LAVORAZIONE" : "CONCLUSO",
         pdfUrl: String(dettagli.pdfUrl ?? ""),
       };
     });
@@ -501,7 +551,7 @@ export default function Home() {
     () =>
       lavori.filter(
         (lavoro) =>
-          lavoro.status === "IN_LAVORAZIONE"
+          lavoro.status === "IN_LAVORAZIONE" || lavoro.status === "DA_DOCUMENTARE"
       ),
     [lavori]
   );
@@ -630,7 +680,7 @@ export default function Home() {
       l.paymentStatus !== "PAGATO"
     );
     const targetManuali = pagamentiManuali.filter((p) => p.clientKey === clientKey && p.stato !== "PAGATO");
-    const ok = window.confirm("Confermi che tutte le voci di questo cliente sono state pagate?");
+    const ok = window.goldencarConfirm ? await window.goldencarConfirm("Confermi che tutte le voci di questo cliente sono state pagate?") : window.confirm("Confermi che tutte le voci di questo cliente sono state pagate?");
     if (!ok) return;
     try {
       for (const lavoro of targetJobs) {
@@ -657,7 +707,8 @@ export default function Home() {
   };
 
   const pagaSingolo = async (pagamento: PagamentoDettaglio) => {
-    const ok = window.confirm(`Confermi il pagamento di ${formatEuro(pagamento.importo)} per "${pagamento.descrizione}"?`);
+    const messaggioPagamento = `Confermi il pagamento di ${formatEuro(pagamento.importo)} per "${pagamento.descrizione}"?`;
+    const ok = window.goldencarConfirm ? await window.goldencarConfirm(messaggioPagamento) : window.confirm(messaggioPagamento);
     if (!ok) return;
     try {
       if (pagamento.manuale) {
@@ -688,17 +739,18 @@ export default function Home() {
       const residuo = Math.max(0, totale - pagato);
       if (residuo <= 0) continue;
 
+      const typesText = Array.isArray(lavoro.types)
+        ? lavoro.types.filter(Boolean).join(" · ").trim()
+        : String(lavoro.types || "").trim();
+      const worksText = Array.isArray(lavoro.works)
+        ? lavoro.works.filter(Boolean).join(" · ").trim()
+        : String(lavoro.works || "").trim();
       result.push({
         id: String(lavoro.jobNumber),
         clientKey: key,
         nomeCliente: nome,
         telefono: lavoro.telefono,
-        descrizione: `Scheda ${lavoro.jobNumber}${(() => {
-          const worksText = Array.isArray(lavoro.works)
-            ? lavoro.works.filter(Boolean).join(" · ").trim()
-            : String(lavoro.works || "").trim();
-          return worksText ? ` · ${worksText}` : "";
-        })()}`,
+        descrizione: typesText || worksText || "Tipologia non indicata",
         importo: residuo,
         totale,
         pagato,
@@ -869,15 +921,62 @@ export default function Home() {
     setNuovoOrdineAperto(false); setOrdineDescrizione(""); setOrdineVeicoloId(""); setOrdineFornitoreId(""); await caricaDati();
   };
   const inviaOrdineHome = async (ordine: Ordine) => {
-    const supplier = fornitori.find(s => s.id === ordine.supplierId);
-    if (!supplier?.whatsapp) { alert("Il fornitore non ha un numero WhatsApp."); return; }
-    const numero = supplier.whatsapp.replace(/\D/g,"");
-    const testo = `Ciao, ordine ${ordine.numero || ""}: ${ordine.descrizione || ""} — ${ordine.veicolo || ""} ${ordine.cliente || ""}`;
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(testo)}`,"_blank","noopener,noreferrer");
-    const response = await fetch("/api/orders", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: ordine.id, stato: "INVIATO" }) });
-    const result = await response.json();
-    if (!response.ok || !result?.ok) { alert("WhatsApp aperto, ma non ho potuto marcare l'ordine come inviato: " + (result?.error || "Errore sconosciuto.")); return; }
-    await caricaDati();
+    // Usa il fornitore attualmente selezionato nel modale, non quello salvato
+    // in precedenza sull'ordine: l'utente può averlo appena cambiato.
+    const supplierId = String(ordineFornitoreId || ordine.supplierId || "").trim();
+    const supplier = fornitori.find((item) => String(item.id).trim() === supplierId);
+    if (!supplierId || !supplier) {
+      alert("Seleziona un fornitore prima di inviare l'ordine.");
+      return;
+    }
+    const numero = String(supplier.whatsapp || "").replace(/\D/g, "");
+    if (!numero) {
+      alert(`Il fornitore "${supplier.nome}" non ha un numero WhatsApp valido nella rubrica. Apri la rubrica fornitori e verifica il numero.`);
+      return;
+    }
+
+    const descrizione = ordineDescrizione.trim() || ordine.descrizione || "";
+    const targa = String(veicoliOrdini.find((vehicle) => String(vehicle.id) === String(ordine.vehicleId))?.targa || "").trim();
+    if (!targa) {
+      alert("Non trovo la targa del veicolo associato all'ordine. Verifica il veicolo prima di inviare.");
+      return;
+    }
+    const elenco = descrizione.split(/\s·\s/).map((voce) => voce.trim()).filter(Boolean).map((voce) => "• " + voce).join("\n");
+    const testo = "Buongiorno,\nMi servirebbe per la targa " + targa + ":" + (elenco ? "\n" + elenco : "");
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (!whatsappWindow) {
+      alert("Il browser ha bloccato l'apertura di WhatsApp. Consenti i popup e riprova.");
+      return;
+    }
+    whatsappWindow.opener = null;
+    whatsappWindow.location.href = `https://wa.me/${numero}?text=${encodeURIComponent(testo)}`;
+
+    // Aggiornamento ottimistico: la UI riflette subito l'invio, senza attendere Supabase.
+    const statoPrecedente = ordine.stato;
+    setOrdini((current) => current.map((item) =>
+      item.id === ordine.id ? { ...item, stato: "INVIATO", supplierId, descrizione } : item
+    ));
+    setOrdineAperto({ ...ordine, stato: "INVIATO", supplierId, descrizione });
+
+    const response = await fetch("/api/orders", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: ordine.id, supplierId, description: descrizione, stato: "INVIATO" }),
+      cache: "no-store",
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.ok) {
+      setOrdini((current) => current.map((item) =>
+        item.id === ordine.id ? { ...item, stato: statoPrecedente } : item
+      ));
+      setOrdineAperto({ ...ordine, stato: statoPrecedente });
+      alert("WhatsApp è stato aperto, ma non ho potuto aggiornare l'ordine: " + (result?.error || "Errore sconosciuto."));
+      return;
+    }
+    invalidateApiCache("/api/home");
+    setOrdineAperto(null);
+    void caricaDati(false);
+    void caricaConteggiRapidi();
   };
   const salvaFornitoreHome = async () => {
     const nome = fornitoreEditNome.trim();
@@ -924,21 +1023,63 @@ export default function Home() {
         {/* =========================
             HEADER
         ========================= */}
-        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "28px 20px 24px" }}>
-        <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+        <div className="page-header-aligned" style={{ position: "relative", display: "flex", alignItems: "center", gap: 18, padding: "28px 70px 24px 20px" }}>
+          <div style={{ width: 110, height: 90, display: "flex", alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
             <img src="/logo.png" alt="Goldencar" style={{ width: "110px", height: "90px", objectFit: "contain" }} />
           </div>
-          <h1
-            style={{
-              fontSize: 31,
-              fontWeight: 800,
-              color: "#041E49",
-              letterSpacing: "-0.7px",
-              margin: "3px 0 0",
-            }}
-          >
+          <h1 style={{ fontSize: 31, fontWeight: 800, color: "#041E49", letterSpacing: "-0.7px", margin: "3px 0 0" }}>
             GOLDENCAR
           </h1>
+{pushNotificationsActive !== true && (
+            <button
+              type="button"
+              aria-label="Attiva notifiche"
+              title="Attiva notifiche"
+              onClick={async () => {
+                try {
+                  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+                    alert("Le notifiche push non sono supportate da questo browser.");
+                    return;
+                  }
+                  const permission = await Notification.requestPermission();
+                  if (permission !== "granted") {
+                    alert("Per ricevere gli avvisi, consenti le notifiche nelle impostazioni del browser.");
+                    return;
+                  }
+                  const keyResponse = await fetch("/api/push/subscribe", { cache: "no-store" });
+                  const keyResult = await keyResponse.json().catch(() => null);
+                  if (!keyResponse.ok || !keyResult?.publicKey) throw new Error(keyResult?.error || "Notifiche non configurate sul server.");
+                  const registration = await navigator.serviceWorker.register("/sw.js");
+                  await navigator.serviceWorker.ready;
+                  const decodeKey = (value: string) => {
+                    const padded = value + "=".repeat((4 - value.length % 4) % 4);
+                    const raw = atob(padded.replace(/-/g, "+").replace(/_/g, "/"));
+                    return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+                  };
+                  let subscription = await registration.pushManager.getSubscription();
+                  if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(keyResult.publicKey) as BufferSource });
+                  const response = await fetch("/api/push/subscribe", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ subscription: subscription.toJSON(), deviceLabel: navigator.userAgent.slice(0, 100) }),
+                  });
+                  const result = await response.json().catch(() => null);
+                  if (!response.ok || !result?.ok) throw new Error(result?.error || "Impossibile attivare le notifiche.");
+                  setPushNotificationsActive(true);
+                alert("Notifiche attivate su questo dispositivo.");
+                } catch (error) {
+                  console.error("Attivazione notifiche:", error);
+                  alert(error instanceof Error ? error.message : "Errore durante l'attivazione delle notifiche.");
+                }
+              }}
+              style={{ position: "absolute", top: 28, right: 20, width: 44, height: 44, border: "1px solid #D9E1EC", borderRadius: "50%", padding: 0, background: "#FFFFFF", color: "#041E49", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 10px rgba(15,23,42,.08)" }}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M10 21h4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
         {/* =========================
             STATISTICHE
@@ -1016,6 +1157,7 @@ export default function Home() {
             CHECK IN / OUT
         ========================= */}
           <div
+            className="home-checkin-wrap"
             style={{
               display: "flex",
               justifyContent: "center",
@@ -1250,9 +1392,10 @@ export default function Home() {
               <OrderRow
                 key={ordine.id || ordine.numero || index}
                 ordine={ordine}
-                onClick={() => {
+                onClick={async () => {
                   if (ordine.stato === "INVIATO") {
-                    const conferma = window.confirm("Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?");
+                    const messaggioConferma = "Questo ordine risulta già inviato. Vuoi eliminarlo dalla lista?";
+                    const conferma = window.goldencarConfirm ? await window.goldencarConfirm(messaggioConferma) : window.confirm(messaggioConferma);
                     if (!conferma) return;
                     void (async () => {
                       const response = await fetch("/api/orders", {
@@ -1318,7 +1461,6 @@ export default function Home() {
             <span>TOTALE RESIDUO</span>
             <span>{formatEuro(pagamentiCliente(dettaglioSollecito).reduce((sum,p) => sum + p.importo, 0))}</span>
           </div>
-          <button type="button" onClick={() => pagaTuttoCliente(dettaglioSollecito)} style={primaryButtonStyle}>SEGNA TUTTO COME PAGATO</button>
         </Modal>
       )}
 
@@ -1368,9 +1510,11 @@ export default function Home() {
             <option value="">Seleziona veicolo</option>
             {veicoliOrdini.map(v=><option key={v.id} value={v.id}>{v.targa} — {v.veicolo} — {v.cliente}</option>)}
           </select>
-          <label style={labelStyle}>COSA ORDINARE</label>
-          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90,resize:"vertical"}} placeholder="Descrizione prodotto"/>
-          <button type="button" onClick={()=>{const R=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!R){alert("Dettatura non disponibile.");return;}const r=new R();r.lang="it-IT";r.onresult=(e:any)=>{setOrdineDescrizione(String(e.results?.[0]?.[0]?.transcript||""));setOrdineListening(false)};r.onend=()=>setOrdineListening(false);setOrdineListening(true);r.start();}} style={secondaryButtonStyle}>{ordineListening?"ASCOLTO…":"🎙️ DETTA"}</button>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:12,marginBottom:6}}>
+            <label style={{...labelStyle,margin:0}}>COSA ORDINARE</label>
+            <button type="button" onClick={()=>{const R=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;if(!R){alert("Dettatura non disponibile.");return;}const r=new R();r.lang="it-IT";r.onresult=(e:any)=>{setOrdineDescrizione(String(e.results?.[0]?.[0]?.transcript||""));setOrdineListening(false)};r.onerror=()=>setOrdineListening(false);r.onend=()=>setOrdineListening(false);setOrdineListening(true);r.start();}} aria-label={ordineListening?"Ascolto in corso":"Detta descrizione ordine"} title={ordineListening?"Ascolto in corso":"Detta descrizione ordine"} style={{width:36,height:36,border:"1px solid #E2E8F0",borderRadius:11,background:ordineListening?"#FEE2E2":"#FFFFFF",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}><MicIcon active={ordineListening}/></button>
+          </div>
+          <textarea value={ordineDescrizione} onChange={e=>setOrdineDescrizione(e.target.value)} style={{...inputStyle,minHeight:90,resize:"vertical",marginTop:0}} placeholder="Descrizione prodotto"/>
           <label style={labelStyle}>FORNITORE</label>
           <select value={ordineFornitoreId} onChange={e=>setOrdineFornitoreId(e.target.value)} style={inputStyle}>
             <option value="">Seleziona fornitore</option>
@@ -1499,12 +1643,12 @@ export default function Home() {
             {fornitori.map(f=><option key={f.id} value={f.id}>{f.nome}</option>)}
           </select>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginTop:16}}>
-            <button type="button" onClick={()=>void aggiornaOrdineHome()} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,fontSize:13,cursor:"pointer"}}>SALVA</button>
             {ordineAperto.stato !== "INVIATO" ? (
-              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} style={{flex:"0 0 auto",width:"44%",minHeight:42,border:0,borderRadius:13,background:"#D4AF37",color:"#111827",fontWeight:900,fontSize:13,cursor:"pointer"}}>INVIA</button>
+              <button type="button" onClick={()=>void inviaOrdineHome(ordineAperto)} aria-label="Invia ordine su WhatsApp" title="WhatsApp" style={{flex:"0 0 44%",minHeight:50,border:0,borderRadius:13,background:"#25D366",color:"#FFFFFF",fontWeight:900,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><WhatsAppIcon/></button>
             ) : (
-              <div style={{fontSize:11,fontWeight:800,color:"#64748B",textAlign:"right"}}>INVIATO</div>
+              <div style={{flex:"0 0 44%",fontSize:11,fontWeight:800,color:"#64748B",textAlign:"center"}}>ORDINE INVIATO</div>
             )}
+            <button type="button" onClick={()=>void aggiornaOrdineHome()} aria-label="Salva ordine" title="Salva" style={{flex:"0 0 44%",minHeight:50,border:"1px solid #E2E8F0",borderRadius:13,background:"#FFFFFF",color:"#041E49",fontWeight:900,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}><SaveIcon/></button>
           </div>
         </Modal>
       )}
@@ -1645,11 +1789,21 @@ function MicIcon({ active = false }: { active?: boolean }) {
   );
 }
 
+function SaveIcon() {
+  return <svg width="25" height="25" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M18.1716 1C18.702 1 19.2107 1.21071 19.5858 1.58579L22.4142 4.41421C22.7893 4.78929 23 5.29799 23 5.82843V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H18.1716ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21L5 21L5 15C5 13.3431 6.34315 12 8 12L16 12C17.6569 12 19 13.3431 19 15V21H20C20.5523 21 21 20.5523 21 20V6.82843C21 6.29799 20.7893 5.78929 20.4142 5.41421L18.5858 3.58579C18.2107 3.21071 17.702 3 17.1716 3H17V5C17 6.65685 15.6569 8 14 8H10C8.34315 8 7 6.65685 7 5V3H4ZM17 21V15C17 14.4477 16.5523 14 16 14L8 14C7.44772 14 7 14.4477 7 15L7 21L17 21ZM9 3H15V5C15 5.55228 14.5523 6 14 6H10C9.44772 6 9 5.55228 9 5V3Z" fill="currentColor"/></svg>;
+}
+function WhatsAppIcon() {
+  return <svg width="29" height="29" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M20.52 3.48A11.82 11.82 0 0 0 12.1 0C5.56 0 .24 5.31.24 11.85c0 2.09.55 4.13 1.6 5.93L.14 24l6.37-1.67a11.9 11.9 0 0 0 5.58 1.42h.01c6.54 0 11.86-5.32 11.86-11.86 0-3.17-1.23-6.15-3.44-8.41ZM12.1 21.73a9.86 9.86 0 0 1-5.03-1.38l-.36-.21-3.78.99 1.01-3.68-.24-.38a9.82 9.82 0 0 1-1.51-5.22c0-5.47 4.45-9.92 9.92-9.92a9.86 9.86 0 0 1 7.02 2.91 9.86 9.86 0 0 1 2.9 7.02c0 5.47-4.45 9.92-9.93 9.92Z" fill="currentColor" transform="translate(0 0) scale(.96)"/>
+    <path d="M17.6 14.4c-.3-.15-1.78-.88-2.06-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.96 1.18-.18.2-.35.23-.65.08-.3-.15-1.27-.47-2.42-1.5-.9-.8-1.5-1.78-1.67-2.08-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.53.15-.18.2-.3.3-.5.1-.2.05-.38-.03-.53-.08-.15-.67-1.61-.91-2.2-.24-.58-.49-.5-.67-.51H7.86c-.2 0-.52.07-.8.37-.28.3-1.05 1.02-1.05 2.49s1.08 2.88 1.23 3.08c.15.2 2.12 3.23 5.12 4.52.72.31 1.28.5 1.71.63.72.23 1.37.2 1.89.12.58-.09 1.78-.73 2.03-1.44.25-.71.25-1.31.17-1.44-.07-.13-.27-.2-.57-.35Z" fill="currentColor"/>
+  </svg>;
+}
 function EmptyState({ text }: { text: string }) {
   return <div style={{ background: "#FFFFFF", borderRadius: 17, padding: "22px 14px", textAlign: "center", color: "#64748B", fontSize: 13, fontWeight: 700 }}>{text}</div>;
 }
 function OrderRow({ ordine, onClick }: { ordine: Ordine; onClick?:()=>void }) {
-  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: "#111827" }}>ORDINE</div><div style={{ fontSize: 13, color: "#64748B", marginTop: 3 }}>{ordine.cliente || "Cliente"}{ordine.veicolo ? ` · ${ordine.veicolo}` : ""}</div>{ordine.descrizione && <div style={{ fontSize: 12, color: "#64748B", marginTop: 3 }}>{ordine.descrizione}</div>}</div><div style={{ fontSize: 11, fontWeight: 800, color: "#64748B", whiteSpace: "nowrap" }}>{ordine.stato || ""}</div></div>;
+  const descrizione = (ordine.descrizione || "").replace(/\s+/g, " ").trim();
+  return <div onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick?.(); } }} style={{ background: ordine.stato === "INVIATO" ? "#FFF4C2" : "#FFFFFF", borderRadius: 17, padding: 13, display: "flex", alignItems: "center", gap: 12, cursor: "pointer", minWidth: 0 }}><div style={{ width: 42, height: 42, borderRadius: 13, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><IconOrdini /></div><div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, overflow: "hidden", lineHeight: 1.35 }}><div style={{ fontSize: 13, fontWeight: 900, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ordine.cliente || "Cliente"}</div><div style={{ fontSize: 12, fontWeight: 600, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ordine.veicolo || "Veicolo non indicato"}</div><div style={{ fontSize: 12, color: "#64748B", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{descrizione || "Nessun dettaglio inserito"}</div></div></div>;
 }
 
 /* =====================================================
@@ -1835,7 +1989,7 @@ function LavoroRow({
             fontWeight: 700,
           }}
         >
-          SCHEDA #{lavoro.jobNumber}
+          {lavoro.status === "DA_DOCUMENTARE" ? "LAVORO TERMINATO" : "LAVORO ATTIVO"}
         </div>
         <div
           style={{
@@ -1862,21 +2016,37 @@ function LavoroRow({
             "—"}
         </div>
       </div>
-      <div
-        style={{
-          background: "#FFF1C2",
-          color: "#92400E",
-          borderRadius: 999,
-          padding:
-            "6px 9px",
-          fontSize: 10,
-          fontWeight: 900,
-          whiteSpace:
-            "nowrap",
-        }}
-      >
-        IN LAVORAZIONE
+      <div className="lavoro-row-status" data-status={lavoro.status} style={{
+        background: lavoro.status === "DA_DOCUMENTARE" ? "#EDE9FE" : "#FFF1C2",
+        color: lavoro.status === "DA_DOCUMENTARE" ? "#6D28D9" : "#92400E",
+        borderRadius: 999,
+        padding: "6px 9px",
+        fontSize: 10,
+        fontWeight: 900,
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+      }}>
+        <span className="lavoro-row-status-text">{lavoro.status === "DA_DOCUMENTARE" ? "DA DOCUMENTARE" : "IN LAVORAZIONE"}</span>
+        <span className="lavoro-row-status-dot" aria-label={lavoro.status === "DA_DOCUMENTARE" ? "Da documentare" : "In lavorazione"} />
       </div>
+      <style jsx>{`
+        .lavoro-row-status-dot { display: none; }
+        @media (max-width: 640px) {
+          .lavoro-row-status {
+            width: 12px;
+            height: 12px;
+            min-width: 12px;
+            padding: 0 !important;
+            border-radius: 50% !important;
+            align-self: center;
+            margin-left: 2px;
+          }
+          .lavoro-row-status-text { display: none; }
+          .lavoro-row-status[data-status="DA_DOCUMENTARE"] { background: #8B5CF6 !important; color: #FFFFFF !important; }
+          .lavoro-row-status[data-status="IN_LAVORAZIONE"] { background: #FACC15 !important; color: #713F12 !important; }
+          .lavoro-row-status-dot { display: block; width: 100%; height: 100%; }
+        }
+      `}</style>
     </button>
   );
 }
