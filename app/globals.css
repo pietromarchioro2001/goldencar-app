@@ -631,3 +631,6 @@ textarea {
 @keyframes gc-dialog-in{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(max-width:480px){.gc-dialog-backdrop{padding:16px}.gc-dialog{width:100%;padding:22px;border-radius:18px}.gc-dialog h2{font-size:19px}.gc-dialog p{font-size:14px}.gc-dialog-actions button{width:100%;min-height:46px}}
 @media(prefers-reduced-motion:reduce){.gc-dialog{animation:none}}
+
+.gc-dialog-actions .gc-dialog-cancel{background:#eef2f7;color:#273449;margin-right:10px}
+@media(max-width:480px){.gc-dialog-actions{flex-direction:column-reverse;gap:10px}.gc-dialog-actions .gc-dialog-cancel{margin-right:0}}
