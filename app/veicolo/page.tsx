@@ -885,6 +885,7 @@ export default function Veicolo() {
       lavoro.types?.length ? lavoro.types.join(" · ") : "Intervento";
 
     const concluso = lavoro.status === "CONCLUSO";
+    const daDocumentare = lavoro.status === "DA_DOCUMENTARE";
 
 
 
@@ -908,15 +909,15 @@ export default function Veicolo() {
 
 
 
-      stato: concluso ? "Concluso" : "In lavorazione",
+      stato: concluso ? "Concluso" : daDocumentare ? "Da documentare" : "In lavorazione",
 
 
 
-      statoBg: concluso ? "#DCFCE7" : "#FFF1C2",
+      statoBg: concluso ? "#DCFCE7" : daDocumentare ? "#F3E8FF" : "#FFF1C2",
 
 
 
-      statoColor: concluso ? "#15803D" : "#92400E",
+      statoColor: concluso ? "#15803D" : daDocumentare ? "#7E22CE" : "#92400E",
 
 
 
@@ -1882,6 +1883,7 @@ export default function Veicolo() {
 
 
           <div
+            className="vehicle-profile-info-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
