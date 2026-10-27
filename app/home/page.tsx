@@ -1117,6 +1117,7 @@ export default function Home() {
             CHECK IN / OUT
         ========================= */}
           <div
+            className="home-checkin-wrap"
             style={{
               display: "flex",
               justifyContent: "center",
