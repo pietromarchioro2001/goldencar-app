@@ -581,3 +581,11 @@ textarea {
     font-weight: 600 !important;
   }
 }
+
+
+/* Header coerenti e CHECK-IN meno basso sui telefoni. */
+@media (max-width: 600px) {
+  .home-checkin-wrap {
+    margin-top: 38px !important;
+  }
+}
